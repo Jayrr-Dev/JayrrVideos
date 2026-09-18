@@ -1,10 +1,9 @@
-import Trans from "@excalidraw/excalidraw/components/Trans";
-import { t } from "@excalidraw/excalidraw/i18n";
 import * as Sentry from "@sentry/browser";
 import React from "react";
 
 interface TopErrorBoundaryState {
   hasError: boolean;
+  errorMessage: string;
   sentryEventId: string;
   localStorage: string;
 }
@@ -15,20 +14,29 @@ export class TopErrorBoundary extends React.Component<
 > {
   state: TopErrorBoundaryState = {
     hasError: false,
+    errorMessage: "",
     sentryEventId: "",
     localStorage: "",
   };
+
+  static getDerivedStateFromError(error: unknown) {
+    return {
+      hasError: true,
+      errorMessage: error instanceof Error ? error.message : String(error),
+    };
+  }
 
   render() {
     return this.state.hasError ? this.errorSplash() : this.props.children;
   }
 
   componentDidCatch(error: Error, errorInfo: any) {
+    console.error(error, errorInfo);
     const _localStorage: any = {};
     for (const [key, value] of Object.entries({ ...localStorage })) {
       try {
         _localStorage[key] = JSON.parse(value);
-      } catch (error: any) {
+      } catch (parseError: any) {
         _localStorage[key] = value;
       }
     }
@@ -39,6 +47,7 @@ export class TopErrorBoundary extends React.Component<
 
       this.setState((state) => ({
         hasError: true,
+        errorMessage: error.message,
         sentryEventId: eventId,
         localStorage: JSON.stringify(_localStorage),
       }));
@@ -77,59 +86,43 @@ export class TopErrorBoundary extends React.Component<
       <div className="ErrorSplash excalidraw">
         <div className="ErrorSplash-messageContainer">
           <div className="ErrorSplash-paragraph bigger align-center">
-            <Trans
-              i18nKey="errorSplash.headingMain"
-              button={(el) => (
-                <button onClick={() => window.location.reload()}>{el}</button>
-              )}
-            />
+            {this.state.errorMessage || "Encountered an error."} Try{" "}
+            <button onClick={() => window.location.reload()}>
+              reloading the page
+            </button>
+            .
           </div>
           <div className="ErrorSplash-paragraph align-center">
-            <Trans
-              i18nKey="errorSplash.clearCanvasMessage"
-              button={(el) => (
-                <button
-                  onClick={() => {
-                    try {
-                      localStorage.clear();
-                      window.location.reload();
-                    } catch (error: any) {
-                      console.error(error);
-                    }
-                  }}
-                >
-                  {el}
-                </button>
-              )}
-            />
+            If reloading doesn't work, try{" "}
+            <button
+              onClick={() => {
+                try {
+                  localStorage.clear();
+                  window.location.reload();
+                } catch (error: any) {
+                  console.error(error);
+                }
+              }}
+            >
+              clearing the canvas
+            </button>
+            .
             <br />
             <div className="smaller">
-              <span role="img" aria-label="warning">
-                ⚠️
-              </span>
-              {t("errorSplash.clearCanvasCaveat")}
-              <span role="img" aria-hidden="true">
-                ⚠️
-              </span>
+              This will track a local-only scene. Your work will not be saved.
             </div>
           </div>
           <div>
             <div className="ErrorSplash-paragraph">
-              {t("errorSplash.trackedToSentry", {
-                eventId: this.state.sentryEventId,
-              })}
+              Error tracked. Event id: {this.state.sentryEventId}
             </div>
             <div className="ErrorSplash-paragraph">
-              <Trans
-                i18nKey="errorSplash.openIssueMessage"
-                button={(el) => (
-                  <button onClick={() => this.createGithubIssue()}>{el}</button>
-                )}
-              />
+              Please open an issue on{" "}
+              <button onClick={() => this.createGithubIssue()}>GitHub</button>.
             </div>
             <div className="ErrorSplash-paragraph">
               <div className="ErrorSplash-details">
-                <label>{t("errorSplash.sceneContent")}</label>
+                <label>Scene content</label>
                 <textarea
                   rows={5}
                   onPointerDown={this.selectTextArea}

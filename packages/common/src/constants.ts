@@ -11,7 +11,7 @@ export { DEFAULT_STICKY_NOTE_BG } from "./colors";
 export const supportsResizeObserver =
   typeof window !== "undefined" && "ResizeObserver" in window;
 
-export const APP_NAME = "Excalidraw";
+export const APP_NAME = "JayrrVideos";
 
 // distance when creating text before it's considered `autoResize: false`
 // we're using higher threshold so that clicks that end up being drags
@@ -515,6 +515,7 @@ export const DEFAULT_ELEMENT_PROPS: {
 };
 
 export const LIBRARY_SIDEBAR_TAB = "library";
+export const SCENE_SIDEBAR_TAB = "scene";
 export const CANVAS_SEARCH_TAB = "search";
 
 export const DEFAULT_SIDEBAR = {

@@ -14,6 +14,7 @@ import { clearAppStateForLocalStorage } from "@excalidraw/excalidraw/appState";
 import {
   CANVAS_SEARCH_TAB,
   DEFAULT_SIDEBAR,
+  MIME_TYPES,
   debounce,
 } from "@excalidraw/common";
 import {
@@ -41,9 +42,19 @@ import type { MaybePromise } from "@excalidraw/common/utility-types";
 import { appJotaiStore, atom } from "../app-jotai";
 import { SAVE_TO_LOCAL_STORAGE_TIMEOUT, STORAGE_KEYS } from "../app_constants";
 
+import { isGoogleDriveEnabled } from "./connectGoogleDrive";
 import { FileManager } from "./FileManager";
 import { FileStatusStore } from "./fileStatusStore";
 import { Locker } from "./Locker";
+import {
+  DRIVE_FILE_PLACEHOLDER_DATA_URL,
+  downloadBinaryFileFromDrive,
+  isDriveFileStub,
+  shouldStoreFileOnDrive,
+  toDriveFileStub,
+  uploadBinaryFileToDrive,
+  type LocalStoredFile,
+} from "./storeGoogleDriveFiles";
 import { updateBrowserStateVersion } from "./tabSync";
 
 const filesStore = createStore("files-db", "files-store");
@@ -170,29 +181,75 @@ export class LocalData {
     onFileStatusChange: FileStatusStore.updateStatuses.bind(FileStatusStore),
     getFiles(ids) {
       return getMany(ids, filesStore).then(
-        async (filesData: (BinaryFileData | undefined)[]) => {
+        async (filesData: (LocalStoredFile | undefined)[]) => {
           const loadedFiles: BinaryFileData[] = [];
           const erroredFiles = new Map<FileId, true>();
+          const filesToSave: [FileId, LocalStoredFile][] = [];
+          const driveEnabled = isGoogleDriveEnabled();
 
-          const filesToSave: [FileId, BinaryFileData][] = [];
-
-          filesData.forEach((data, index) => {
+          for (const [index, data] of filesData.entries()) {
             const id = ids[index];
-            if (data) {
-              const _data: BinaryFileData = {
-                ...data,
-                lastRetrieved: Date.now(),
-              };
-              filesToSave.push([id, _data]);
-              loadedFiles.push(_data);
-            } else {
-              erroredFiles.set(id, true);
+            if (!data) {
+              if (driveEnabled) {
+                try {
+                  const { file: fromDrive, driveFileId } =
+                    await downloadBinaryFileFromDrive({
+                      id,
+                      mimeType: MIME_TYPES.binary,
+                      created: Date.now(),
+                      dataURL: DRIVE_FILE_PLACEHOLDER_DATA_URL,
+                    });
+                  loadedFiles.push(fromDrive);
+                  filesToSave.push([
+                    id,
+                    toDriveFileStub(fromDrive, driveFileId),
+                  ]);
+                } catch (error) {
+                  console.warn(error);
+                  erroredFiles.set(id, true);
+                }
+              } else {
+                erroredFiles.set(id, true);
+              }
+              continue;
             }
-          });
+
+            if (isDriveFileStub(data)) {
+              if (!driveEnabled) {
+                erroredFiles.set(id, true);
+                continue;
+              }
+              try {
+                const { file: fromDrive, driveFileId } =
+                  await downloadBinaryFileFromDrive(data);
+                loadedFiles.push(fromDrive);
+                filesToSave.push([
+                  id,
+                  {
+                    ...toDriveFileStub(
+                      fromDrive,
+                      data.driveFileId ?? driveFileId,
+                    ),
+                    lastRetrieved: Date.now(),
+                  },
+                ]);
+              } catch (error) {
+                console.warn(error);
+                erroredFiles.set(id, true);
+              }
+              continue;
+            }
+
+            const _data: LocalStoredFile = {
+              ...data,
+              lastRetrieved: Date.now(),
+            };
+            filesToSave.push([id, _data]);
+            loadedFiles.push(_data);
+          }
 
           try {
-            // save loaded files back to storage with updated `lastRetrieved`
-            setMany(filesToSave, filesStore);
+            await setMany(filesToSave, filesStore);
           } catch (error) {
             console.warn(error);
           }
@@ -204,6 +261,7 @@ export class LocalData {
     async saveFiles({ addedFiles }) {
       const savedFiles = new Map<FileId, BinaryFileData>();
       const erroredFiles = new Map<FileId, BinaryFileData>();
+      const driveEnabled = isGoogleDriveEnabled();
 
       // before we use `storage` event synchronization, let's update the flag
       // optimistically. Hopefully nothing fails, and an IDB read executed
@@ -213,9 +271,35 @@ export class LocalData {
       await Promise.all(
         [...addedFiles].map(async ([id, fileData]) => {
           try {
+            let storeOnDrive = false;
+            if (driveEnabled) {
+              storeOnDrive = shouldStoreFileOnDrive(fileData);
+            }
+
+            if (storeOnDrive) {
+              const driveFileId = await uploadBinaryFileToDrive(fileData);
+              await set(id, toDriveFileStub(fileData, driveFileId), filesStore);
+              savedFiles.set(id, fileData);
+              return;
+            }
+
             await set(id, fileData, filesStore);
             savedFiles.set(id, fileData);
           } catch (error: any) {
+            if (driveEnabled) {
+              try {
+                const driveFileId = await uploadBinaryFileToDrive(fileData);
+                await set(
+                  id,
+                  toDriveFileStub(fileData, driveFileId),
+                  filesStore,
+                );
+                savedFiles.set(id, fileData);
+                return;
+              } catch (driveError) {
+                console.error(driveError);
+              }
+            }
             console.error(error);
             erroredFiles.set(id, fileData);
           }

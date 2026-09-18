@@ -4,6 +4,7 @@
 interface ImportMetaEnv {
   // The port to run the dev server
   VITE_APP_PORT: string;
+  VITE_CONVEX_URL: string;
 
   VITE_APP_BACKEND_V2_GET_URL: string;
   VITE_APP_BACKEND_V2_POST_URL: string;
@@ -16,6 +17,8 @@ interface ImportMetaEnv {
   VITE_APP_AI_BACKEND: string;
 
   VITE_APP_FIREBASE_CONFIG: string;
+
+  VITE_APP_GOOGLE_CLIENT_ID: string;
 
   // whether to disable live reload / HMR. Usuaully what you want to do when
   // debugging Service Workers.

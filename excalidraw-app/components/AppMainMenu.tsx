@@ -1,18 +1,24 @@
 import {
-  loginIcon,
-  ExcalLogo,
   eyeIcon,
+  LinkIcon,
+  presentationIcon,
 } from "@excalidraw/excalidraw/components/icons";
-import { useI18n } from "@excalidraw/excalidraw/i18n";
-import { MainMenu } from "@excalidraw/excalidraw/index";
-import React from "react";
+import { MainMenu, useExcalidrawAPI } from "@excalidraw/excalidraw/index";
+import React, { useState } from "react";
 
 import { isDevEnv } from "@excalidraw/common";
 
 import type { Theme } from "@excalidraw/element/types";
 
+import { JAYRR_PRESENT_SIDEBAR } from "../present/buildPresentDeck";
 import { LanguageList } from "../app-language/LanguageList";
-import { isExcalidrawPlusSignedUser } from "../app_constants";
+import { useAtomValue } from "../app-jotai";
+import {
+  connectGoogleDrive,
+  disconnectGoogleDrive,
+  googleDriveConnectedAtom,
+  isGoogleDriveConfigured,
+} from "../data/connectGoogleDrive";
 
 import { saveDebugState } from "./DebugCanvas";
 
@@ -22,44 +28,86 @@ export const AppMainMenu: React.FC<{
   isCollabEnabled: boolean;
   theme: Theme | "system";
   refresh: () => void;
+  onToast: (message: string) => void;
 }> = React.memo((props) => {
-  const { t } = useI18n();
+  const driveConnected = useAtomValue(googleDriveConnectedAtom);
+  const [driveBusy, setDriveBusy] = useState(false);
+  const excalidrawAPI = useExcalidrawAPI();
+
+  const onDriveSelect = async () => {
+    if (driveBusy) {
+      return;
+    }
+
+    if (!isGoogleDriveConfigured()) {
+      props.onToast(
+        "Add VITE_APP_GOOGLE_CLIENT_ID in .env.development.local, then restart yarn start.",
+      );
+      return;
+    }
+
+    setDriveBusy(true);
+    try {
+      if (driveConnected) {
+        await disconnectGoogleDrive();
+        props.onToast(
+          "Google Drive disconnected. New big files stay in this browser.",
+        );
+        props.refresh();
+        return;
+      }
+
+      await connectGoogleDrive();
+      props.onToast(
+        "Google Drive connected. Files over 512KB save to the JayrrVideos folder.",
+      );
+      props.refresh();
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Google Drive sign-in failed.";
+      props.onToast(message);
+    } finally {
+      setDriveBusy(false);
+    }
+  };
+
   return (
     <MainMenu>
       <MainMenu.DefaultItems.LoadScene />
       <MainMenu.DefaultItems.SaveToActiveFile />
       <MainMenu.DefaultItems.Export />
       <MainMenu.DefaultItems.SaveAsImage />
-      {props.isCollabEnabled && (
-        <MainMenu.DefaultItems.LiveCollaborationTrigger
-          isCollaborating={props.isCollaborating}
-          onSelect={() => props.onCollabDialogOpen()}
-        />
-      )}
       <MainMenu.DefaultItems.CommandPalette className="highlighted" />
       <MainMenu.DefaultItems.SearchMenu />
+      <MainMenu.Item
+        icon={presentationIcon}
+        onSelect={() => {
+          excalidrawAPI?.updateScene({
+            appState: { openSidebar: { name: JAYRR_PRESENT_SIDEBAR } },
+          });
+        }}
+      >
+        Present
+      </MainMenu.Item>
       <MainMenu.DefaultItems.Help />
       <MainMenu.DefaultItems.ClearCanvas />
       <MainMenu.Separator />
-      <MainMenu.ItemLink
-        icon={ExcalLogo}
-        href={`${
-          import.meta.env.VITE_APP_PLUS_LP
-        }/plus?utm_source=excalidraw&utm_medium=app&utm_content=hamburger`}
-        className=""
+      <MainMenu.Item
+        icon={LinkIcon}
+        onSelect={() => {
+          void onDriveSelect();
+        }}
+        aria-label={
+          driveConnected ? "Disconnect Google Drive" : "Connect Google Drive"
+        }
       >
-        Excalidraw+
-      </MainMenu.ItemLink>
+        {driveBusy
+          ? "Google Drive…"
+          : driveConnected
+          ? "Disconnect Google Drive"
+          : "Connect Google Drive"}
+      </MainMenu.Item>
       <MainMenu.DefaultItems.Socials />
-      <MainMenu.ItemLink
-        icon={loginIcon}
-        href={`${import.meta.env.VITE_APP_PLUS_APP}${
-          isExcalidrawPlusSignedUser ? "" : "/sign-up"
-        }?utm_source=signin&utm_medium=app&utm_content=hamburger`}
-        className="highlighted"
-      >
-        {isExcalidrawPlusSignedUser ? t("labels.signIn") : t("labels.signUp")}
-      </MainMenu.ItemLink>
       {isDevEnv() && (
         <MainMenu.Item
           icon={eyeIcon}

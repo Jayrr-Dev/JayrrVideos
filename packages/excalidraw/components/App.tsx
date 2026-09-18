@@ -825,6 +825,13 @@ class App extends React.Component<AppProps, AppState> {
       mutateElement: this.mutateElement,
       updateLibrary: this.library.updateLibrary,
       addFiles: this.addFiles,
+      insertElementsFromLibrary: (opts) => {
+        this.addElementsFromPasteOrLibrary({
+          elements: opts.elements,
+          files: opts.files ?? null,
+          position: "center",
+        });
+      },
       resetScene: this.resetScene,
       getSceneElementsIncludingDeleted: this.getSceneElementsIncludingDeleted,
       getSceneElementsMapIncludingDeleted:

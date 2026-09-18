@@ -531,6 +531,7 @@ export interface AppState {
     y: number;
   } | null;
   objectsSnapModeEnabled: boolean;
+  timelineEnabled: boolean;
 
   /** image cropping */
   isCropping: boolean;
@@ -963,6 +964,12 @@ export interface ExcalidrawProps {
   gridModeEnabled?: boolean;
   objectsSnapModeEnabled?: boolean;
   libraryReturnUrl?: string;
+  renderLibraryMenu?: () => React.ReactNode;
+  renderSceneMenu?: () => React.ReactNode;
+  onAddToLibrary?: (
+    elements: readonly NonDeletedExcalidrawElement[],
+    files: BinaryFiles,
+  ) => void | Promise<void>;
   theme?: Theme;
   // @TODO come with better API before v0.18.0
   name?: string;
@@ -1351,6 +1358,10 @@ export interface ExcalidrawImperativeAPI {
   refresh: InstanceType<typeof App>["refresh"];
   setToast: InstanceType<typeof App>["setToast"];
   addFiles: (data: BinaryFileData[]) => void;
+  insertElementsFromLibrary: (opts: {
+    elements: readonly ExcalidrawElement[];
+    files?: BinaryFiles | null;
+  }) => void;
   id: string;
   setActiveTool: InstanceType<typeof App>["setActiveTool"];
   setCursor: InstanceType<typeof App>["cursor"]["set"];

@@ -4,6 +4,7 @@ import {
   CANVAS_SEARCH_TAB,
   DEFAULT_SIDEBAR,
   LIBRARY_SIDEBAR_TAB,
+  SCENE_SIDEBAR_TAB,
   composeEventHandlers,
 } from "@excalidraw/common";
 
@@ -11,15 +12,17 @@ import type { MarkOptional, Merge } from "@excalidraw/common/utility-types";
 
 import { useTunnels } from "../context/tunnels";
 import { useUIAppState } from "../context/ui-appState";
+import { t } from "../i18n";
 
 import "../components/dropdownMenu/DropdownMenu.scss";
 
-import { useExcalidrawSetAppState } from "./App";
+import { useAppProps, useExcalidrawSetAppState } from "./App";
 import { LibraryMenu } from "./LibraryMenu";
+import { SceneMenu } from "./SceneMenu";
 import { SearchMenu } from "./SearchMenu";
 import { Sidebar } from "./Sidebar/Sidebar";
 import { withInternalFallback } from "./hoc/withInternalFallback";
-import { LibraryIcon, searchIcon } from "./icons";
+import { LibraryIcon, SceneIcon, searchIcon } from "./icons";
 
 import type { SidebarProps, SidebarTriggerProps } from "./Sidebar/common";
 
@@ -71,6 +74,7 @@ export const DefaultSidebar = Object.assign(
     >) => {
       const appState = useUIAppState();
       const setAppState = useExcalidrawSetAppState();
+      const { renderLibraryMenu, renderSceneMenu } = useAppProps();
 
       const { DefaultSidebarTabTriggersTunnel } = useTunnels();
 
@@ -105,11 +109,21 @@ export const DefaultSidebar = Object.assign(
                 <Sidebar.TabTrigger tab={LIBRARY_SIDEBAR_TAB}>
                   {LibraryIcon}
                 </Sidebar.TabTrigger>
+                <Sidebar.TabTrigger
+                  tab={SCENE_SIDEBAR_TAB}
+                  title={t("toolBar.scene")}
+                  aria-label={t("toolBar.scene")}
+                >
+                  {SceneIcon}
+                </Sidebar.TabTrigger>
                 <DefaultSidebarTabTriggersTunnel.Out />
               </Sidebar.TabTriggers>
             </Sidebar.Header>
             <Sidebar.Tab tab={LIBRARY_SIDEBAR_TAB}>
-              <LibraryMenu />
+              {renderLibraryMenu ? renderLibraryMenu() : <LibraryMenu />}
+            </Sidebar.Tab>
+            <Sidebar.Tab tab={SCENE_SIDEBAR_TAB}>
+              {renderSceneMenu ? renderSceneMenu() : <SceneMenu />}
             </Sidebar.Tab>
             <Sidebar.Tab tab={CANVAS_SEARCH_TAB}>
               <SearchMenu />

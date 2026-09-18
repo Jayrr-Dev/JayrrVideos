@@ -10,6 +10,13 @@ export const DELETED_ELEMENT_TIMEOUT = 24 * 60 * 60 * 1000; // 1 day
 
 // should be aligned with MAX_ALLOWED_FILE_BYTES
 export const FILE_UPLOAD_MAX_BYTES = 4 * 1024 * 1024; // 4 MiB
+/** Files at or above this size go to Google Drive when connected. */
+export const GOOGLE_DRIVE_MIN_FILE_BYTES = 512 * 1024;
+/** Canvas still loads the file into RAM; this is a personal-use cap, not Drive's 5TB. */
+export const GOOGLE_DRIVE_MAX_FILE_BYTES = 512 * 1024 * 1024;
+export const GOOGLE_DRIVE_MAX_WIDTH_OR_HEIGHT = 8192;
+export const GOOGLE_DRIVE_FOLDER_NAME = "JayrrVideos";
+export const GOOGLE_DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
 // 1 year (https://stackoverflow.com/a/25201898/927631)
 export const FILE_CACHE_MAX_AGE_SEC = 31536000;
 
@@ -47,6 +54,11 @@ export const STORAGE_KEYS = {
 
   IDB_LIBRARY: "excalidraw-library",
   IDB_TTD_CHATS: "excalidraw-ttd-chats",
+  LOCAL_STORAGE_GOOGLE_DRIVE_ENABLED: "jayrr-google-drive-enabled",
+  LOCAL_STORAGE_GOOGLE_DRIVE_TOKEN: "jayrr-google-drive-token",
+  LOCAL_STORAGE_GOOGLE_DRIVE_FOLDER_ID: "jayrr-google-drive-folder-id",
+  LOCAL_STORAGE_OWNER_KEY: "jayrr-owner-key",
+  LOCAL_STORAGE_OPEN_LIBRARY_ID: "jayrr-open-library-id",
 
   // do not use apart from migrations
   __LEGACY_LOCAL_STORAGE_LIBRARY: "excalidraw-library",

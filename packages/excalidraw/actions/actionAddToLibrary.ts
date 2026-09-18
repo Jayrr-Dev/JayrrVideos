@@ -29,6 +29,29 @@ export const actionAddToLibrary = register({
       }
     }
 
+    if (app.props.onAddToLibrary) {
+      return Promise.resolve(app.props.onAddToLibrary(selectedElements, app.files))
+        .then(() => {
+          return {
+            captureUpdate: CaptureUpdateAction.EVENTUALLY,
+            appState: {
+              ...appState,
+              toast: { message: t("toast.addedToLibrary") },
+            },
+          };
+        })
+        .catch((error) => {
+          return {
+            captureUpdate: CaptureUpdateAction.EVENTUALLY,
+            appState: {
+              ...appState,
+              errorMessage:
+                error instanceof Error ? error.message : String(error),
+            },
+          };
+        });
+    }
+
     return app.library
       .getLatestLibrary()
       .then((items) => {

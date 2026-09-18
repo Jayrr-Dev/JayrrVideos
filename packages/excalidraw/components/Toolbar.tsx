@@ -3,12 +3,12 @@ import { useState } from "react";
 
 import { KEYS } from "@excalidraw/common";
 
-import { useTunnels } from "../context/tunnels";
 import { t } from "../i18n";
 
 import { useEditorInterface, useStylesPanelMode } from "./App";
 import { HintViewer } from "./HintViewer";
 import { Island } from "./Island";
+import { TimelineButton } from "./TimelineButton";
 import { LockButton } from "./LockButton";
 import { PenModeButton } from "./PenModeButton";
 import Stack from "./Stack";
@@ -21,8 +21,6 @@ import {
   LassoIcon,
   laserPointerToolIcon,
   bucketFillIcon,
-  MagicIcon,
-  mermaidLogoIcon,
   DotsIcon,
 } from "./icons";
 import {
@@ -64,8 +62,6 @@ const ExtraToolsDropdown = ({
 }) => {
   const [isExtraToolsMenuOpen, setIsExtraToolsMenuOpen] = useState(false);
   const isFullStylesPanel = useStylesPanelMode() === "full";
-  const { TTDDialogTriggerTunnel } = useTunnels();
-
   const imageToolSelected = activeTool.type === "image";
   const frameToolSelected = activeTool.type === "frame";
   const drawShapeToolSelected = activeTool.type === "autoshape";
@@ -192,28 +188,6 @@ const ExtraToolsDropdown = ({
             {t("toolBar.lasso")}
           </DropdownMenu.Item>
         )}
-        <div style={{ margin: "6px 0", fontSize: 14, fontWeight: 600 }}>
-          Generate
-        </div>
-        {app.props.aiEnabled !== false && <TTDDialogTriggerTunnel.Out />}
-        <DropdownMenu.Item
-          onSelect={() => app.setOpenDialog({ name: "ttd", tab: "mermaid" })}
-          icon={mermaidLogoIcon}
-          data-testid="toolbar-embeddable"
-        >
-          {t("toolBar.mermaidToExcalidraw")}
-        </DropdownMenu.Item>
-        {app.props.aiEnabled !== false && app.plugins.diagramToCode && (
-          <DropdownMenu.Item
-            onSelect={() => app.onMagicframeToolSelect()}
-            icon={MagicIcon}
-            data-testid="toolbar-magicframe"
-            badge={<DropdownMenu.Item.Badge>AI</DropdownMenu.Item.Badge>}
-            disabled={isToolButtonDisabled(app, "magicframe")}
-          >
-            {t("toolBar.magicframe")}
-          </DropdownMenu.Item>
-        )}
       </DropdownMenu.Content>
     </DropdownMenu>
   );
@@ -278,6 +252,15 @@ export const Toolbar = ({
               title={t("toolBar.lock")}
               // the active tool — including its lock state — is host-controlled
               disabled={app.props.activeTool != null}
+            />
+            <TimelineButton
+              checked={appState.timelineEnabled}
+              onChange={() =>
+                setAppState({
+                  timelineEnabled: !appState.timelineEnabled,
+                })
+              }
+              title={t("toolBar.timeline")}
             />
 
             <div

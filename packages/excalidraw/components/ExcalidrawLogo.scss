@@ -31,6 +31,10 @@
       margin-left: 0.75rem;
       width: auto;
       color: var(--color-logo-text);
+      font-family: "Excalifont", "Virgil", cursive;
+      font-weight: 700;
+      line-height: 1;
+      height: auto;
     }
 
     &.is-mobile {
@@ -60,7 +64,8 @@
       }
 
       .ExcalidrawLogo-text {
-        height: var(--logo-text--small);
+        height: auto;
+        font-size: var(--logo-text--small);
       }
     }
 

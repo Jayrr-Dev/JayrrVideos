@@ -1,0 +1,153 @@
+.excalidraw {
+  .jayrr-present {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 0 0.75rem 1rem;
+    overflow: auto;
+    flex: 1;
+  }
+
+  .jayrr-present__title-row {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    min-width: 0;
+  }
+
+  .jayrr-present__title {
+    margin: 0;
+    font-size: 1rem;
+  }
+
+  .jayrr-present__info {
+    display: inline-flex;
+    align-items: center;
+    cursor: help;
+  }
+
+  .jayrr-present__sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .jayrr-present__actions {
+    display: flex;
+    gap: 0.5rem;
+
+    .ExcButton {
+      justify-content: center;
+    }
+  }
+
+  .jayrr-present__empty,
+  .jayrr-present__status {
+    margin: 0;
+    color: var(--text-primary-color);
+    opacity: 0.72;
+    font-size: 0.85rem;
+  }
+
+  .jayrr-present__frames,
+  .jayrr-present__objects {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .jayrr-present__objects {
+    padding: 0.25rem 0 0.5rem 0.85rem;
+  }
+
+  .jayrr-present__frame {
+    border: 1px solid var(--color-surface-lowest);
+    border-radius: var(--border-radius-md);
+    padding: 0.4rem;
+    background: var(--color-surface-low);
+  }
+
+  .jayrr-present__row {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+
+  .jayrr-present__name {
+    flex: 1;
+    border: none;
+    background: none;
+    text-align: left;
+    color: var(--text-primary-color);
+    cursor: pointer;
+    padding: 0.35rem 0.4rem;
+    border-radius: var(--border-radius-md);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .jayrr-present__name:hover,
+  .jayrr-present__name.is-selected {
+    background: var(--color-surface-mid);
+  }
+
+  .jayrr-present__move {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .jayrr-present__move button {
+    border: none;
+    background: none;
+    cursor: pointer;
+    color: var(--text-primary-color);
+    line-height: 1;
+    padding: 0 0.25rem;
+  }
+
+  .jayrr-present__move button:disabled {
+    opacity: 0.35;
+    cursor: default;
+  }
+
+  .jayrr-present-hud {
+    position: fixed;
+    left: 50%;
+    bottom: 4.75rem;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.4rem 0.7rem;
+    border-radius: var(--border-radius-md);
+    background: var(--island-bg-color);
+    box-shadow: var(--shadow-island);
+    z-index: 10;
+    font-size: 0.85rem;
+    pointer-events: auto;
+  }
+
+  .jayrr-present-hud__keys {
+    opacity: 0.7;
+  }
+
+  .jayrr-present-hud button {
+    border: none;
+    background: var(--color-surface-mid);
+    color: var(--text-primary-color);
+    border-radius: var(--border-radius-md);
+    padding: 0.2rem 0.5rem;
+    cursor: pointer;
+  }
+}

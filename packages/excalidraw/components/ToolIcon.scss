@@ -187,8 +187,19 @@
       }
 
       svg {
-        width: var(--lg-icon-size);
-        height: var(--lg-icon-size);
+        // Enlarge the glyph inside the fixed toolbar button; preserve the
+        // button's box so labels, shortcuts, and hit targets do not move.
+        width: calc(var(--lg-icon-size) * 1.25);
+        height: calc(var(--lg-icon-size) * 1.25);
+        transform: scale(1.12);
+        transform-origin: center;
+
+        // The 100-unit pen drawings have more internal whitespace. Increase
+        // their current 20px viewport by 25% (25px at the default 16px rem).
+        &.handdrawn-tool-icon {
+          width: calc(var(--lg-icon-size) * 1.5625);
+          height: calc(var(--lg-icon-size) * 1.5625);
+        }
       }
     }
 
