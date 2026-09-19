@@ -25,7 +25,7 @@ import {
   isGoogleDriveConfigured,
 } from "../data/connectGoogleDrive";
 import { saveCanvasAsScene } from "../data/jayrrScenes";
-import { JAYRR_PRESENT_SIDEBAR } from "../present/buildPresentDeck";
+import { JAYRR_PRESENT_TAB } from "../present/buildPresentDeck";
 
 import { saveDebugState } from "./DebugCanvas";
 
@@ -131,7 +131,12 @@ export const AppMainMenu: React.FC<{
         icon={presentationIcon}
         onSelect={() => {
           excalidrawAPI?.updateScene({
-            appState: { openSidebar: { name: JAYRR_PRESENT_SIDEBAR } },
+            appState: {
+              openSidebar: {
+                name: DEFAULT_SIDEBAR.name,
+                tab: JAYRR_PRESENT_TAB,
+              },
+            },
           });
         }}
       >

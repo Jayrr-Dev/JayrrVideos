@@ -23,8 +23,18 @@ export const JAYRR_PRESENT_EDGE_PAD = 16;
 export const JAYRR_PRESENT_FOCUS_PAD = 72;
 /** Longer ease so Focus Zoom can settle instead of snapping. */
 export const JAYRR_PRESENT_ZOOM_MS = 850;
+export const JAYRR_PRESENT_ZOOM_PERCENT_MIN = 50;
+export const JAYRR_PRESENT_ZOOM_PERCENT_MAX = 400;
+export const JAYRR_PRESENT_ZOOM_PERCENT_DEFAULT = 100;
 
 export type PresentEffect = "focus" | "zoom";
+
+export type PresentMotion =
+  | "fade"
+  | "fadeUp"
+  | "fadeDown"
+  | "fadeLeft"
+  | "fadeRight";
 
 export type PresentRevealStep = {
   type: "reveal";
@@ -44,6 +54,8 @@ export type PresentObject = {
   label: string;
   order: number | null;
   effect: PresentEffect | null;
+  motion: PresentMotion | null;
+  zoomPercent: number | null;
   groupId: string | null;
   memberIds: string[];
 };
@@ -53,6 +65,7 @@ export type PresentFrame = {
   label: string;
   order: number | null;
   effect: PresentEffect | null;
+  zoomPercent: number | null;
   objects: PresentObject[];
 };
 
@@ -65,6 +78,8 @@ type PresentBag = {
   order?: number;
   label?: string;
   effect?: PresentEffect;
+  motion?: PresentMotion;
+  zoomPercent?: number;
 };
 
 const readPresentEffect = (value: unknown): PresentEffect | null => {
@@ -72,6 +87,33 @@ const readPresentEffect = (value: unknown): PresentEffect | null => {
     return value;
   }
   return null;
+};
+
+const readPresentMotionValue = (value: unknown): PresentMotion | null => {
+  if (
+    value === "fade" ||
+    value === "fadeUp" ||
+    value === "fadeDown" ||
+    value === "fadeLeft" ||
+    value === "fadeRight"
+  ) {
+    return value;
+  }
+  return null;
+};
+
+const readPresentZoomPercent = (value: unknown): number | null => {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return null;
+  }
+  const next = Math.round(value);
+  if (next < JAYRR_PRESENT_ZOOM_PERCENT_MIN) {
+    return JAYRR_PRESENT_ZOOM_PERCENT_MIN;
+  }
+  if (next > JAYRR_PRESENT_ZOOM_PERCENT_MAX) {
+    return JAYRR_PRESENT_ZOOM_PERCENT_MAX;
+  }
+  return next;
 };
 
 const readPresentBag = (element: ExcalidrawElement): PresentBag => {
@@ -96,6 +138,16 @@ const readPresentBag = (element: ExcalidrawElement): PresentBag => {
   if (effect) {
     bag.effect = effect;
   }
+  const motion = readPresentMotionValue(Reflect.get(present, "motion"));
+  if (motion) {
+    bag.motion = motion;
+  }
+  const zoomPercent = readPresentZoomPercent(
+    Reflect.get(present, "zoomPercent"),
+  );
+  if (zoomPercent !== null) {
+    bag.zoomPercent = zoomPercent;
+  }
   return bag;
 };
 
@@ -111,6 +163,30 @@ const presentEffectOf = (
   return null;
 };
 
+const presentMotionOf = (
+  elements: readonly ExcalidrawElement[],
+): PresentMotion | null => {
+  for (const element of elements) {
+    const motion = readPresentBag(element).motion;
+    if (motion) {
+      return motion;
+    }
+  }
+  return null;
+};
+
+const presentZoomPercentOf = (
+  elements: readonly ExcalidrawElement[],
+): number | null => {
+  for (const element of elements) {
+    const zoomPercent = readPresentBag(element).zoomPercent;
+    if (zoomPercent !== undefined) {
+      return zoomPercent;
+    }
+  }
+  return null;
+};
+
 const readPresentOrder = (element: ExcalidrawElement): number | null => {
   return readPresentBag(element).order ?? null;
 };
@@ -121,6 +197,8 @@ const writePresentBag = (
     order?: number | null;
     label?: string | null;
     effect?: PresentEffect | null;
+    motion?: PresentMotion | null;
+    zoomPercent?: number | null;
   },
 ): ExcalidrawElement["customData"] => {
   const current = readPresentBag(element);
@@ -140,13 +218,30 @@ const writePresentBag = (
   } else if (patch.effect !== undefined) {
     next.effect = patch.effect;
   }
+  if (patch.motion === null) {
+    delete next.motion;
+  } else if (patch.motion !== undefined) {
+    next.motion = patch.motion;
+  }
+  if (patch.zoomPercent === null) {
+    delete next.zoomPercent;
+  } else if (patch.zoomPercent !== undefined) {
+    const zoomPercent = readPresentZoomPercent(patch.zoomPercent);
+    if (zoomPercent === null) {
+      delete next.zoomPercent;
+    } else {
+      next.zoomPercent = zoomPercent;
+    }
+  }
   const customData: Record<string, unknown> = {
     ...(element.customData ?? {}),
   };
   if (
     next.order === undefined &&
     next.label === undefined &&
-    next.effect === undefined
+    next.effect === undefined &&
+    next.motion === undefined &&
+    next.zoomPercent === undefined
   ) {
     delete customData[JAYRR_PRESENT_KEY];
     return Object.keys(customData).length
@@ -176,6 +271,20 @@ export const writePresentEffect = (
   effect: PresentEffect | null,
 ): ExcalidrawElement["customData"] => {
   return writePresentBag(element, { effect });
+};
+
+export const writePresentMotion = (
+  element: ExcalidrawElement,
+  motion: PresentMotion | null,
+): ExcalidrawElement["customData"] => {
+  return writePresentBag(element, { motion });
+};
+
+export const writePresentZoomPercent = (
+  element: ExcalidrawElement,
+  zoomPercent: number | null,
+): ExcalidrawElement["customData"] => {
+  return writePresentBag(element, { zoomPercent });
 };
 
 const comparePresentable = (
@@ -297,13 +406,32 @@ export const idsForPresentObject = (
   elements: readonly ExcalidrawElement[],
 ): string[] => {
   const ids: string[] = [];
-  const byId = arrayToMap(elements);
+  const seen = new Set<string>();
+  const add = (id: string) => {
+    if (seen.has(id)) {
+      return;
+    }
+    seen.add(id);
+    ids.push(id);
+  };
+  const members = new Set(object.memberIds);
   for (const memberId of object.memberIds) {
-    const element = byId.get(memberId);
+    const element = elements.find((item) => item.id === memberId);
     if (!element) {
       continue;
     }
-    ids.push(...boundIdsForElement(element, elements));
+    for (const id of boundIdsForElement(element, elements)) {
+      add(id);
+    }
+  }
+  // Sticky-note labels may only point at the container via containerId.
+  for (const element of elements) {
+    if (!isBoundToContainer(element)) {
+      continue;
+    }
+    if (members.has(element.containerId) || seen.has(element.containerId)) {
+      add(element.id);
+    }
   }
   return ids;
 };
@@ -357,6 +485,8 @@ export const buildPresentDeck = (
       label: string;
       order: number | null;
       effect: PresentEffect | null;
+      motion: PresentMotion | null;
+      zoomPercent: number | null;
       index: number;
       groupId: string | null;
       memberIds: string[];
@@ -374,6 +504,8 @@ export const buildPresentDeck = (
           label: getPresentLabel(object.element),
           order: object.order,
           effect: presentEffectOf([object.element]),
+          motion: presentMotionOf([object.element]),
+          zoomPercent: presentZoomPercentOf([object.element]),
           index: object.index,
           groupId: null,
           memberIds: [object.element.id],
@@ -396,6 +528,8 @@ export const buildPresentDeck = (
           label: getPresentLabel(representative.element),
           order: representative.order,
           effect: presentEffectOf([representative.element]),
+          motion: presentMotionOf([representative.element]),
+          zoomPercent: presentZoomPercentOf([representative.element]),
           index: representative.index,
           groupId: null,
           memberIds: [representative.element.id],
@@ -407,6 +541,8 @@ export const buildPresentDeck = (
         label: groupPresentLabel(members.map((item) => item.element)),
         order: minPresentOrder(members.map((item) => item.order)),
         effect: presentEffectOf(members.map((item) => item.element)),
+        motion: presentMotionOf(members.map((item) => item.element)),
+        zoomPercent: presentZoomPercentOf(members.map((item) => item.element)),
         index: representative.index,
         groupId,
         memberIds: members.map((item) => item.element.id),
@@ -420,11 +556,14 @@ export const buildPresentDeck = (
       label: getPresentLabel(frame.element),
       order: frame.order,
       effect: presentEffectOf([frame.element]),
+      zoomPercent: presentZoomPercentOf([frame.element]),
       objects: clustered.map((object) => ({
         id: object.id,
         label: object.label,
         order: object.order,
         effect: object.effect,
+        motion: object.motion,
+        zoomPercent: object.zoomPercent,
         groupId: object.groupId,
         memberIds: object.memberIds,
       })),
@@ -447,19 +586,15 @@ export const buildPresentDeck = (
 };
 
 /**
- * A step Next/Back can stop on. Every reveal lands; a bare `showFrame` only
- * lands when it is a slide of its own (empty frame or frame-level effect),
- * otherwise it is skipped because the slide would look blank.
+ * Every deck step is a stop: the blank `showFrame` (all objects hidden) and
+ * each reveal. Next and Back use the same list so the empty slide is a
+ * frame you can land on in both directions.
  */
 export const isPresentLandableStep = (
-  deck: PresentDeck,
+  _deck: PresentDeck,
   step: PresentStep,
 ): boolean => {
-  if (step.type === "reveal") {
-    return true;
-  }
-  const frame = deck.frames.find((item) => item.id === step.frameId);
-  return Boolean(frame?.effect) || frame?.objects.length === 0;
+  return step.type === "showFrame" || step.type === "reveal";
 };
 
 /**

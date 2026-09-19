@@ -162,10 +162,9 @@ export const usePresentPlayback = (
     if (getPresentHideFrames()) {
       api.updateFrameRendering({ enabled: false });
     }
-    // Start on the first landable step (same rule Next/Back use).
-    const first = nextPresentStepIndex(nextDeck, -1, 1) ?? 0;
+    // Start on the opening showFrame so the first object is still hidden.
     setPresenting(true);
-    applyStep(first, false);
+    applyStep(0, false);
     refocusPresentTrap();
   }, [api, applyStep]);
 
@@ -216,11 +215,21 @@ export const usePresentPlayback = (
       });
     };
     const onFullscreenChange = () => {
-      // Stopping a video often exits iframe/document fullscreen.
-      // Do not treat that as Exit Present — only Escape / Exit does.
-      if (isFullScreen()) {
+      const el = document.fullscreenElement;
+      // YouTube / embed player fullscreen is the iframe, not the document.
+      if (el && el.nodeName !== "HTML") {
+        return;
+      }
+      if (el?.nodeName === "HTML") {
         enteredFullscreenRef.current = true;
         refit();
+        return;
+      }
+      // First Esc is consumed by the browser to leave document fullscreen.
+      // That must also leave Present — otherwise preview (zen, trap, view
+      // mode) stays up until a second Esc.
+      if (presentingRef.current) {
+        stopPresent();
       }
     };
     window.addEventListener("resize", refit);

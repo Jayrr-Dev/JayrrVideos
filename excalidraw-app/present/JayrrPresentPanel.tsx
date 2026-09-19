@@ -1,15 +1,15 @@
 import {
+  closestCorners,
   DndContext,
   KeyboardSensor,
   PointerSensor,
-  closestCorners,
   useSensor,
   useSensors,
   type CollisionDetection,
   type DragEndEvent,
-  type DragOverEvent,
   type DraggableAttributes,
   type DraggableSyntheticListeners,
+  type DragOverEvent,
   type UniqueIdentifier,
 } from "@dnd-kit/core";
 import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
@@ -49,19 +49,31 @@ import {
 } from "react";
 
 import {
+  JAYRR_PRESENT_ZOOM_PERCENT_DEFAULT,
+  JAYRR_PRESENT_ZOOM_PERCENT_MAX,
+  JAYRR_PRESENT_ZOOM_PERCENT_MIN,
   reorderPresentIds,
   stepCaption,
   writePresentEffect,
   writePresentLabel,
+  writePresentMotion,
   writePresentOrder,
+  writePresentZoomPercent,
   type PresentDeck,
   type PresentEffect,
   type PresentFrame,
+  type PresentMotion,
 } from "./buildPresentDeck";
 import {
   getPresentHideFrames,
   setPresentHideFrames,
 } from "./presentHideFrames";
+import {
+  getPresentDefaultMotion,
+  PRESENT_MOTION_LABEL,
+  PRESENT_MOTIONS,
+  setPresentDefaultMotion,
+} from "./presentMotion";
 
 import "./JayrrPresentPanel.scss";
 
@@ -119,17 +131,47 @@ const focusZoomIcon = (
 const PresentEffectMenu = ({
   className,
   effect,
+  motion,
+  zoomPercent,
   disabled,
   onEffect,
+  onMotion,
+  onZoomPercent,
   children,
 }: {
   className?: string;
   effect: PresentEffect | null;
+  motion?: PresentMotion | null;
+  zoomPercent?: number | null;
   disabled: boolean;
   onEffect: (effect: PresentEffect | null) => void;
+  onMotion?: (motion: PresentMotion | null) => void;
+  onZoomPercent?: (zoomPercent: number) => void;
   children: ReactNode;
 }) => {
   const { container } = useExcalidrawContainer();
+  const [zoomOpen, setZoomOpen] = useState(false);
+  const currentZoom = zoomPercent ?? JAYRR_PRESENT_ZOOM_PERCENT_DEFAULT;
+  const [zoomDraft, setZoomDraft] = useState(String(currentZoom));
+
+  useEffect(() => {
+    setZoomDraft(String(currentZoom));
+  }, [currentZoom]);
+
+  const commitZoomPercent = () => {
+    const next = Number(zoomDraft);
+    if (!Number.isFinite(next)) {
+      setZoomDraft(String(currentZoom));
+      return;
+    }
+    const clamped = Math.min(
+      JAYRR_PRESENT_ZOOM_PERCENT_MAX,
+      Math.max(JAYRR_PRESENT_ZOOM_PERCENT_MIN, Math.round(next)),
+    );
+    setZoomDraft(String(clamped));
+    onZoomPercent?.(clamped);
+    onEffect("zoom");
+  };
   const triggerClass = className
     ? `jayrr-present__effect-trigger ${className}`
     : "jayrr-present__effect-trigger";
@@ -148,6 +190,20 @@ const PresentEffectMenu = ({
           aria-label="Focus Zoom"
         >
           {focusZoomIcon}
+        </span>
+      ) : null}
+      {effect === "zoom" &&
+      zoomPercent !== null &&
+      zoomPercent !== undefined &&
+      zoomPercent !== JAYRR_PRESENT_ZOOM_PERCENT_DEFAULT ? (
+        <span className="jayrr-present__motion-tag">{`${zoomPercent}%`}</span>
+      ) : null}
+      {motion ? (
+        <span
+          className="jayrr-present__motion-tag"
+          title={PRESENT_MOTION_LABEL[motion]}
+        >
+          {PRESENT_MOTION_LABEL[motion]}
         </span>
       ) : null}
     </>
@@ -195,19 +251,118 @@ const PresentEffectMenu = ({
             </span>
             Focus
           </ContextMenu.Item>
-          <ContextMenu.Item
-            className={
-              effect === "zoom"
-                ? "jayrr-present__menu-item is-active"
-                : "jayrr-present__menu-item"
-            }
-            onSelect={() => onEffect("zoom")}
-          >
-            <span className="jayrr-present__menu-check">
-              {effect === "zoom" ? checkIcon : null}
-            </span>
-            Focus Zoom
-          </ContextMenu.Item>
+          <div className="jayrr-present__menu-zoom-row">
+            <ContextMenu.Item
+              className={
+                effect === "zoom"
+                  ? "jayrr-present__menu-item is-active"
+                  : "jayrr-present__menu-item"
+              }
+              onSelect={() => onEffect("zoom")}
+            >
+              <span className="jayrr-present__menu-check">
+                {effect === "zoom" ? checkIcon : null}
+              </span>
+              Focus Zoom
+            </ContextMenu.Item>
+            {onZoomPercent ? (
+              <Popover.Root open={zoomOpen} onOpenChange={setZoomOpen}>
+                <Popover.Trigger asChild>
+                  <button
+                    type="button"
+                    className="jayrr-present__zoom-gear"
+                    aria-label="Focus Zoom percent"
+                    title={`${currentZoom}%`}
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onClick={() => onEffect("zoom")}
+                  >
+                    {settingsIcon}
+                  </button>
+                </Popover.Trigger>
+                <Popover.Portal container={container}>
+                  <Popover.Content
+                    side="right"
+                    align="start"
+                    sideOffset={8}
+                    className="jayrr-present__settings-popover"
+                    onOpenAutoFocus={(event) => event.preventDefault()}
+                  >
+                    <div className="jayrr-present__settings-head">
+                      <span className="jayrr-present__settings-title">
+                        Zoom
+                      </span>
+                      <Tooltip
+                        label="100% fills the object in the view. Higher is closer, lower shows more around it."
+                        long
+                      >
+                        <span className="jayrr-present__settings-info">
+                          {helpIcon}
+                        </span>
+                      </Tooltip>
+                    </div>
+                    <label className="jayrr-present__settings-row">
+                      <span>Amount</span>
+                      <span className="jayrr-present__zoom-field">
+                        <input
+                          type="number"
+                          className="jayrr-present__settings-select jayrr-present__zoom-input"
+                          min={JAYRR_PRESENT_ZOOM_PERCENT_MIN}
+                          max={JAYRR_PRESENT_ZOOM_PERCENT_MAX}
+                          step={10}
+                          value={zoomDraft}
+                          onChange={(event) => setZoomDraft(event.target.value)}
+                          onBlur={commitZoomPercent}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              commitZoomPercent();
+                            }
+                          }}
+                        />
+                        %
+                      </span>
+                    </label>
+                  </Popover.Content>
+                </Popover.Portal>
+              </Popover.Root>
+            ) : null}
+          </div>
+          {onMotion ? (
+            <>
+              <ContextMenu.Label className="jayrr-present__menu-label">
+                Motion
+              </ContextMenu.Label>
+              <ContextMenu.Item
+                className={
+                  motion === null || motion === undefined
+                    ? "jayrr-present__menu-item is-active"
+                    : "jayrr-present__menu-item"
+                }
+                onSelect={() => onMotion(null)}
+              >
+                <span className="jayrr-present__menu-check">
+                  {motion === null || motion === undefined ? checkIcon : null}
+                </span>
+                Default
+              </ContextMenu.Item>
+              {PRESENT_MOTIONS.map((item) => (
+                <ContextMenu.Item
+                  key={item}
+                  className={
+                    motion === item
+                      ? "jayrr-present__menu-item is-active"
+                      : "jayrr-present__menu-item"
+                  }
+                  onSelect={() => onMotion(item)}
+                >
+                  <span className="jayrr-present__menu-check">
+                    {motion === item ? checkIcon : null}
+                  </span>
+                  {PRESENT_MOTION_LABEL[item]}
+                </ContextMenu.Item>
+              ))}
+            </>
+          ) : null}
         </ContextMenu.Content>
       </ContextMenu.Portal>
     </ContextMenu.Root>
@@ -219,6 +374,7 @@ const PresentSettingsPopover = () => {
   const { container } = useExcalidrawContainer();
   const [open, setOpen] = useState(false);
   const [hideFrames, setHideFrames] = useState(getPresentHideFrames);
+  const [motion, setMotion] = useState(getPresentDefaultMotion);
 
   useEffect(() => {
     api?.updateFrameRendering({ enabled: true });
@@ -250,12 +406,31 @@ const PresentSettingsPopover = () => {
             <div className="jayrr-present__settings-head">
               <h3 className="jayrr-present__settings-title">Settings</h3>
               <Tooltip
-                label="Hides frame borders and names after you press Present. Objects inside stay on the slide."
+                label="Motion is the default enter/leave for every object. Right-click a row to override one. Hide frames removes borders and names in Present."
                 long
                 position="top"
               >
                 <span className="jayrr-present__settings-info">{helpIcon}</span>
               </Tooltip>
+            </div>
+            <div className="jayrr-present__settings-row">
+              <label htmlFor="presentMotion">Motion</label>
+              <select
+                id="presentMotion"
+                className="jayrr-present__settings-select"
+                value={motion}
+                onChange={(event) => {
+                  const next = event.target.value as PresentMotion;
+                  setMotion(next);
+                  setPresentDefaultMotion(next);
+                }}
+              >
+                {PRESENT_MOTIONS.map((item) => (
+                  <option key={item} value={item}>
+                    {PRESENT_MOTION_LABEL[item]}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="jayrr-present__settings-row">
               <label htmlFor="hideFrames">Hide frames</label>
@@ -414,6 +589,7 @@ const SortableFrameBlock = ({
   renaming,
   draftName,
   effect,
+  zoomPercent,
   onSelect,
   onToggleCollapse,
   onStartRename,
@@ -421,6 +597,7 @@ const SortableFrameBlock = ({
   onCommit,
   onCancel,
   onEffect,
+  onZoomPercent,
   children,
 }: {
   id: string;
@@ -432,6 +609,7 @@ const SortableFrameBlock = ({
   renaming: boolean;
   draftName: string;
   effect: PresentEffect | null;
+  zoomPercent: number | null;
   onSelect: () => void;
   onToggleCollapse: () => void;
   onStartRename: () => void;
@@ -439,6 +617,7 @@ const SortableFrameBlock = ({
   onCommit: () => void;
   onCancel: () => void;
   onEffect: (effect: PresentEffect | null) => void;
+  onZoomPercent: (zoomPercent: number) => void;
   children: ReactNode;
 }) => {
   const {
@@ -464,8 +643,10 @@ const SortableFrameBlock = ({
       <PresentEffectMenu
         className="jayrr-present__frame-head"
         effect={effect}
+        zoomPercent={zoomPercent}
         disabled={renaming}
         onEffect={onEffect}
+        onZoomPercent={onZoomPercent}
       >
         <EditablePresentName
           index={index}
@@ -512,12 +693,16 @@ const SortableObjectBlock = ({
   renaming,
   draftName,
   effect,
+  motion,
+  zoomPercent,
   onSelect,
   onStartRename,
   onDraftChange,
   onCommit,
   onCancel,
   onEffect,
+  onMotion,
+  onZoomPercent,
 }: {
   id: string;
   index: number;
@@ -527,12 +712,16 @@ const SortableObjectBlock = ({
   renaming: boolean;
   draftName: string;
   effect: PresentEffect | null;
+  motion: PresentMotion | null;
+  zoomPercent: number | null;
   onSelect: () => void;
   onStartRename: () => void;
   onDraftChange: (value: string) => void;
   onCommit: () => void;
   onCancel: () => void;
   onEffect: (effect: PresentEffect | null) => void;
+  onMotion: (motion: PresentMotion | null) => void;
+  onZoomPercent: (zoomPercent: number) => void;
 }) => {
   const {
     attributes,
@@ -556,8 +745,12 @@ const SortableObjectBlock = ({
     >
       <PresentEffectMenu
         effect={effect}
+        motion={motion}
+        zoomPercent={zoomPercent}
         disabled={renaming}
         onEffect={onEffect}
+        onMotion={onMotion}
+        onZoomPercent={onZoomPercent}
       >
         <EditablePresentName
           index={index}
@@ -682,6 +875,52 @@ export const JayrrPresentPanel = ({
             element,
             trimmed.length > 0 ? trimmed : null,
           ),
+        });
+      });
+      api.updateScene({
+        elements: next,
+        captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+      });
+    },
+    [api],
+  );
+
+  const persistPresentMotion = useCallback(
+    (ids: readonly string[], motion: PresentMotion | null) => {
+      if (!api || ids.length === 0) {
+        return;
+      }
+      const targets = new Set(ids);
+      const all = api.getSceneElementsIncludingDeleted();
+      const next = all.map((element) => {
+        if (!targets.has(element.id)) {
+          return element;
+        }
+        return newElementWith(element, {
+          customData: writePresentMotion(element, motion),
+        });
+      });
+      api.updateScene({
+        elements: next,
+        captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+      });
+    },
+    [api],
+  );
+
+  const persistPresentZoomPercent = useCallback(
+    (ids: readonly string[], zoomPercent: number) => {
+      if (!api || ids.length === 0) {
+        return;
+      }
+      const targets = new Set(ids);
+      const all = api.getSceneElementsIncludingDeleted();
+      const next = all.map((element) => {
+        if (!targets.has(element.id)) {
+          return element;
+        }
+        return newElementWith(element, {
+          customData: writePresentZoomPercent(element, zoomPercent),
         });
       });
       api.updateScene({
@@ -924,6 +1163,7 @@ export const JayrrPresentPanel = ({
                     renaming={renamingId === frame.id}
                     draftName={draftName}
                     effect={frame.effect}
+                    zoomPercent={frame.zoomPercent}
                     onSelect={() => selectId(frame.id)}
                     onToggleCollapse={() => {
                       setCollapsedFrameIds((current) => ({
@@ -937,6 +1177,9 @@ export const JayrrPresentPanel = ({
                     onCancel={cancelRename}
                     onEffect={(effect) =>
                       persistPresentEffect([frame.id], effect)
+                    }
+                    onZoomPercent={(zoomPercent) =>
+                      persistPresentZoomPercent([frame.id], zoomPercent)
                     }
                   >
                     {childIds.length === 0 ? (
@@ -973,6 +1216,8 @@ export const JayrrPresentPanel = ({
                                 renaming={renamingId === object.id}
                                 draftName={draftName}
                                 effect={object.effect}
+                                motion={object.motion}
+                                zoomPercent={object.zoomPercent}
                                 onSelect={() => selectId(object.id)}
                                 onStartRename={() =>
                                   startRename(object.id, object.label)
@@ -982,6 +1227,15 @@ export const JayrrPresentPanel = ({
                                 onCancel={cancelRename}
                                 onEffect={(effect) =>
                                   persistPresentEffect(object.memberIds, effect)
+                                }
+                                onMotion={(motion) =>
+                                  persistPresentMotion(object.memberIds, motion)
+                                }
+                                onZoomPercent={(zoomPercent) =>
+                                  persistPresentZoomPercent(
+                                    object.memberIds,
+                                    zoomPercent,
+                                  )
                                 }
                               />
                             );

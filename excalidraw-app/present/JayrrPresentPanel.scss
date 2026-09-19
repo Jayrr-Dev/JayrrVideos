@@ -88,6 +88,29 @@
     font-size: 0.85rem;
   }
 
+  .jayrr-present__settings-row + .jayrr-present__settings-row {
+    margin-top: 0.55rem;
+  }
+
+  .jayrr-present__settings-select {
+    max-width: 8.5rem;
+    font-size: 0.8rem;
+  }
+
+  .jayrr-present__settings-tips {
+    margin: 0;
+    padding-left: 1.1em;
+  }
+
+  .jayrr-present__motion-tag {
+    margin-left: 0.25rem;
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    color: var(--color-primary);
+    opacity: 0.85;
+  }
+
   .jayrr-present__sr {
     position: absolute;
     width: 1px;
@@ -351,6 +374,53 @@
   .jayrr-present__menu-check svg {
     width: 0.85rem;
     height: 0.85rem;
+  }
+
+  .jayrr-present__menu-zoom-row {
+    display: flex;
+    align-items: center;
+    gap: 0.1rem;
+  }
+
+  .jayrr-present__menu-zoom-row .jayrr-present__menu-item {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .jayrr-present__zoom-gear {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.45rem;
+    height: 1.45rem;
+    margin-right: 0.15rem;
+    padding: 0;
+    border: none;
+    border-radius: var(--border-radius-md);
+    background: transparent;
+    color: var(--icon-fill-color);
+    cursor: pointer;
+  }
+
+  .jayrr-present__zoom-gear:hover,
+  .jayrr-present__zoom-gear[data-state="open"] {
+    background: var(--button-hover-bg);
+  }
+
+  .jayrr-present__zoom-gear svg {
+    width: 0.95rem;
+    height: 0.95rem;
+  }
+
+  .jayrr-present__zoom-field {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+
+  .jayrr-present__zoom-input {
+    width: 4.25rem;
+    max-width: 4.25rem;
   }
 }
 
