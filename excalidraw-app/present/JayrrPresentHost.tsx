@@ -10,8 +10,12 @@ import { createPortal } from "react-dom";
 
 import type { NonDeletedExcalidrawElement } from "@excalidraw/element/types";
 
+import { TopErrorBoundary } from "../components/TopErrorBoundary";
+import { JayrrPresentCursor } from "./JayrrPresentCursor";
 import { JayrrPresentPanel } from "./JayrrPresentPanel";
+import { JayrrPresentTranslationOverlay } from "./JayrrPresentTranslationOverlay";
 import { JAYRR_PRESENT_TAB } from "./buildPresentDeck";
+import { getPresentCustomCursor } from "./presentCursor";
 import { PRESENT_TRAP_CLASS } from "./presentFocus";
 import { usePresentPlayback } from "./usePresentPlayback";
 
@@ -56,43 +60,51 @@ export const JayrrPresentHost = ({
 
   if (playback.presenting) {
     return createPortal(
-      <div
-        ref={trapRef}
-        className={PRESENT_TRAP_CLASS}
-        tabIndex={0}
-        role="application"
-        aria-label="Slideshow. Arrow keys or click to advance. Escape to exit."
-        onMouseDown={(event) => {
-          event.preventDefault();
-          trapRef.current?.focus();
-        }}
-        onClick={playback.goNext}
-      />,
+      <>
+        <div
+          ref={trapRef}
+          className={PRESENT_TRAP_CLASS}
+          tabIndex={0}
+          role="application"
+          aria-label="Slideshow. Arrow keys or click to advance. Escape to exit."
+          onMouseDown={(event) => {
+            event.preventDefault();
+            trapRef.current?.focus();
+          }}
+          onClick={playback.goNext}
+        />
+        {getPresentCustomCursor() ? <JayrrPresentCursor /> : null}
+      </>,
       document.body,
     );
   }
 
   return (
-    <DefaultSidebar>
-      <DefaultSidebar.TabTriggers>
-        <Sidebar.TabTrigger
-          tab={JAYRR_PRESENT_TAB}
-          title="Present"
-          aria-label="Present"
-        >
-          {presentationIcon}
-        </Sidebar.TabTrigger>
-      </DefaultSidebar.TabTriggers>
-      <Sidebar.Tab tab={JAYRR_PRESENT_TAB}>
-        <JayrrPresentPanel
-          deck={playback.deck}
-          presenting={playback.presenting}
-          stepIndex={playback.stepIndex}
-          selectedElementIds={selectedElementIds}
-          startPresent={playback.startPresent}
-          stopPresent={playback.stopPresent}
-        />
-      </Sidebar.Tab>
-    </DefaultSidebar>
+    <>
+      <JayrrPresentTranslationOverlay deck={playback.deck} />
+      <DefaultSidebar>
+        <DefaultSidebar.TabTriggers>
+          <Sidebar.TabTrigger
+            tab={JAYRR_PRESENT_TAB}
+            title="Present"
+            aria-label="Present"
+          >
+            {presentationIcon}
+          </Sidebar.TabTrigger>
+        </DefaultSidebar.TabTriggers>
+        <Sidebar.Tab tab={JAYRR_PRESENT_TAB}>
+          <TopErrorBoundary compact>
+            <JayrrPresentPanel
+              deck={playback.deck}
+              presenting={playback.presenting}
+              stepIndex={playback.stepIndex}
+              selectedElementIds={selectedElementIds}
+              startPresent={playback.startPresent}
+              stopPresent={playback.stopPresent}
+            />
+          </TopErrorBoundary>
+        </Sidebar.Tab>
+      </DefaultSidebar>
+    </>
   );
 };

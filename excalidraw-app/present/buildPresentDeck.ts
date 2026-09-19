@@ -23,18 +23,29 @@ export const JAYRR_PRESENT_EDGE_PAD = 16;
 export const JAYRR_PRESENT_FOCUS_PAD = 72;
 /** Longer ease so Focus Zoom can settle instead of snapping. */
 export const JAYRR_PRESENT_ZOOM_MS = 850;
-export const JAYRR_PRESENT_ZOOM_PERCENT_MIN = 50;
+export const JAYRR_PRESENT_ZOOM_PERCENT_MIN = 10;
 export const JAYRR_PRESENT_ZOOM_PERCENT_MAX = 400;
 export const JAYRR_PRESENT_ZOOM_PERCENT_DEFAULT = 100;
+export const JAYRR_PRESENT_TRANSLATION_TIME_DEFAULT = 500;
+export const JAYRR_PRESENT_TRANSLATION_TIME_MIN = 50;
+export const JAYRR_PRESENT_TRANSLATION_TIME_MAX = 8000;
 
-export type PresentEffect = "focus" | "zoom";
+export type PresentEffect = "focus" | "zoom" | "scale";
 
 export type PresentMotion =
-  | "fade"
-  | "fadeUp"
-  | "fadeDown"
-  | "fadeLeft"
-  | "fadeRight";
+  "fade" | "fadeUp" | "fadeDown" | "fadeLeft" | "fadeRight";
+
+export type PresentExit = PresentMotion;
+
+export type PresentEasing = "linear" | "easeIn" | "easeOut" | "easeInOut";
+
+export type PresentTranslation = {
+  kind: "move";
+  time: number;
+  easing: PresentEasing;
+  x: number;
+  y: number;
+};
 
 export type PresentRevealStep = {
   type: "reveal";
@@ -55,7 +66,11 @@ export type PresentObject = {
   order: number | null;
   effect: PresentEffect | null;
   motion: PresentMotion | null;
+  exit: PresentExit | null;
+  translation: PresentTranslation | null;
   zoomPercent: number | null;
+  skip: boolean;
+  hide: boolean;
   groupId: string | null;
   memberIds: string[];
 };
@@ -79,11 +94,15 @@ type PresentBag = {
   label?: string;
   effect?: PresentEffect;
   motion?: PresentMotion;
+  exit?: PresentExit;
+  translation?: PresentTranslation;
   zoomPercent?: number;
+  skip?: boolean;
+  hide?: boolean;
 };
 
 const readPresentEffect = (value: unknown): PresentEffect | null => {
-  if (value === "focus" || value === "zoom") {
+  if (value === "focus" || value === "zoom" || value === "scale") {
     return value;
   }
   return null;
@@ -101,6 +120,63 @@ const readPresentMotionValue = (value: unknown): PresentMotion | null => {
   }
   return null;
 };
+
+const readPresentExit = (value: unknown): PresentExit | null => {
+  return readPresentMotionValue(value);
+};
+
+const readPresentEasing = (value: unknown): PresentEasing | null => {
+  if (
+    value === "linear" ||
+    value === "easeIn" ||
+    value === "easeOut" ||
+    value === "easeInOut"
+  ) {
+    return value;
+  }
+  return null;
+};
+
+const readPresentTime = (value: unknown): number => {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return JAYRR_PRESENT_TRANSLATION_TIME_DEFAULT;
+  }
+  return Math.min(
+    JAYRR_PRESENT_TRANSLATION_TIME_MAX,
+    Math.max(JAYRR_PRESENT_TRANSLATION_TIME_MIN, Math.round(value)),
+  );
+};
+
+const readPresentDelta = (value: unknown): number => {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return 0;
+  }
+  return value;
+};
+
+const readPresentTranslation = (value: unknown): PresentTranslation | null => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  if (Reflect.get(value, "kind") !== "move") {
+    return null;
+  }
+  return {
+    kind: "move",
+    time: readPresentTime(Reflect.get(value, "time")),
+    easing: readPresentEasing(Reflect.get(value, "easing")) ?? "easeOut",
+    x: readPresentDelta(Reflect.get(value, "x")),
+    y: readPresentDelta(Reflect.get(value, "y")),
+  };
+};
+
+export const defaultPresentTranslation = (): PresentTranslation => ({
+  kind: "move",
+  time: JAYRR_PRESENT_TRANSLATION_TIME_DEFAULT,
+  easing: "easeOut",
+  x: 0,
+  y: 0,
+});
 
 const readPresentZoomPercent = (value: unknown): number | null => {
   if (typeof value !== "number" || !Number.isFinite(value)) {
@@ -142,11 +218,27 @@ const readPresentBag = (element: ExcalidrawElement): PresentBag => {
   if (motion) {
     bag.motion = motion;
   }
+  const exit = readPresentExit(Reflect.get(present, "exit"));
+  if (exit) {
+    bag.exit = exit;
+  }
+  const translation = readPresentTranslation(
+    Reflect.get(present, "translation"),
+  );
+  if (translation) {
+    bag.translation = translation;
+  }
   const zoomPercent = readPresentZoomPercent(
     Reflect.get(present, "zoomPercent"),
   );
   if (zoomPercent !== null) {
     bag.zoomPercent = zoomPercent;
+  }
+  if (Reflect.get(present, "skip") === true) {
+    bag.skip = true;
+  }
+  if (Reflect.get(present, "hide") === true) {
+    bag.hide = true;
   }
   return bag;
 };
@@ -175,6 +267,30 @@ const presentMotionOf = (
   return null;
 };
 
+const presentExitOf = (
+  elements: readonly ExcalidrawElement[],
+): PresentExit | null => {
+  for (const element of elements) {
+    const exit = readPresentBag(element).exit;
+    if (exit) {
+      return exit;
+    }
+  }
+  return null;
+};
+
+const presentTranslationOf = (
+  elements: readonly ExcalidrawElement[],
+): PresentTranslation | null => {
+  for (const element of elements) {
+    const translation = readPresentBag(element).translation;
+    if (translation) {
+      return translation;
+    }
+  }
+  return null;
+};
+
 const presentZoomPercentOf = (
   elements: readonly ExcalidrawElement[],
 ): number | null => {
@@ -185,6 +301,20 @@ const presentZoomPercentOf = (
     }
   }
   return null;
+};
+
+const presentSkipOf = (elements: readonly ExcalidrawElement[]): boolean => {
+  return elements.some((element) => readPresentBag(element).skip === true);
+};
+
+const presentHideOf = (elements: readonly ExcalidrawElement[]): boolean => {
+  return elements.some((element) => readPresentBag(element).hide === true);
+};
+
+export const countedPresentObjects = (
+  objects: readonly PresentObject[],
+): PresentObject[] => {
+  return objects.filter((object) => !object.skip && !object.hide);
 };
 
 const readPresentOrder = (element: ExcalidrawElement): number | null => {
@@ -198,7 +328,11 @@ const writePresentBag = (
     label?: string | null;
     effect?: PresentEffect | null;
     motion?: PresentMotion | null;
+    exit?: PresentExit | null;
+    translation?: PresentTranslation | null;
     zoomPercent?: number | null;
+    skip?: boolean;
+    hide?: boolean;
   },
 ): ExcalidrawElement["customData"] => {
   const current = readPresentBag(element);
@@ -217,11 +351,28 @@ const writePresentBag = (
     delete next.effect;
   } else if (patch.effect !== undefined) {
     next.effect = patch.effect;
+    delete next.skip;
+    delete next.hide;
   }
   if (patch.motion === null) {
     delete next.motion;
   } else if (patch.motion !== undefined) {
     next.motion = patch.motion;
+  }
+  if (patch.exit === null) {
+    delete next.exit;
+  } else if (patch.exit !== undefined) {
+    next.exit = patch.exit;
+  }
+  if (patch.translation === null) {
+    delete next.translation;
+  } else if (patch.translation !== undefined) {
+    const translation = readPresentTranslation(patch.translation);
+    if (translation) {
+      next.translation = translation;
+    } else {
+      delete next.translation;
+    }
   }
   if (patch.zoomPercent === null) {
     delete next.zoomPercent;
@@ -233,6 +384,20 @@ const writePresentBag = (
       next.zoomPercent = zoomPercent;
     }
   }
+  if (patch.skip === false) {
+    delete next.skip;
+  } else if (patch.skip === true) {
+    next.skip = true;
+    delete next.hide;
+    delete next.effect;
+  }
+  if (patch.hide === false) {
+    delete next.hide;
+  } else if (patch.hide === true) {
+    next.hide = true;
+    delete next.skip;
+    delete next.effect;
+  }
   const customData: Record<string, unknown> = {
     ...(element.customData ?? {}),
   };
@@ -241,7 +406,11 @@ const writePresentBag = (
     next.label === undefined &&
     next.effect === undefined &&
     next.motion === undefined &&
-    next.zoomPercent === undefined
+    next.exit === undefined &&
+    next.translation === undefined &&
+    next.zoomPercent === undefined &&
+    next.skip === undefined &&
+    next.hide === undefined
   ) {
     delete customData[JAYRR_PRESENT_KEY];
     return Object.keys(customData).length
@@ -280,11 +449,54 @@ export const writePresentMotion = (
   return writePresentBag(element, { motion });
 };
 
+export const writePresentExit = (
+  element: ExcalidrawElement,
+  exit: PresentExit | null,
+): ExcalidrawElement["customData"] => {
+  return writePresentBag(element, { exit });
+};
+
+export const writePresentTranslation = (
+  element: ExcalidrawElement,
+  translation: PresentTranslation | null,
+): ExcalidrawElement["customData"] => {
+  return writePresentBag(element, { translation });
+};
+
 export const writePresentZoomPercent = (
   element: ExcalidrawElement,
   zoomPercent: number | null,
 ): ExcalidrawElement["customData"] => {
   return writePresentBag(element, { zoomPercent });
+};
+
+export const writePresentSkip = (
+  element: ExcalidrawElement,
+  skip: boolean,
+): ExcalidrawElement["customData"] => {
+  return writePresentBag(element, { skip, hide: skip ? false : undefined });
+};
+
+export const writePresentHide = (
+  element: ExcalidrawElement,
+  hide: boolean,
+): ExcalidrawElement["customData"] => {
+  return writePresentBag(element, { hide, skip: hide ? false : undefined });
+};
+
+export type PresentPresence = "skip" | "hide" | null;
+
+export const writePresentPresence = (
+  element: ExcalidrawElement,
+  presence: PresentPresence,
+): ExcalidrawElement["customData"] => {
+  if (presence === "skip") {
+    return writePresentBag(element, { skip: true, hide: false });
+  }
+  if (presence === "hide") {
+    return writePresentBag(element, { hide: true, skip: false });
+  }
+  return writePresentBag(element, { skip: false, hide: false });
 };
 
 const comparePresentable = (
@@ -395,7 +607,8 @@ export const boundIdsForElement = (
 ): string[] => {
   const ids = [element.id];
   const bound = getBoundTextElement(element, arrayToMap(elements));
-  if (bound) {
+  // A bad binding can point at another shape. Only labels travel with the shape.
+  if (bound && isTextElement(bound)) {
     ids.push(bound.id);
   }
   return ids;
@@ -425,11 +638,12 @@ export const idsForPresentObject = (
     }
   }
   // Sticky-note labels may only point at the container via containerId.
+  // Do not follow `seen`: a label id must not pull in the next shape.
   for (const element of elements) {
     if (!isBoundToContainer(element)) {
       continue;
     }
-    if (members.has(element.containerId) || seen.has(element.containerId)) {
+    if (members.has(element.containerId)) {
       add(element.id);
     }
   }
@@ -486,7 +700,11 @@ export const buildPresentDeck = (
       order: number | null;
       effect: PresentEffect | null;
       motion: PresentMotion | null;
+      exit: PresentExit | null;
+      translation: PresentTranslation | null;
       zoomPercent: number | null;
+      skip: boolean;
+      hide: boolean;
       index: number;
       groupId: string | null;
       memberIds: string[];
@@ -505,7 +723,11 @@ export const buildPresentDeck = (
           order: object.order,
           effect: presentEffectOf([object.element]),
           motion: presentMotionOf([object.element]),
+          exit: presentExitOf([object.element]),
+          translation: presentTranslationOf([object.element]),
           zoomPercent: presentZoomPercentOf([object.element]),
+          skip: presentSkipOf([object.element]),
+          hide: presentHideOf([object.element]),
           index: object.index,
           groupId: null,
           memberIds: [object.element.id],
@@ -529,7 +751,11 @@ export const buildPresentDeck = (
           order: representative.order,
           effect: presentEffectOf([representative.element]),
           motion: presentMotionOf([representative.element]),
+          exit: presentExitOf([representative.element]),
+          translation: presentTranslationOf([representative.element]),
           zoomPercent: presentZoomPercentOf([representative.element]),
+          skip: presentSkipOf([representative.element]),
+          hide: presentHideOf([representative.element]),
           index: representative.index,
           groupId: null,
           memberIds: [representative.element.id],
@@ -542,7 +768,11 @@ export const buildPresentDeck = (
         order: minPresentOrder(members.map((item) => item.order)),
         effect: presentEffectOf(members.map((item) => item.element)),
         motion: presentMotionOf(members.map((item) => item.element)),
+        exit: presentExitOf(members.map((item) => item.element)),
+        translation: presentTranslationOf(members.map((item) => item.element)),
         zoomPercent: presentZoomPercentOf(members.map((item) => item.element)),
+        skip: presentSkipOf(members.map((item) => item.element)),
+        hide: presentHideOf(members.map((item) => item.element)),
         index: representative.index,
         groupId,
         memberIds: members.map((item) => item.element.id),
@@ -563,7 +793,11 @@ export const buildPresentDeck = (
         order: object.order,
         effect: object.effect,
         motion: object.motion,
+        exit: object.exit,
+        translation: object.translation,
         zoomPercent: object.zoomPercent,
+        skip: object.skip,
+        hide: object.hide,
         groupId: object.groupId,
         memberIds: object.memberIds,
       })),
@@ -574,6 +808,9 @@ export const buildPresentDeck = (
   for (const frame of frames) {
     steps.push({ type: "showFrame", frameId: frame.id });
     for (const object of frame.objects) {
+      if (object.skip || object.hide) {
+        continue;
+      }
       steps.push({
         type: "reveal",
         frameId: frame.id,
@@ -654,8 +891,8 @@ export const stepCaption = (deck: PresentDeck, stepIndex: number): string => {
   if (step.type === "showFrame") {
     return `${frameLabel} (${frameNumber}/${deck.frames.length})`;
   }
-  const objectNumber =
-    frame?.objects.findIndex((item) => item.id === step.elementId) ?? -1;
-  const objectTotal = frame?.objects.length ?? 0;
+  const counted = countedPresentObjects(frame?.objects ?? []);
+  const objectNumber = counted.findIndex((item) => item.id === step.elementId);
+  const objectTotal = counted.length;
   return `${frameLabel} · ${objectNumber + 1}/${objectTotal}`;
 };

@@ -62,6 +62,7 @@ export const STORAGE_KEYS = {
   LOCAL_STORAGE_ACTIVE_SCENE_ID: "jayrr-active-scene-id",
   LOCAL_STORAGE_PRESENT_HIDE_FRAMES: "jayrr-present-hide-frames",
   LOCAL_STORAGE_PRESENT_MOTION: "jayrr-present-motion",
+  LOCAL_STORAGE_PRESENT_CUSTOM_CURSOR: "jayrr-present-custom-cursor",
 
   // do not use apart from migrations
   __LEGACY_LOCAL_STORAGE_LIBRARY: "excalidraw-library",

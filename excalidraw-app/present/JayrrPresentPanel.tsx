@@ -49,21 +49,35 @@ import {
 } from "react";
 
 import {
+  defaultPresentTranslation,
+  JAYRR_PRESENT_TRANSLATION_TIME_DEFAULT,
+  JAYRR_PRESENT_TRANSLATION_TIME_MAX,
+  JAYRR_PRESENT_TRANSLATION_TIME_MIN,
   JAYRR_PRESENT_ZOOM_PERCENT_DEFAULT,
   JAYRR_PRESENT_ZOOM_PERCENT_MAX,
   JAYRR_PRESENT_ZOOM_PERCENT_MIN,
   reorderPresentIds,
   stepCaption,
   writePresentEffect,
+  writePresentExit,
   writePresentLabel,
   writePresentMotion,
   writePresentOrder,
+  writePresentPresence,
+  writePresentTranslation,
   writePresentZoomPercent,
   type PresentDeck,
   type PresentEffect,
+  type PresentExit,
   type PresentFrame,
   type PresentMotion,
+  type PresentPresence,
+  type PresentTranslation,
 } from "./buildPresentDeck";
+import {
+  getPresentCustomCursor,
+  setPresentCustomCursor,
+} from "./presentCursor";
 import {
   getPresentHideFrames,
   setPresentHideFrames,
@@ -74,6 +88,11 @@ import {
   PRESENT_MOTIONS,
   setPresentDefaultMotion,
 } from "./presentMotion";
+import {
+  PRESENT_EASING_LABEL,
+  PRESENT_EASINGS,
+  startPresentTranslationPlace,
+} from "./presentTranslation";
 
 import "./JayrrPresentPanel.scss";
 
@@ -128,37 +147,66 @@ const focusZoomIcon = (
   </svg>
 );
 
+type PresentMenuPane = "transitions" | "motion" | "translation" | "exit";
+
 const PresentEffectMenu = ({
   className,
   effect,
   motion,
+  exit,
+  translation,
   zoomPercent,
+  skip,
+  hide,
   disabled,
+  placeIds,
   onEffect,
   onMotion,
+  onExit,
+  onTranslation,
   onZoomPercent,
+  onPresence,
   children,
 }: {
   className?: string;
   effect: PresentEffect | null;
   motion?: PresentMotion | null;
+  exit?: PresentExit | null;
+  translation?: PresentTranslation | null;
   zoomPercent?: number | null;
+  skip?: boolean;
+  hide?: boolean;
   disabled: boolean;
+  placeIds?: readonly string[];
   onEffect: (effect: PresentEffect | null) => void;
   onMotion?: (motion: PresentMotion | null) => void;
+  onExit?: (exit: PresentExit | null) => void;
+  onTranslation?: (translation: PresentTranslation | null) => void;
   onZoomPercent?: (zoomPercent: number) => void;
+  onPresence?: (presence: PresentPresence) => void;
   children: ReactNode;
 }) => {
   const { container } = useExcalidrawContainer();
-  const [zoomOpen, setZoomOpen] = useState(false);
+  const [zoomKind, setZoomKind] = useState<"zoom" | "scale" | null>(null);
+  const [moveOpen, setMoveOpen] = useState(false);
+  const [pane, setPane] = useState<PresentMenuPane>("transitions");
+  const inputRef = useRef<HTMLInputElement>(null);
   const currentZoom = zoomPercent ?? JAYRR_PRESENT_ZOOM_PERCENT_DEFAULT;
   const [zoomDraft, setZoomDraft] = useState(String(currentZoom));
+  const move = translation?.kind === "move" ? translation : null;
+  const [timeDraft, setTimeDraft] = useState(
+    String(move?.time ?? JAYRR_PRESENT_TRANSLATION_TIME_DEFAULT),
+  );
 
   useEffect(() => {
     setZoomDraft(String(currentZoom));
   }, [currentZoom]);
 
-  const commitZoomPercent = () => {
+  useEffect(() => {
+    setTimeDraft(String(move?.time ?? JAYRR_PRESENT_TRANSLATION_TIME_DEFAULT));
+  }, [move?.time]);
+
+  const commitZoomPercent = (kind: "zoom" | "scale") => {
     const next = Number(zoomDraft);
     if (!Number.isFinite(next)) {
       setZoomDraft(String(currentZoom));
@@ -169,21 +217,204 @@ const PresentEffectMenu = ({
       Math.max(JAYRR_PRESENT_ZOOM_PERCENT_MIN, Math.round(next)),
     );
     setZoomDraft(String(clamped));
+    onPresence?.(null);
     onZoomPercent?.(clamped);
-    onEffect("zoom");
+    onEffect(kind);
+  };
+  const zoomControl = (kind: "zoom" | "scale", label: string) => {
+    if (!onZoomPercent) {
+      return null;
+    }
+    return (
+      <Popover.Root
+        open={zoomKind === kind}
+        onOpenChange={(open) => setZoomKind(open ? kind : null)}
+      >
+        <Popover.Trigger asChild>
+          <button
+            type="button"
+            className="jayrr-present__zoom-gear"
+            aria-label={label}
+            title={`${currentZoom}%`}
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={() => {
+              onPresence?.(null);
+              onEffect(kind);
+            }}
+          >
+            {settingsIcon}
+          </button>
+        </Popover.Trigger>
+        <Popover.Portal container={container}>
+          <Popover.Content
+            side="left"
+            align="center"
+            sideOffset={1}
+            className="jayrr-present__zoom-box"
+            data-prevent-outside-click
+            onOpenAutoFocus={(event) => {
+              event.preventDefault();
+              inputRef.current?.focus();
+              inputRef.current?.select();
+            }}
+            onCloseAutoFocus={(event) => event.preventDefault()}
+            onPointerDown={(event) => event.stopPropagation()}
+          >
+            <label className="jayrr-present__zoom-field">
+              <input
+                ref={zoomKind === kind ? inputRef : undefined}
+                type="number"
+                className="jayrr-present__settings-select jayrr-present__zoom-input"
+                min={JAYRR_PRESENT_ZOOM_PERCENT_MIN}
+                max={JAYRR_PRESENT_ZOOM_PERCENT_MAX}
+                step={10}
+                value={zoomDraft}
+                aria-label={label}
+                onChange={(event) => setZoomDraft(event.target.value)}
+                onBlur={() => commitZoomPercent(kind)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    commitZoomPercent(kind);
+                  }
+                }}
+              />
+              %
+            </label>
+          </Popover.Content>
+        </Popover.Portal>
+      </Popover.Root>
+    );
+  };
+  const commitMove = (patch: Partial<PresentTranslation>) => {
+    const base = move ?? defaultPresentTranslation();
+    const nextTime = patch.time ?? base.time;
+    onTranslation?.({
+      ...base,
+      ...patch,
+      kind: "move",
+      time: Math.min(
+        JAYRR_PRESENT_TRANSLATION_TIME_MAX,
+        Math.max(JAYRR_PRESENT_TRANSLATION_TIME_MIN, Math.round(nextTime)),
+      ),
+    });
+  };
+  const moveControl = () => {
+    if (!onTranslation) {
+      return null;
+    }
+    return (
+      <Popover.Root open={moveOpen} onOpenChange={setMoveOpen}>
+        <Popover.Trigger asChild>
+          <button
+            type="button"
+            className="jayrr-present__zoom-gear"
+            aria-label="Edit move"
+            title="Edit move"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={() => {
+              if (!move) {
+                onTranslation(defaultPresentTranslation());
+              }
+            }}
+          >
+            {settingsIcon}
+          </button>
+        </Popover.Trigger>
+        <Popover.Portal container={container}>
+          <Popover.Content
+            side="left"
+            align="center"
+            sideOffset={1}
+            className="jayrr-present__zoom-box jayrr-present__move-box"
+            data-prevent-outside-click
+            onOpenAutoFocus={(event) => event.preventDefault()}
+            onCloseAutoFocus={(event) => event.preventDefault()}
+            onPointerDown={(event) => event.stopPropagation()}
+          >
+            <label className="jayrr-present__move-field">
+              Time
+              <span className="jayrr-present__zoom-field">
+                <input
+                  type="number"
+                  className="jayrr-present__settings-select jayrr-present__zoom-input"
+                  min={JAYRR_PRESENT_TRANSLATION_TIME_MIN}
+                  max={JAYRR_PRESENT_TRANSLATION_TIME_MAX}
+                  step={50}
+                  value={timeDraft}
+                  aria-label="Move time"
+                  onChange={(event) => setTimeDraft(event.target.value)}
+                  onBlur={() => {
+                    const next = Number(timeDraft);
+                    if (!Number.isFinite(next)) {
+                      setTimeDraft(
+                        String(
+                          move?.time ?? JAYRR_PRESENT_TRANSLATION_TIME_DEFAULT,
+                        ),
+                      );
+                      return;
+                    }
+                    commitMove({ time: next });
+                  }}
+                />
+                ms
+              </span>
+            </label>
+            <label className="jayrr-present__move-field">
+              Easing
+              <select
+                className="jayrr-present__settings-select"
+                value={move?.easing ?? "easeOut"}
+                aria-label="Move easing"
+                onChange={(event) => {
+                  const easing = PRESENT_EASINGS.find(
+                    (item) => item === event.target.value,
+                  );
+                  if (easing) {
+                    commitMove({ easing });
+                  }
+                }}
+              >
+                {PRESENT_EASINGS.map((item) => (
+                  <option key={item} value={item}>
+                    {PRESENT_EASING_LABEL[item]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              className="jayrr-present__move-position"
+              onClick={() => {
+                if (!move) {
+                  onTranslation(defaultPresentTranslation());
+                }
+                if (placeIds && placeIds.length > 0) {
+                  startPresentTranslationPlace(placeIds);
+                }
+                setMoveOpen(false);
+              }}
+            >
+              Position
+            </button>
+          </Popover.Content>
+        </Popover.Portal>
+      </Popover.Root>
+    );
   };
   const triggerClass = className
     ? `jayrr-present__effect-trigger ${className}`
     : "jayrr-present__effect-trigger";
+  const parked = Boolean(skip || hide);
   const body = (
     <>
       {children}
-      {effect === "focus" ? (
+      {effect === "focus" && !parked ? (
         <span className="jayrr-present__focus" role="img" aria-label="Focus">
           {focusTargetIcon}
         </span>
       ) : null}
-      {effect === "zoom" ? (
+      {effect === "zoom" && !parked ? (
         <span
           className="jayrr-present__focus"
           role="img"
@@ -192,18 +423,55 @@ const PresentEffectMenu = ({
           {focusZoomIcon}
         </span>
       ) : null}
-      {effect === "zoom" &&
+      {effect === "scale" && !parked ? (
+        <span className="jayrr-present__focus" role="img" aria-label="Zoom">
+          {focusZoomIcon}
+        </span>
+      ) : null}
+      {exit && !parked ? (
+        <span
+          className="jayrr-present__exit-mark"
+          role="img"
+          aria-label={`Motion-out ${PRESENT_MOTION_LABEL[exit]}`}
+          title={`Out ${PRESENT_MOTION_LABEL[exit]}`}
+        />
+      ) : null}
+      {(effect === "zoom" || effect === "scale") &&
+      !parked &&
       zoomPercent !== null &&
       zoomPercent !== undefined &&
       zoomPercent !== JAYRR_PRESENT_ZOOM_PERCENT_DEFAULT ? (
         <span className="jayrr-present__motion-tag">{`${zoomPercent}%`}</span>
       ) : null}
-      {motion ? (
+      {motion && !parked ? (
         <span
           className="jayrr-present__motion-tag"
-          title={PRESENT_MOTION_LABEL[motion]}
+          title={`In ${PRESENT_MOTION_LABEL[motion]}`}
         >
           {PRESENT_MOTION_LABEL[motion]}
+        </span>
+      ) : null}
+      {exit && !parked ? (
+        <span
+          className="jayrr-present__motion-tag"
+          title={`Out ${PRESENT_MOTION_LABEL[exit]}`}
+        >
+          {`Out ${PRESENT_MOTION_LABEL[exit]}`}
+        </span>
+      ) : null}
+      {move && !parked ? (
+        <span className="jayrr-present__motion-tag" title="Move">
+          Move
+        </span>
+      ) : null}
+      {skip ? (
+        <span className="jayrr-present__motion-tag" title="Skip">
+          Skip
+        </span>
+      ) : null}
+      {hide ? (
+        <span className="jayrr-present__motion-tag" title="Hide">
+          Hide
         </span>
       ) : null}
     </>
@@ -211,8 +479,43 @@ const PresentEffectMenu = ({
   if (disabled) {
     return <div className={triggerClass}>{body}</div>;
   }
+  const panes: { id: PresentMenuPane; label: string }[] = [
+    { id: "transitions", label: "Transitions" },
+  ];
+  if (onMotion && !parked) {
+    panes.push({ id: "motion", label: "Motion-in" });
+  }
+  if (onTranslation && !parked) {
+    panes.push({ id: "translation", label: "Translation" });
+  }
+  if (onExit && !parked) {
+    panes.push({ id: "exit", label: "Motion-out" });
+  }
+  const activePane = panes.some((item) => item.id === pane)
+    ? pane
+    : "transitions";
+  const option = (
+    label: string,
+    active: boolean,
+    onPick: () => void,
+    gear?: ReactNode,
+    key?: string,
+  ) => (
+    <div key={key} className="jayrr-present__menu-option-row">
+      <ContextMenu.Item
+        className="jayrr-present__menu-option"
+        onSelect={onPick}
+      >
+        <span>{label}</span>
+        <span className="jayrr-present__menu-check">
+          {active ? checkIcon : null}
+        </span>
+      </ContextMenu.Item>
+      {gear ? gear : null}
+    </div>
+  );
   return (
-    <ContextMenu.Root>
+    <ContextMenu.Root modal={false}>
       <ContextMenu.Trigger asChild>
         <div className={triggerClass}>{body}</div>
       </ContextMenu.Trigger>
@@ -221,148 +524,141 @@ const PresentEffectMenu = ({
           className="jayrr-present__menu"
           collisionPadding={8}
           data-prevent-outside-click
+          onPointerDownOutside={(event) => {
+            const target = event.target;
+            if (
+              target instanceof Element &&
+              target.closest(
+                ".jayrr-present__zoom-box, .jayrr-present__move-box",
+              )
+            ) {
+              event.preventDefault();
+            }
+          }}
+          onFocusOutside={(event) => {
+            const target = event.target;
+            if (
+              target instanceof Element &&
+              target.closest(
+                ".jayrr-present__zoom-box, .jayrr-present__move-box",
+              )
+            ) {
+              event.preventDefault();
+            }
+          }}
+          onInteractOutside={(event) => {
+            const target = event.target;
+            if (
+              target instanceof Element &&
+              target.closest(
+                ".jayrr-present__zoom-box, .jayrr-present__move-box",
+              )
+            ) {
+              event.preventDefault();
+            }
+          }}
         >
-          <ContextMenu.Label className="jayrr-present__menu-label">
-            Transition
-          </ContextMenu.Label>
-          <ContextMenu.Item
-            className={
-              effect === null
-                ? "jayrr-present__menu-item is-active"
-                : "jayrr-present__menu-item"
-            }
-            onSelect={() => onEffect(null)}
-          >
-            <span className="jayrr-present__menu-check">
-              {effect === null ? checkIcon : null}
-            </span>
-            None
-          </ContextMenu.Item>
-          <ContextMenu.Item
-            className={
-              effect === "focus"
-                ? "jayrr-present__menu-item is-active"
-                : "jayrr-present__menu-item"
-            }
-            onSelect={() => onEffect("focus")}
-          >
-            <span className="jayrr-present__menu-check">
-              {effect === "focus" ? checkIcon : null}
-            </span>
-            Focus
-          </ContextMenu.Item>
-          <div className="jayrr-present__menu-zoom-row">
-            <ContextMenu.Item
-              className={
-                effect === "zoom"
-                  ? "jayrr-present__menu-item is-active"
-                  : "jayrr-present__menu-item"
-              }
-              onSelect={() => onEffect("zoom")}
-            >
-              <span className="jayrr-present__menu-check">
-                {effect === "zoom" ? checkIcon : null}
-              </span>
-              Focus Zoom
-            </ContextMenu.Item>
-            {onZoomPercent ? (
-              <Popover.Root open={zoomOpen} onOpenChange={setZoomOpen}>
-                <Popover.Trigger asChild>
-                  <button
-                    type="button"
-                    className="jayrr-present__zoom-gear"
-                    aria-label="Focus Zoom percent"
-                    title={`${currentZoom}%`}
-                    onPointerDown={(event) => event.stopPropagation()}
-                    onClick={() => onEffect("zoom")}
-                  >
-                    {settingsIcon}
-                  </button>
-                </Popover.Trigger>
-                <Popover.Portal container={container}>
-                  <Popover.Content
-                    side="right"
-                    align="start"
-                    sideOffset={8}
-                    className="jayrr-present__settings-popover"
-                    onOpenAutoFocus={(event) => event.preventDefault()}
-                  >
-                    <div className="jayrr-present__settings-head">
-                      <span className="jayrr-present__settings-title">
-                        Zoom
-                      </span>
-                      <Tooltip
-                        label="100% fills the object in the view. Higher is closer, lower shows more around it."
-                        long
-                      >
-                        <span className="jayrr-present__settings-info">
-                          {helpIcon}
-                        </span>
-                      </Tooltip>
-                    </div>
-                    <label className="jayrr-present__settings-row">
-                      <span>Amount</span>
-                      <span className="jayrr-present__zoom-field">
-                        <input
-                          type="number"
-                          className="jayrr-present__settings-select jayrr-present__zoom-input"
-                          min={JAYRR_PRESENT_ZOOM_PERCENT_MIN}
-                          max={JAYRR_PRESENT_ZOOM_PERCENT_MAX}
-                          step={10}
-                          value={zoomDraft}
-                          onChange={(event) => setZoomDraft(event.target.value)}
-                          onBlur={commitZoomPercent}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter") {
-                              event.preventDefault();
-                              commitZoomPercent();
-                            }
-                          }}
-                        />
-                        %
-                      </span>
-                    </label>
-                  </Popover.Content>
-                </Popover.Portal>
-              </Popover.Root>
-            ) : null}
-          </div>
-          {onMotion ? (
-            <>
-              <ContextMenu.Label className="jayrr-present__menu-label">
-                Motion
-              </ContextMenu.Label>
-              <ContextMenu.Item
-                className={
-                  motion === null || motion === undefined
-                    ? "jayrr-present__menu-item is-active"
-                    : "jayrr-present__menu-item"
-                }
-                onSelect={() => onMotion(null)}
-              >
-                <span className="jayrr-present__menu-check">
-                  {motion === null || motion === undefined ? checkIcon : null}
-                </span>
-                Default
-              </ContextMenu.Item>
-              {PRESENT_MOTIONS.map((item) => (
+          <div className="jayrr-present__menu-split">
+            <div className="jayrr-present__menu-nav">
+              {panes.map((item) => (
                 <ContextMenu.Item
-                  key={item}
+                  key={item.id}
                   className={
-                    motion === item
-                      ? "jayrr-present__menu-item is-active"
-                      : "jayrr-present__menu-item"
+                    activePane === item.id
+                      ? "jayrr-present__menu-nav-item is-active"
+                      : "jayrr-present__menu-nav-item"
                   }
-                  onSelect={() => onMotion(item)}
+                  onSelect={(event) => {
+                    event.preventDefault();
+                    setPane(item.id);
+                  }}
                 >
-                  <span className="jayrr-present__menu-check">
-                    {motion === item ? checkIcon : null}
-                  </span>
-                  {PRESENT_MOTION_LABEL[item]}
+                  {item.label}
                 </ContextMenu.Item>
               ))}
-            </>
-          ) : null}
+            </div>
+            <div className="jayrr-present__menu-pane">
+              {activePane === "transitions" ? (
+                <>
+                  {option("None", !parked && effect === null, () => {
+                    onPresence?.(null);
+                    onEffect(null);
+                  })}
+                  {option("Focus", !parked && effect === "focus", () => {
+                    onPresence?.(null);
+                    onEffect("focus");
+                  })}
+                  {option(
+                    "Focus Zoom",
+                    !parked && effect === "zoom",
+                    () => {
+                      onPresence?.(null);
+                      onEffect("zoom");
+                    },
+                    zoomControl("zoom", "Focus Zoom percent"),
+                  )}
+                  {option(
+                    "Zoom",
+                    !parked && effect === "scale",
+                    () => {
+                      onPresence?.(null);
+                      onEffect("scale");
+                    },
+                    zoomControl("scale", "Zoom percent"),
+                  )}
+                  {onPresence
+                    ? option("Skip", Boolean(skip), () => onPresence("skip"))
+                    : null}
+                  {onPresence
+                    ? option("Hide", Boolean(hide), () => onPresence("hide"))
+                    : null}
+                </>
+              ) : null}
+              {activePane === "motion" && onMotion ? (
+                <>
+                  {option(
+                    "Default",
+                    motion === null || motion === undefined,
+                    () => onMotion(null),
+                  )}
+                  {PRESENT_MOTIONS.map((item) =>
+                    option(
+                      PRESENT_MOTION_LABEL[item],
+                      motion === item,
+                      () => onMotion(item),
+                      undefined,
+                      item,
+                    ),
+                  )}
+                </>
+              ) : null}
+              {activePane === "translation" && onTranslation ? (
+                <>
+                  {option("None", !move, () => onTranslation(null))}
+                  {option(
+                    "Move",
+                    Boolean(move),
+                    () => onTranslation(move ?? defaultPresentTranslation()),
+                    moveControl(),
+                  )}
+                </>
+              ) : null}
+              {activePane === "exit" && onExit ? (
+                <>
+                  {option("None", !exit, () => onExit(null))}
+                  {PRESENT_MOTIONS.map((item) =>
+                    option(
+                      PRESENT_MOTION_LABEL[item],
+                      exit === item,
+                      () => onExit(item),
+                      undefined,
+                      `out-${item}`,
+                    ),
+                  )}
+                </>
+              ) : null}
+            </div>
+          </div>
         </ContextMenu.Content>
       </ContextMenu.Portal>
     </ContextMenu.Root>
@@ -374,6 +670,7 @@ const PresentSettingsPopover = () => {
   const { container } = useExcalidrawContainer();
   const [open, setOpen] = useState(false);
   const [hideFrames, setHideFrames] = useState(getPresentHideFrames);
+  const [customCursor, setCustomCursor] = useState(getPresentCustomCursor);
   const [motion, setMotion] = useState(getPresentDefaultMotion);
 
   useEffect(() => {
@@ -406,7 +703,7 @@ const PresentSettingsPopover = () => {
             <div className="jayrr-present__settings-head">
               <h3 className="jayrr-present__settings-title">Settings</h3>
               <Tooltip
-                label="Motion is the default enter/leave for every object. Right-click a row to override one. Hide frames removes borders and names in Present."
+                label="Motion is the default enter for every object. Right-click a row for transition, motion-in, or motion-out. Hide frames removes borders and names in Present. Big cursor shows an oversized pointer with a click burst."
                 long
                 position="top"
               >
@@ -414,7 +711,7 @@ const PresentSettingsPopover = () => {
               </Tooltip>
             </div>
             <div className="jayrr-present__settings-row">
-              <label htmlFor="presentMotion">Motion</label>
+              <label htmlFor="presentMotion">Motion-in</label>
               <select
                 id="presentMotion"
                 className="jayrr-present__settings-select"
@@ -440,6 +737,17 @@ const PresentSettingsPopover = () => {
                 onChange={(checked) => {
                   setHideFrames(checked);
                   setPresentHideFrames(checked);
+                }}
+              />
+            </div>
+            <div className="jayrr-present__settings-row">
+              <label htmlFor="customCursor">Big cursor</label>
+              <Switch
+                name="customCursor"
+                checked={customCursor}
+                onChange={(checked) => {
+                  setCustomCursor(checked);
+                  setPresentCustomCursor(checked);
                 }}
               />
             </div>
@@ -509,7 +817,7 @@ const EditablePresentName = ({
   onCommit,
   onCancel,
 }: {
-  index: number;
+  index: number | null;
   name: string;
   selected: boolean;
   renaming: boolean;
@@ -574,7 +882,7 @@ const EditablePresentName = ({
       {...attributes}
       {...listeners}
     >
-      {`${index}. ${name}`}
+      {index === null ? name : `${index}. ${name}`}
     </button>
   );
 };
@@ -694,7 +1002,12 @@ const SortableObjectBlock = ({
   draftName,
   effect,
   motion,
+  exit,
+  translation,
   zoomPercent,
+  skip,
+  hide,
+  placeIds,
   onSelect,
   onStartRename,
   onDraftChange,
@@ -702,10 +1015,13 @@ const SortableObjectBlock = ({
   onCancel,
   onEffect,
   onMotion,
+  onExit,
+  onTranslation,
   onZoomPercent,
+  onPresence,
 }: {
   id: string;
-  index: number;
+  index: number | null;
   disabled: boolean;
   name: string;
   selected: boolean;
@@ -713,7 +1029,12 @@ const SortableObjectBlock = ({
   draftName: string;
   effect: PresentEffect | null;
   motion: PresentMotion | null;
+  exit: PresentExit | null;
+  translation: PresentTranslation | null;
   zoomPercent: number | null;
+  skip: boolean;
+  hide: boolean;
+  placeIds: readonly string[];
   onSelect: () => void;
   onStartRename: () => void;
   onDraftChange: (value: string) => void;
@@ -721,7 +1042,10 @@ const SortableObjectBlock = ({
   onCancel: () => void;
   onEffect: (effect: PresentEffect | null) => void;
   onMotion: (motion: PresentMotion | null) => void;
+  onExit: (exit: PresentExit | null) => void;
+  onTranslation: (translation: PresentTranslation | null) => void;
   onZoomPercent: (zoomPercent: number) => void;
+  onPresence: (presence: PresentPresence) => void;
 }) => {
   const {
     attributes,
@@ -735,9 +1059,9 @@ const SortableObjectBlock = ({
   return (
     <li
       ref={setNodeRef}
-      className={
-        isDragging ? "jayrr-present__row is-dragging" : "jayrr-present__row"
-      }
+      className={`jayrr-present__row${isDragging ? " is-dragging" : ""}${
+        hide ? " is-hidden" : ""
+      }`}
       style={{
         transform: CSS.Transform.toString(transform),
         transition,
@@ -746,11 +1070,19 @@ const SortableObjectBlock = ({
       <PresentEffectMenu
         effect={effect}
         motion={motion}
+        exit={exit}
+        translation={translation}
         zoomPercent={zoomPercent}
+        skip={skip}
+        hide={hide}
         disabled={renaming}
+        placeIds={placeIds}
         onEffect={onEffect}
         onMotion={onMotion}
+        onExit={onExit}
+        onTranslation={onTranslation}
         onZoomPercent={onZoomPercent}
+        onPresence={onPresence}
       >
         <EditablePresentName
           index={index}
@@ -908,6 +1240,52 @@ export const JayrrPresentPanel = ({
     [api],
   );
 
+  const persistPresentExit = useCallback(
+    (ids: readonly string[], exit: PresentExit | null) => {
+      if (!api || ids.length === 0) {
+        return;
+      }
+      const targets = new Set(ids);
+      const all = api.getSceneElementsIncludingDeleted();
+      const next = all.map((element) => {
+        if (!targets.has(element.id)) {
+          return element;
+        }
+        return newElementWith(element, {
+          customData: writePresentExit(element, exit),
+        });
+      });
+      api.updateScene({
+        elements: next,
+        captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+      });
+    },
+    [api],
+  );
+
+  const persistPresentTranslation = useCallback(
+    (ids: readonly string[], translation: PresentTranslation | null) => {
+      if (!api || ids.length === 0) {
+        return;
+      }
+      const targets = new Set(ids);
+      const all = api.getSceneElementsIncludingDeleted();
+      const next = all.map((element) => {
+        if (!targets.has(element.id)) {
+          return element;
+        }
+        return newElementWith(element, {
+          customData: writePresentTranslation(element, translation),
+        });
+      });
+      api.updateScene({
+        elements: next,
+        captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+      });
+    },
+    [api],
+  );
+
   const persistPresentZoomPercent = useCallback(
     (ids: readonly string[], zoomPercent: number) => {
       if (!api || ids.length === 0) {
@@ -921,6 +1299,29 @@ export const JayrrPresentPanel = ({
         }
         return newElementWith(element, {
           customData: writePresentZoomPercent(element, zoomPercent),
+        });
+      });
+      api.updateScene({
+        elements: next,
+        captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+      });
+    },
+    [api],
+  );
+
+  const persistPresentPresence = useCallback(
+    (ids: readonly string[], presence: PresentPresence) => {
+      if (!api || ids.length === 0) {
+        return;
+      }
+      const targets = new Set(ids);
+      const all = api.getSceneElementsIncludingDeleted();
+      const next = all.map((element) => {
+        if (!targets.has(element.id)) {
+          return element;
+        }
+        return newElementWith(element, {
+          customData: writePresentPresence(element, presence),
         });
       });
       api.updateScene({
@@ -1192,54 +1593,85 @@ export const JayrrPresentPanel = ({
                         strategy={verticalListSortingStrategy}
                       >
                         <ol className="jayrr-present__objects">
-                          {childIds.map((objectId, objectIndex) => {
-                            const object = frame.objects.find(
-                              (item) => item.id === objectId,
-                            );
-                            if (!object) {
-                              return null;
-                            }
-                            return (
-                              <SortableObjectBlock
-                                key={object.id}
-                                id={object.id}
-                                index={objectIndex + 1}
-                                disabled={
-                                  presenting ||
-                                  renamingId !== null ||
-                                  childIds.length < 2
-                                }
-                                name={object.label}
-                                selected={Boolean(
-                                  selectedElementIds[object.id],
-                                )}
-                                renaming={renamingId === object.id}
-                                draftName={draftName}
-                                effect={object.effect}
-                                motion={object.motion}
-                                zoomPercent={object.zoomPercent}
-                                onSelect={() => selectId(object.id)}
-                                onStartRename={() =>
-                                  startRename(object.id, object.label)
-                                }
-                                onDraftChange={setDraftName}
-                                onCommit={commitRename}
-                                onCancel={cancelRename}
-                                onEffect={(effect) =>
-                                  persistPresentEffect(object.memberIds, effect)
-                                }
-                                onMotion={(motion) =>
-                                  persistPresentMotion(object.memberIds, motion)
-                                }
-                                onZoomPercent={(zoomPercent) =>
-                                  persistPresentZoomPercent(
-                                    object.memberIds,
-                                    zoomPercent,
-                                  )
-                                }
-                              />
-                            );
-                          })}
+                          {(() => {
+                            let counted = 0;
+                            return childIds.map((objectId) => {
+                              const object = frame.objects.find(
+                                (item) => item.id === objectId,
+                              );
+                              if (!object) {
+                                return null;
+                              }
+                              const index =
+                                object.skip || object.hide ? null : ++counted;
+                              return (
+                                <SortableObjectBlock
+                                  key={object.id}
+                                  id={object.id}
+                                  index={index}
+                                  disabled={
+                                    presenting ||
+                                    renamingId !== null ||
+                                    childIds.length < 2
+                                  }
+                                  name={object.label}
+                                  selected={Boolean(
+                                    selectedElementIds[object.id],
+                                  )}
+                                  renaming={renamingId === object.id}
+                                  draftName={draftName}
+                                  effect={object.effect}
+                                  motion={object.motion}
+                                  exit={object.exit}
+                                  translation={object.translation}
+                                  zoomPercent={object.zoomPercent}
+                                  skip={object.skip}
+                                  hide={object.hide}
+                                  placeIds={object.memberIds}
+                                  onSelect={() => selectId(object.id)}
+                                  onStartRename={() =>
+                                    startRename(object.id, object.label)
+                                  }
+                                  onDraftChange={setDraftName}
+                                  onCommit={commitRename}
+                                  onCancel={cancelRename}
+                                  onEffect={(effect) =>
+                                    persistPresentEffect(
+                                      object.memberIds,
+                                      effect,
+                                    )
+                                  }
+                                  onMotion={(motion) =>
+                                    persistPresentMotion(
+                                      object.memberIds,
+                                      motion,
+                                    )
+                                  }
+                                  onExit={(exit) =>
+                                    persistPresentExit(object.memberIds, exit)
+                                  }
+                                  onTranslation={(translation) =>
+                                    persistPresentTranslation(
+                                      object.memberIds,
+                                      translation,
+                                    )
+                                  }
+                                  onZoomPercent={(zoomPercent) =>
+                                    persistPresentZoomPercent(
+                                      object.memberIds,
+                                      zoomPercent,
+                                    )
+                                  }
+                                  onPresence={(presence) =>
+                                    persistPresentPresence(
+                                      object.memberIds,
+                                      presence,
+                                    )
+                                  }
+                                />
+                              );
+                            });
+                          })()}
                         </ol>
                       </SortableContext>
                     )}

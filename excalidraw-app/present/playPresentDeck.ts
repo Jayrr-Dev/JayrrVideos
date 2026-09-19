@@ -1,9 +1,13 @@
 import { isEmbeddableElement, isFrameLikeElement } from "@excalidraw/element";
+import { CaptureUpdateAction } from "@excalidraw/excalidraw";
+import { getNormalizedZoom } from "@excalidraw/excalidraw/scene";
 
 import type { NonDeletedExcalidrawElement } from "@excalidraw/element/types";
 import type { ElementRenderOverrides } from "@excalidraw/excalidraw";
-import { CaptureUpdateAction } from "@excalidraw/excalidraw";
-import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
+import type {
+  ExcalidrawImperativeAPI,
+  Zoom,
+} from "@excalidraw/excalidraw/types";
 
 import {
   idsForPresentObject,
@@ -18,6 +22,7 @@ import {
   type PresentMotion,
   type PresentObject,
   type PresentStep,
+  type PresentTranslation,
 } from "./buildPresentDeck";
 import {
   pauseOtherPresentMedia,
@@ -26,6 +31,7 @@ import {
   resetPresentMediaVisibility,
 } from "./playPresentMedia";
 import { getPresentDefaultMotion } from "./presentMotion";
+import { easePresent } from "./presentTranslation";
 
 type OverrideValues = {
   opacity: number;
@@ -58,6 +64,33 @@ const SHOWN: OverrideValues = {
   offset: { x: 0, y: 0 },
 };
 
+const shownPose = (object: PresentObject): OverrideValues => {
+  if (object.translation?.kind !== "move") {
+    return SHOWN;
+  }
+  return {
+    opacity: 100,
+    offset: { x: object.translation.x, y: object.translation.y },
+  };
+};
+
+const hiddenPoseAt = (
+  motion: PresentMotion,
+  translation: PresentTranslation | null,
+): OverrideValues => {
+  const pose = hiddenPose(motion);
+  if (translation?.kind !== "move") {
+    return pose;
+  }
+  return {
+    opacity: pose.opacity,
+    offset: {
+      x: pose.offset.x + translation.x,
+      y: pose.offset.y + translation.y,
+    },
+  };
+};
+
 const easeOutQuad = (t: number) => 1 - (1 - t) * (1 - t);
 
 const lerp = (from: number, to: number, t: number) => from + (to - from) * t;
@@ -88,25 +121,127 @@ const targetForDeck = (
 ): Map<string, OverrideValues> => {
   const step = deck.steps[stepIndex];
   const revealed = new Set<string>();
+  const exited = new Set<string>();
   for (let i = 0; i <= stepIndex; i++) {
     const item = deck.steps[i];
     if (item?.type === "reveal" && step && item.frameId === step.frameId) {
       revealed.add(item.elementId);
+      // Exit fade hides on the next click, still inside this frame.
+      if (i < stepIndex) {
+        exited.add(item.elementId);
+      }
     }
   }
 
   const fallback = getPresentDefaultMotion();
   const values = new Map<string, OverrideValues>();
+  // Hide first. A later object can share an id (bad binding); that must not
+  // keep an earlier shape hidden after its own reveal step.
   for (const frame of deck.frames) {
     for (const object of frame.objects) {
-      const shown = revealed.has(object.id);
-      const pose = shown ? SHOWN : hiddenPose(object.motion ?? fallback);
+      if (object.skip) {
+        continue;
+      }
+      const pose = object.hide
+        ? HIDDEN_FADE
+        : hiddenPose(object.motion ?? fallback);
+      for (const id of idsForPresentObject(object, elements)) {
+        if (!values.has(id)) {
+          values.set(id, pose);
+        }
+      }
+    }
+  }
+  for (const frame of deck.frames) {
+    for (const object of frame.objects) {
+      if (!object.skip || object.hide) {
+        continue;
+      }
+      for (const id of idsForPresentObject(object, elements)) {
+        values.set(id, shownPose(object));
+      }
+    }
+  }
+  for (const frame of deck.frames) {
+    for (const object of frame.objects) {
+      if (!revealed.has(object.id)) {
+        continue;
+      }
+      const pose =
+        object.exit && exited.has(object.id)
+          ? hiddenPoseAt(object.exit, object.translation)
+          : shownPose(object);
       for (const id of idsForPresentObject(object, elements)) {
         values.set(id, pose);
       }
     }
   }
   return values;
+};
+
+/** Leave animation uses motion-out, not the enter pose. */
+const stampExitPose = (
+  deck: PresentDeck,
+  elements: readonly NonDeletedExcalidrawElement[],
+  from: Map<string, OverrideValues>,
+  target: Map<string, OverrideValues>,
+) => {
+  for (const frame of deck.frames) {
+    for (const object of frame.objects) {
+      if (!object.exit) {
+        continue;
+      }
+      const ids = idsForPresentObject(object, elements);
+      let leaving = false;
+      for (const id of ids) {
+        const start = from.get(id);
+        const end = target.get(id);
+        if (start && end && start.opacity > end.opacity) {
+          leaving = true;
+          break;
+        }
+      }
+      if (!leaving) {
+        continue;
+      }
+      const pose = hiddenPoseAt(object.exit, object.translation);
+      for (const id of ids) {
+        if (target.has(id)) {
+          target.set(id, pose);
+        }
+      }
+    }
+  }
+};
+
+/** Enter still starts from the motion pose, even after a fade exit. */
+const primeEnterPoses = (
+  deck: PresentDeck,
+  elements: readonly NonDeletedExcalidrawElement[],
+  from: Map<string, OverrideValues>,
+  target: Map<string, OverrideValues>,
+) => {
+  const fallback = getPresentDefaultMotion();
+  for (const frame of deck.frames) {
+    for (const object of frame.objects) {
+      if (object.skip || object.hide) {
+        continue;
+      }
+      const pose = hiddenPose(object.motion ?? fallback);
+      for (const id of idsForPresentObject(object, elements)) {
+        const start = from.get(id);
+        const end = target.get(id);
+        if (!end || end.opacity < 100) {
+          continue;
+        }
+        const startOpacity = start ? start.opacity : 0;
+        if (startOpacity > 1) {
+          continue;
+        }
+        from.set(id, pose);
+      }
+    }
+  }
 };
 
 const frameRect = (element: NonDeletedExcalidrawElement) => ({
@@ -126,12 +261,16 @@ type SceneViewRect = {
 type SavedView = {
   scrollX: number;
   scrollY: number;
-  zoom: { value: number };
+  zoom: Zoom;
 };
+
+const savedZoom = (zoom: number): Zoom => ({
+  value: getNormalizedZoom(zoom),
+});
 
 const snapshotView = (api: ExcalidrawImperativeAPI): SavedView => {
   const { scrollX, scrollY, zoom } = api.getAppState();
-  return { scrollX, scrollY, zoom: { value: zoom.value } };
+  return { scrollX, scrollY, zoom: savedZoom(zoom.value) };
 };
 
 const editorSize = (api: ExcalidrawImperativeAPI) => {
@@ -188,7 +327,7 @@ const containRect = (
   return {
     scrollX: midX / zoom - cx,
     scrollY: midY / zoom - cy,
-    zoom: { value: zoom },
+    zoom: savedZoom(zoom),
   };
 };
 
@@ -202,7 +341,7 @@ const panToRect = (
   return {
     scrollX: size.width / 2 / zoom - cx,
     scrollY: size.height / 2 / zoom - cy,
-    zoom: { value: zoom },
+    zoom: savedZoom(zoom),
   };
 };
 
@@ -220,7 +359,7 @@ const mixView = (from: SavedView, to: SavedView, t: number): SavedView => {
   return {
     scrollX: ((1 - m) * from.scrollX * z0 + m * to.scrollX * z1) / zoom,
     scrollY: ((1 - m) * from.scrollY * z0 + m * to.scrollY * z1) / zoom,
-    zoom: { value: zoom },
+    zoom: savedZoom(zoom),
   };
 };
 
@@ -272,6 +411,25 @@ const objectSceneRect = (
  * children, never a stale element object. Focus/Zoom is the only exception,
  * and only while staying inside the same frame.
  */
+const objectForStep = (
+  deck: PresentDeck,
+  step: PresentStep | null | undefined,
+): PresentObject | null => {
+  if (!step || step.type !== "reveal") {
+    return null;
+  }
+  const frame = deck.frames.find((item) => item.id === step.frameId);
+  return frame?.objects.find((item) => item.id === step.elementId) ?? null;
+};
+
+const translationForStep = (
+  deck: PresentDeck,
+  step: PresentStep | null | undefined,
+): PresentTranslation | null => {
+  const object = objectForStep(deck, step);
+  return object?.translation?.kind === "move" ? object.translation : null;
+};
+
 const objectEffectForStep = (
   deck: PresentDeck,
   step: PresentStep | null | undefined,
@@ -279,9 +437,12 @@ const objectEffectForStep = (
   if (!step || step.type !== "reveal") {
     return null;
   }
-  const frame = deck.frames.find((item) => item.id === step.frameId);
-  const object = frame?.objects.find((item) => item.id === step.elementId);
-  if (object?.effect === "focus" || object?.effect === "zoom") {
+  const object = objectForStep(deck, step);
+  if (
+    object?.effect === "focus" ||
+    object?.effect === "zoom" ||
+    object?.effect === "scale"
+  ) {
     return object.effect;
   }
   return null;
@@ -312,6 +473,13 @@ const cameraForStep = (
     const objectEffect = objectEffectForStep(deck, step);
     const object = frame?.objects.find((item) => item.id === step.elementId);
     if (object && objectEffect) {
+      if (objectEffect === "scale" && frameEl) {
+        return {
+          target: frameRect(frameEl),
+          effect: objectEffect,
+          zoomPercent: object.zoomPercent,
+        };
+      }
       const rect = objectSceneRect(object, elements);
       if (rect) {
         return {
@@ -455,8 +623,13 @@ export class PresentPlayer {
       fromStep && step && fromStep.frameId !== step.frameId,
     );
     const destObjectEffect = objectEffectForStep(deck, step);
+    const destFrameEffect =
+      step?.type === "showFrame"
+        ? (deck.frames.find((item) => item.id === step.frameId)?.effect ?? null)
+        : null;
+    const destActiveEffect = destObjectEffect ?? destFrameEffect;
     const fromObjectEffect = objectEffectForStep(deck, fromStep);
-    const objectCamera = Boolean(destObjectEffect);
+    const objectCamera = Boolean(destActiveEffect);
     const leavingFocus = Boolean(fromObjectEffect) && !objectCamera;
     const camera = cameraForStep(deck, stepIndex, liveElements, crossedFrame);
     const moveCamera =
@@ -482,12 +655,23 @@ export class PresentPlayer {
       }
       const size = editorSize(api);
       let dest: SavedView | null = restore;
-      const destEffect = restore ? null : destObjectEffect;
+      const destEffect = restore ? null : destActiveEffect;
       if (!dest && camera?.target && isSceneRect(camera.target)) {
         if (destEffect === "focus") {
           dest = panToRect(camera.target, size, snapshotView(api).zoom.value);
-        } else if (destEffect === "zoom") {
-          const fit = containRect(camera.target, size, ZOOM_INSET);
+        } else if (destEffect === "zoom" || destEffect === "scale") {
+          const fit = containRect(
+            camera.target,
+            size,
+            destEffect === "scale"
+              ? {
+                  top: JAYRR_PRESENT_NAME_PAD,
+                  right: JAYRR_PRESENT_EDGE_PAD,
+                  bottom: JAYRR_PRESENT_EDGE_PAD,
+                  left: JAYRR_PRESENT_EDGE_PAD,
+                }
+              : ZOOM_INSET,
+          );
           const percent =
             camera.zoomPercent ?? JAYRR_PRESENT_ZOOM_PERCENT_DEFAULT;
           dest = panToRect(
@@ -509,7 +693,12 @@ export class PresentPlayer {
       }
       let duration = 0;
       if (animate) {
-        if (destEffect === "zoom" || destEffect === "focus" || leavingFocus) {
+        if (
+          destEffect === "zoom" ||
+          destEffect === "scale" ||
+          destEffect === "focus" ||
+          leavingFocus
+        ) {
           duration = JAYRR_PRESENT_ZOOM_MS;
         } else {
           duration = SLIDE_MS;
@@ -541,18 +730,40 @@ export class PresentPlayer {
     }
 
     const from = new Map(this.current);
-    // Camera never moves until outgoing objects have finished fading.
-    if (moveCamera && (hasFadeOut(from, target) || crossedFrame)) {
+    stampExitPose(deck, liveElements, from, target);
+    primeEnterPoses(deck, liveElements, from, target);
+    const translation = translationForStep(deck, step);
+    const enterMs = translation?.time ?? JAYRR_PRESENT_REVEAL_MS;
+    const enterEase = (t: number) =>
+      easePresent(translation?.easing ?? "easeOut", t);
+    // Finish leave fades before camera or the next object's enter.
+    if (hasFadeOut(from, target) || (moveCamera && crossedFrame)) {
       const mid = fadeOutHold(from, target);
-      this.animateOverrides(api, from, mid, gen, () => {
-        applyCamera();
-        this.animateOverrides(api, mid, target, gen, settle);
-      });
+      this.animateOverrides(
+        api,
+        from,
+        mid,
+        gen,
+        () => {
+          applyCamera();
+          this.animateOverrides(
+            api,
+            mid,
+            target,
+            gen,
+            settle,
+            enterMs,
+            enterEase,
+          );
+        },
+        JAYRR_PRESENT_REVEAL_MS,
+        easeOutQuad,
+      );
       return;
     }
 
     applyCamera();
-    this.animateOverrides(api, from, target, gen, settle);
+    this.animateOverrides(api, from, target, gen, settle, enterMs, enterEase);
   }
 
   private easeCamera(
@@ -594,6 +805,8 @@ export class PresentPlayer {
     to: Map<string, OverrideValues>,
     gen: number,
     onDone: () => void,
+    duration = JAYRR_PRESENT_REVEAL_MS,
+    ease: (t: number) => number = easeOutQuad,
   ) {
     const ids = new Set([...from.keys(), ...to.keys()]);
     const start = performance.now();
@@ -601,9 +814,7 @@ export class PresentPlayer {
       if (this.gen !== gen) {
         return;
       }
-      const t = easeOutQuad(
-        Math.min(1, (now - start) / JAYRR_PRESENT_REVEAL_MS),
-      );
+      const t = ease(Math.min(1, (now - start) / Math.max(1, duration)));
       const mixed = new Map<string, OverrideValues>();
       for (const id of ids) {
         const a = poseOf(from, id, SHOWN);
