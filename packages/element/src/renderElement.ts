@@ -11,64 +11,64 @@ import {
 } from "@excalidraw/math";
 
 import {
+  applyDarkModeFilter,
   BOUND_TEXT_PADDING,
+  DARK_THEME_FILTER,
   DEFAULT_REDUCED_GLOBAL_ALPHA,
+  distance,
   ELEMENT_READY_TO_ERASE_OPACITY,
   FRAME_STYLE,
-  DARK_THEME_FILTER,
-  MIME_TYPES,
-  THEME,
-  distance,
   getFontString,
-  isRTL,
   getVerticalOffset,
   invariant,
-  applyDarkModeFilter,
+  isRTL,
   isSafari,
+  MIME_TYPES,
   STICKY_NOTE_EDGE_SHADOW_OPACITY,
   STICKY_NOTE_EDGE_SHADOW_WIDTH,
   STICKY_NOTE_FOOTER,
   STICKY_NOTE_SHADOW_OPACITY,
+  THEME,
 } from "@excalidraw/common";
 
 import type {
   AppState,
-  StaticCanvasAppState,
-  Zoom,
+  ElementRenderOverrides,
   InteractiveCanvasAppState,
   NormalizedZoomValue,
-  ElementRenderOverrides,
+  StaticCanvasAppState,
+  Zoom,
 } from "@excalidraw/excalidraw/types";
 
 import type {
-  StaticCanvasRenderConfig,
-  RenderableElementsMap,
   InteractiveCanvasRenderConfig,
+  RenderableElementsMap,
+  StaticCanvasRenderConfig,
 } from "@excalidraw/excalidraw/scene/types";
 
 import { getElementAbsoluteCoords, getElementBounds } from "./bounds";
 import { getUncroppedImageElement } from "./cropElement";
+import { getContainingFrame } from "./frame";
 import { LinearElementEditor } from "./linearElementEditor";
 import {
   getBoundTextElement,
-  getContainerCoords,
-  getContainerElement,
   getBoundTextMaxHeight,
   getBoundTextMaxWidth,
+  getContainerCoords,
+  getContainerElement,
 } from "./textElement";
 import { getLineHeightInPx } from "./textMeasurements";
 import {
-  isTextElement,
-  isLinearElement,
-  isFreeDrawElement,
-  isInitializedImageElement,
-  isArrowElement,
   hasBoundTextElement,
-  isMagicFrameElement,
+  isArrowElement,
   isFrameLikeElement,
+  isFreeDrawElement,
   isImageElement,
+  isInitializedImageElement,
+  isLinearElement,
+  isMagicFrameElement,
+  isTextElement,
 } from "./typeChecks";
-import { getContainingFrame } from "./frame";
 import { getCornerRadius } from "./utils";
 
 import { ShapeCache } from "./shape";
@@ -79,15 +79,15 @@ import {
 } from "./stickyNote";
 
 import type {
+  ElementsMap,
   ExcalidrawElement,
-  ExcalidrawTextElement,
-  NonDeleted,
-  NonDeletedExcalidrawElement,
   ExcalidrawFreeDrawElement,
   ExcalidrawImageElement,
+  ExcalidrawTextElement,
   ExcalidrawTextElementWithContainer,
+  NonDeleted,
+  NonDeletedExcalidrawElement,
   NonDeletedSceneElementsMap,
-  ElementsMap,
 } from "./types";
 
 import type { RoughCanvas } from "roughjs/bin/canvas";
@@ -683,6 +683,31 @@ export const elementWithCanvasCache = new WeakMap<
   ExcalidrawElement,
   ExcalidrawElementWithCanvas
 >();
+
+/** Rasterize element bitmaps at `zoom` so a later zoom-in can downscale
+ * a sharp cache instead of upscaling a stale one. */
+export const primeElementCanvasCache = ({
+  elements,
+  elementsMap,
+  renderConfig,
+  appState,
+  zoom,
+}: {
+  elements: readonly NonDeletedExcalidrawElement[];
+  elementsMap: NonDeletedSceneElementsMap;
+  renderConfig: StaticCanvasRenderConfig;
+  appState: StaticCanvasAppState | InteractiveCanvasAppState;
+  zoom: Zoom;
+}) => {
+  const primedState = {
+    ...appState,
+    zoom,
+    shouldCacheIgnoreZoom: false,
+  };
+  for (const element of elements) {
+    generateElementWithCanvas(element, elementsMap, renderConfig, primedState);
+  }
+};
 
 const generateElementWithCanvas = (
   element: NonDeletedExcalidrawElement,

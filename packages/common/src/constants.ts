@@ -402,6 +402,8 @@ export const VERSIONS = {
 } as const;
 
 export const BOUND_TEXT_PADDING = 5;
+export const INNER_PADDING_VALUES = [2, 4, 8, 16] as const;
+export type InnerPaddingValue = typeof INNER_PADDING_VALUES[number];
 export const ARROW_LABEL_WIDTH_FRACTION = 0.7;
 export const ARROW_LABEL_FONT_SIZE_TO_MIN_WIDTH_RATIO = 11;
 

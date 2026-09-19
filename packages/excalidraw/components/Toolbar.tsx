@@ -16,7 +16,6 @@ import DropdownMenu from "./dropdownMenu/DropdownMenu";
 import {
   drawShapeToolIcon,
   EmbedIcon,
-  frameToolIcon,
   ImageIcon,
   LassoIcon,
   laserPointerToolIcon,
@@ -33,6 +32,7 @@ import {
   getToolShortcut,
   HandToolButton,
   isToolButtonDisabled,
+  FrameToolButton,
   LassoToolButton,
   LineToolButton,
   RectangleToolButton,
@@ -63,7 +63,6 @@ const ExtraToolsDropdown = ({
   const [isExtraToolsMenuOpen, setIsExtraToolsMenuOpen] = useState(false);
   const isFullStylesPanel = useStylesPanelMode() === "full";
   const imageToolSelected = activeTool.type === "image";
-  const frameToolSelected = activeTool.type === "frame";
   const drawShapeToolSelected = activeTool.type === "autoshape";
   const laserToolSelected = activeTool.type === "laser";
   const bucketFillToolSelected = activeTool.type === "bucketfill";
@@ -79,7 +78,6 @@ const ExtraToolsDropdown = ({
         className={clsx("App-toolbar__extra-tools-trigger", {
           "App-toolbar__extra-tools-trigger--selected":
             imageToolSelected ||
-            frameToolSelected ||
             embeddableToolSelected ||
             (isFullStylesPanel && drawShapeToolSelected) ||
             lassoToolSelected ||
@@ -97,8 +95,6 @@ const ExtraToolsDropdown = ({
       >
         {imageToolSelected
           ? ImageIcon
-          : frameToolSelected
-          ? frameToolIcon
           : embeddableToolSelected
           ? EmbedIcon
           : isFullStylesPanel && drawShapeToolSelected
@@ -128,16 +124,6 @@ const ExtraToolsDropdown = ({
             {t("toolBar.image")}
           </DropdownMenu.Item>
         )}
-        <DropdownMenu.Item
-          onSelect={() => app.setActiveTool({ type: "frame" })}
-          icon={frameToolIcon}
-          shortcut={KEYS.F.toLocaleUpperCase()}
-          data-testid="toolbar-frame"
-          selected={frameToolSelected}
-          disabled={isToolButtonDisabled(app, "frame")}
-        >
-          {t("toolBar.frame")}
-        </DropdownMenu.Item>
         <DropdownMenu.Item
           onSelect={() => app.setActiveTool({ type: "embeddable" })}
           icon={EmbedIcon}
@@ -271,6 +257,7 @@ export const Toolbar = ({
         )}
 
         <HandToolButton {...toolProps} hideKeyBinding />
+        <FrameToolButton {...toolProps} />
         {isCompactStylesPanel ? (
           <SelectionToolPopover {...toolProps} setAppState={setAppState} />
         ) : appState.preferredSelectionTool.type === "lasso" ? (

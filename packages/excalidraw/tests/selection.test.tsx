@@ -1,4 +1,3 @@
-import React from "react";
 import { vi } from "vitest";
 
 import { KEYS, ROUNDNESS, arrayToMap, reseed } from "@excalidraw/common";
@@ -19,11 +18,11 @@ import { API } from "./helpers/api";
 import { Keyboard, Pointer, UI } from "./helpers/ui";
 import {
   act,
-  render,
+  assertSelectedElements,
   fireEvent,
   mockBoundingClientRect,
+  render,
   restoreOriginalGetBoundingClientRect,
-  assertSelectedElements,
   unmountComponent,
 } from "./test-utils";
 
@@ -1351,8 +1350,6 @@ describe("tool locking & selection", () => {
         value !== "arrow" &&
         value !== "hand" &&
         value !== "laser" &&
-        // no top-level toolbar button (rendered in the extra-tools dropdown)
-        value !== "frame" &&
         value !== "embeddable" &&
         value !== "autoshape" &&
         value !== "bucketfill"

@@ -1,4 +1,3 @@
-import React from "react";
 import { vi } from "vitest";
 
 import {
@@ -266,6 +265,7 @@ describe("props.activeTool (forced tool)", () => {
     );
     expect(queryToolButton("freedraw")!.disabled).toBe(true);
     expect(queryToolButton("eraser")!.disabled).toBe(true);
+    expect(queryToolButton("frame")!.disabled).toBe(true);
     expect(queryToolButton("lock")).toBe(null);
 
     // the extra-tools dropdown items are disabled as well
@@ -274,11 +274,6 @@ describe("props.activeTool (forced tool)", () => {
         ".App-toolbar__extra-tools-trigger",
       )!,
     );
-    const frameItem = document.querySelector<HTMLButtonElement>(
-      '[data-testid="toolbar-frame"]',
-    );
-    expect(frameItem).not.toBe(null);
-    expect(frameItem!.disabled).toBe(true);
     const laserItem = document.querySelector<HTMLButtonElement>(
       '[data-testid="toolbar-laser"]',
     );
@@ -361,11 +356,11 @@ describe("toolbar", () => {
 
   it("keeps the image tool in the extra-tools menu", async () => {
     await render(<Excalidraw />);
+    expect(queryTool("frame")).not.toBe(null);
     expect(queryTool("image")).toBe(null);
 
     openExtraTools();
     expect(queryTool("image")).not.toBe(null);
-    expect(queryTool("frame")).not.toBe(null);
   });
 
   it("hides the image tool through UIOptions.tools.image", async () => {

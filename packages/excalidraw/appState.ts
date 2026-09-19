@@ -1,18 +1,19 @@
 import {
-  COLOR_PALETTE,
   ARROW_TYPE,
+  COLOR_PALETTE,
   DEFAULT_ELEMENT_PROPS,
+  DEFAULT_ELEMENT_STROKE_WIDTH_KEY,
   DEFAULT_FONT_FAMILY,
   DEFAULT_FONT_SIZE,
-  DEFAULT_ELEMENT_STROKE_WIDTH_KEY,
-  DEFAULT_TEXT_ALIGN,
   DEFAULT_GRID_SIZE,
+  DEFAULT_GRID_STEP,
+  DEFAULT_STICKY_NOTE_BG,
+  DEFAULT_TEXT_ALIGN,
   EXPORT_SCALES,
+  isTestEnv,
+  LIBRARY_SIDEBAR_TAB,
   STATS_PANELS,
   THEME,
-  DEFAULT_GRID_STEP,
-  isTestEnv,
-  DEFAULT_STICKY_NOTE_BG,
 } from "@excalidraw/common";
 
 import type { AppState, InputDevice, NormalizedZoomValue } from "./types";
@@ -79,6 +80,7 @@ export const getDefaultAppState = (): Omit<
     isMidpointSnappingEnabled: true,
     inputDevice: "auto",
     defaultSidebarDockedPreference: false,
+    defaultSidebarTabPreference: LIBRARY_SIDEBAR_TAB,
     isLoading: false,
     isResizing: false,
     isRotating: false,
@@ -227,6 +229,11 @@ const APP_STATE_STORAGE_CONF = (<
   isMidpointSnappingEnabled: { browser: true, export: false, server: false },
   inputDevice: { browser: true, export: false, server: false },
   defaultSidebarDockedPreference: {
+    browser: true,
+    export: false,
+    server: false,
+  },
+  defaultSidebarTabPreference: {
     browser: true,
     export: false,
     server: false,

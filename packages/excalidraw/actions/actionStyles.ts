@@ -1,30 +1,30 @@
 import {
-  DEFAULT_FONT_SIZE,
-  DEFAULT_FONT_FAMILY,
-  DEFAULT_TEXT_ALIGN,
   CODES,
+  DEFAULT_FONT_FAMILY,
+  DEFAULT_FONT_SIZE,
+  DEFAULT_TEXT_ALIGN,
   KEYS,
-  getLineHeight,
   arrayToMap,
+  getLineHeight,
 } from "@excalidraw/common";
 
 import { newElementWith, syncStickyNoteInk } from "@excalidraw/element";
 
 import {
-  normalizeStickyNote,
-  hasBoundTextElement,
   canApplyRoundnessTypeToElement,
+  getBaseFontSize,
+  getBaseFontSizeUpdate,
+  getColorUpdate,
   getDefaultRoundnessTypeForElement,
-  isFrameLikeElement,
+  hasBoundTextElement,
   isArrowElement,
   isExcalidrawElement,
-  getColorUpdate,
+  isFrameLikeElement,
   isNonDeletedElement,
   isStickyNoteBoundText,
   isStickyNoteElement,
   isTextElement,
-  getBaseFontSize,
-  getBaseFontSizeUpdate,
+  normalizeStickyNote,
   relayoutStickyNotes,
   updateBoundElements,
 } from "@excalidraw/element";
@@ -123,6 +123,7 @@ export const actionPasteStyles = register({
               fillStyle: elementStylesToCopyFrom?.fillStyle,
               opacity: elementStylesToCopyFrom?.opacity,
               roughness: elementStylesToCopyFrom?.roughness,
+              innerPadding: elementStylesToCopyFrom?.innerPadding,
               roundness: elementStylesToCopyFrom.roundness
                 ? canApplyRoundnessTypeToElement(
                     elementStylesToCopyFrom.roundness.type,

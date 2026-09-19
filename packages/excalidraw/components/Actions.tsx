@@ -1,6 +1,6 @@
 import clsx from "clsx";
-import { useRef } from "react";
 import { Popover } from "radix-ui";
+import { useRef } from "react";
 
 import { CLASSES } from "@excalidraw/common";
 
@@ -26,31 +26,31 @@ import { actionToggleViewMode } from "../actions/actionToggleViewMode";
 import "./Actions.scss";
 
 import { useExcalidrawContainer } from "./App";
+import { PropertiesPopover } from "./PropertiesPopover";
 import Stack from "./Stack";
 import { Tooltip } from "./Tooltip";
-import { PropertiesPopover } from "./PropertiesPopover";
 import {
-  sharpArrowIcon,
-  roundArrowIcon,
-  elbowArrowIcon,
-  TextSizeIcon,
   adjustmentsIcon,
   DotsHorizontalIcon,
+  elbowArrowIcon,
   pencilIcon,
+  roundArrowIcon,
+  sharpArrowIcon,
+  TextSizeIcon,
 } from "./icons";
 
 import { Island } from "./Island";
 
 import { getShapeActionPredicates } from "./shapeActionPredicates";
 
-import type { ShapeActionPredicates } from "./shapeActionPredicates";
-import type { AppClassProperties, UIAppState, AppState } from "../types";
 import type { ActionManager } from "../actions/manager";
+import type { AppClassProperties, AppState, UIAppState } from "../types";
+import type { ShapeActionPredicates } from "./shapeActionPredicates";
 
 // re-exported for consumers outside the styles panel (e.g. CommandPalette)
 export {
-  canChangeStrokeColor,
   canChangeBackgroundColor,
+  canChangeStrokeColor,
 } from "./shapeActionPredicates";
 
 // Common CSS class combinations
@@ -182,6 +182,8 @@ export const SelectedShapeActions = ({
 
       {predicates.roundness && <>{renderAction("changeRoundness")}</>}
 
+      {predicates.innerPadding && renderAction("changeInnerPadding")}
+
       {predicates.arrowType && <>{renderAction("changeArrowType")}</>}
 
       {predicates.text && (
@@ -302,6 +304,7 @@ const CombinedShapeProperties = ({
               )}
               {predicates.sloppiness && <>{renderAction("changeSloppiness")}</>}
               {predicates.roundness && renderAction("changeRoundness")}
+              {predicates.innerPadding && renderAction("changeInnerPadding")}
               {predicates.opacity && renderAction("changeOpacity")}
             </div>
           </PropertiesPopover>

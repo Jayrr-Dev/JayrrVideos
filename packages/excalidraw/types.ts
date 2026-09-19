@@ -1,10 +1,10 @@
 import type {
+  EditorInterface,
   IMAGE_MIME_TYPES,
+  MIME_TYPES,
+  StrokeWidthKey,
   UserIdleState,
   throttleRAF,
-  MIME_TYPES,
-  EditorInterface,
-  StrokeWidthKey,
 } from "@excalidraw/common";
 
 import type { LinearElementEditor } from "@excalidraw/element";
@@ -12,37 +12,37 @@ import type { LinearElementEditor } from "@excalidraw/element";
 import type { MaybeTransformHandleType } from "@excalidraw/element";
 
 import type {
-  PointerType,
-  ExcalidrawLinearElement,
-  NonDeletedExcalidrawElement,
-  NonDeleted,
-  TextAlign,
-  ExcalidrawElement,
-  GroupId,
-  ExcalidrawBindableElement,
-  ExcalidrawArrowElement,
   Arrowhead,
-  FontFamilyValues,
-  FileId,
-  Theme,
-  StrokeRoundness,
-  ExcalidrawEmbeddableElement,
-  ExcalidrawMagicFrameElement,
-  ExcalidrawFrameLikeElement,
-  ExcalidrawElementType,
-  ExcalidrawIframeLikeElement,
-  OrderedExcalidrawElement,
-  ExcalidrawNonSelectionElement,
   BindMode,
+  ExcalidrawArrowElement,
+  ExcalidrawBindableElement,
+  ExcalidrawElement,
+  ExcalidrawElementType,
+  ExcalidrawEmbeddableElement,
+  ExcalidrawFrameLikeElement,
+  ExcalidrawIframeLikeElement,
+  ExcalidrawLinearElement,
+  ExcalidrawMagicFrameElement,
+  ExcalidrawNonSelectionElement,
   ExcalidrawTextElement,
+  FileId,
+  FontFamilyValues,
+  GroupId,
+  NonDeleted,
+  NonDeletedExcalidrawElement,
+  OrderedExcalidrawElement,
+  PointerType,
+  StrokeRoundness,
   StrokeVariability,
+  TextAlign,
+  Theme,
 } from "@excalidraw/element/types";
 
 import type {
-  Merge,
-  MaybePromise,
-  ValueOf,
   MakeBrand,
+  MaybePromise,
+  Merge,
+  ValueOf,
 } from "@excalidraw/common/utility-types";
 
 import type {
@@ -56,16 +56,16 @@ import type { Action } from "./actions/types";
 import type { Spreadsheet } from "./charts";
 import type { ClipboardData } from "./clipboard";
 import type App from "./components/App";
-import type Library from "./data/library";
 import type { ContextMenuItems } from "./components/ContextMenu";
-import type { SnapLine } from "./snapping";
+import type Library from "./data/library";
 import type { ImportedDataState } from "./data/types";
+import type { SnapLine } from "./snapping";
 import type { SetViewportOptions } from "./viewport";
 
-import type { Language } from "./i18n";
-import type { isOverScrollBars } from "./scene/scrollbars";
 import type React from "react";
 import type { JSX } from "react";
+import type { Language } from "./i18n";
+import type { isOverScrollBars } from "./scene/scrollbars";
 
 export type { App };
 
@@ -486,6 +486,8 @@ export interface AppState {
    * a DefaultSidebar prop, which is not reflected back to the appState.
    */
   defaultSidebarDockedPreference: boolean;
+  /** Last non-search tab of the default sidebar, used when reopening it. */
+  defaultSidebarTabPreference: SidebarTabName;
 
   lastPointerDownWith: PointerType;
   selectedElementIds: Readonly<{ [id: string]: true }>;

@@ -39,67 +39,148 @@
     gap: 0.75rem;
   }
 
-  .jayrr-library__list {
+  .jayrr-scene-grid {
     list-style: none;
     margin: 0;
     padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-  }
-
-  .jayrr-library__row {
-    display: flex;
-    align-items: center;
-    gap: 0.25rem;
-  }
-
-  .jayrr-library__folder {
-    flex: 1;
-    display: flex;
-    align-items: center;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
     gap: 0.75rem;
-    border: none;
-    background: none;
-    text-align: left;
-    padding: 0.5rem 0.4rem;
-    border-radius: var(--border-radius-md);
-    cursor: pointer;
-    min-width: 0;
-    color: var(--text-primary-color);
   }
 
-  .jayrr-library__folder:hover {
-    background: var(--color-surface-mid);
-  }
-
-  .jayrr-library__folder-icon svg {
-    width: 1.25rem;
-    height: 1.25rem;
-  }
-
-  .jayrr-library__folder-copy {
+  .jayrr-scene-card {
+    position: relative;
     display: flex;
     flex-direction: column;
     min-width: 0;
+    background: none;
+    padding: 0;
+    box-sizing: border-box;
   }
 
-  .jayrr-library__folder-name {
-    font-weight: 600;
+  .jayrr-scene-card__name,
+  .jayrr-scene-card__name-input {
+    position: absolute;
+    top: 0.45rem;
+    left: 0.5rem;
+    z-index: 1;
+    max-width: calc(100% - 2.4rem);
+    margin: 0;
+    border: none;
+    border-radius: 0.35rem;
+    background: none;
+    color: var(--color-primary);
+    font-weight: 700;
+    font-size: 0.9rem;
+    line-height: 1.2;
+    padding: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    pointer-events: none;
   }
 
-  .jayrr-library__folder-meta {
-    font-size: 0.75rem;
-    color: var(--color-gray-70);
+  .jayrr-scene-card__name-input {
+    width: calc(100% - 2.4rem);
+    box-sizing: border-box;
+    padding: 0.15rem 0.3rem;
+    outline: 2px solid var(--color-primary);
+    background: var(--island-bg-color);
+    pointer-events: auto;
   }
 
-  .jayrr-library__row-actions {
+  .jayrr-scene-card__preview {
+    aspect-ratio: 1;
+    width: 100%;
+    min-height: 0;
+    padding: 0.35rem;
+    border: 1px solid var(--sidebar-border-color);
+    border-radius: 0.7rem;
+    background: none;
+    cursor: pointer;
+    overflow: hidden;
     display: flex;
     align-items: center;
-    gap: 0.15rem;
+    justify-content: center;
+  }
+
+  .jayrr-scene-card__preview:hover {
+    border-color: var(--color-primary);
+  }
+
+  .jayrr-scene-card--active .jayrr-scene-card__preview {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 1px var(--color-primary);
+  }
+
+  .jayrr-scene-card__preview img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    pointer-events: none;
+  }
+
+  .jayrr-scene-card__empty {
+    font-size: 0.75rem;
+    color: var(--color-gray-70);
+    padding: 0.35rem;
+  }
+
+  .jayrr-scene-card__menu.dropdown-menu-button {
+    position: absolute;
+    top: 0.15rem;
+    right: 0.15rem;
+    z-index: 2;
+    width: 1.5rem;
+    height: 1.5rem;
+    padding: 0;
+    border: none;
+    box-shadow: none;
+    background: none;
+    --background: transparent;
+    color: var(--icon-fill-color);
+    opacity: 0.55;
+
+    &:hover,
+    &:active,
+    &[data-state="open"] {
+      background: none;
+      --background: transparent;
+      box-shadow: none;
+      color: var(--color-primary);
+      opacity: 1;
+    }
+
+    svg {
+      width: 0.95rem;
+      height: 0.95rem;
+      stroke-width: 1.5;
+    }
+  }
+
+  .jayrr-library-card__thumbs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.25rem;
+    width: 100%;
+    height: 100%;
+    padding-top: 1.15rem;
+    box-sizing: border-box;
+    pointer-events: none;
+  }
+
+  .jayrr-library-card__thumb {
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    svg {
+      width: 100%;
+      height: 100%;
+    }
   }
 
   .jayrr-library__icon-button {
@@ -116,10 +197,6 @@
 
   .jayrr-library__icon-button:hover {
     background: var(--color-surface-mid);
-  }
-
-  .jayrr-library__icon-button--danger:hover {
-    color: var(--color-danger);
   }
 
   .jayrr-library__icon-button svg {
@@ -162,6 +239,23 @@
     color: var(--color-primary);
     font-weight: 600;
     text-align: left;
+  }
+
+  .jayrr-library__pending-icon {
+    display: flex;
+    flex-shrink: 0;
+    width: 1.5rem;
+    height: 1.5rem;
+    justify-content: center;
+    align-items: center;
+    background-color: var(--color-primary);
+    border-radius: var(--border-radius-md);
+
+    svg {
+      color: var(--color-primary-light);
+      width: 1rem;
+      height: 1rem;
+    }
   }
 
   .jayrr-library__asset-delete {

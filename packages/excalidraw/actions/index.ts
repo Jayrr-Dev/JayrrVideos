@@ -1,51 +1,52 @@
 export { actionDeleteSelected } from "./actionDeleteSelected";
+export { actionDuplicateSelection } from "./actionDuplicateSelection";
+export {
+  actionChangeArrowProperties,
+  actionChangeBackgroundColor,
+  actionChangeBucketFillBackgroundColor,
+  actionChangeFillStyle,
+  actionChangeFontFamily,
+  actionChangeFontSize,
+  actionChangeFreedrawMode,
+  actionChangeInnerPadding,
+  actionChangeOpacity,
+  actionChangeSloppiness,
+  actionChangeStrokeColor,
+  actionChangeStrokeWidth,
+  actionChangeTextAlign,
+  actionChangeVerticalAlign,
+} from "./actionProperties";
+export { actionSelectAll } from "./actionSelectAll";
 export {
   actionBringForward,
   actionBringToFront,
   actionSendBackward,
   actionSendToBack,
 } from "./actionZindex";
-export { actionSelectAll } from "./actionSelectAll";
-export { actionDuplicateSelection } from "./actionDuplicateSelection";
-export {
-  actionChangeStrokeColor,
-  actionChangeBackgroundColor,
-  actionChangeBucketFillBackgroundColor,
-  actionChangeStrokeWidth,
-  actionChangeFillStyle,
-  actionChangeSloppiness,
-  actionChangeFreedrawMode,
-  actionChangeOpacity,
-  actionChangeFontSize,
-  actionChangeFontFamily,
-  actionChangeTextAlign,
-  actionChangeVerticalAlign,
-  actionChangeArrowProperties,
-} from "./actionProperties";
 
 export {
   actionChangeViewBackgroundColor,
   actionClearCanvas,
+  actionResetZoom,
+  actionToggleTheme,
   actionZoomIn,
   actionZoomOut,
-  actionResetZoom,
   actionZoomToFit,
-  actionToggleTheme,
 } from "./actionCanvas";
 
-export { actionFinalize } from "./actionFinalize";
 export { actionDeselect } from "./actionDeselect";
+export { actionFinalize } from "./actionFinalize";
 
 export {
-  actionChangeProjectName,
   actionChangeExportBackground,
-  actionSaveToActiveFile,
-  actionSaveFileToDisk,
+  actionChangeProjectName,
   actionLoadScene,
+  actionSaveFileToDisk,
+  actionSaveToActiveFile,
 } from "./actionExport";
 
-export { actionCopyStyles, actionPasteStyles } from "./actionStyles";
 export { actionShortcuts } from "./actionMenu";
+export { actionCopyStyles, actionPasteStyles } from "./actionStyles";
 
 export { actionGroup, actionUngroup } from "./actionGroup";
 
@@ -54,12 +55,12 @@ export { actionGoToCollaborator } from "./actionNavigate";
 export { actionAddToLibrary } from "./actionAddToLibrary";
 
 export {
-  actionAlignTop,
   actionAlignBottom,
+  actionAlignHorizontallyCentered,
   actionAlignLeft,
   actionAlignRight,
+  actionAlignTop,
   actionAlignVerticallyCentered,
-  actionAlignHorizontallyCentered,
 } from "./actionAlign";
 
 export {
@@ -71,23 +72,23 @@ export { actionFlipHorizontal, actionFlipVertical } from "./actionFlip";
 
 export {
   actionCopy,
-  actionCut,
   actionCopyAsPng,
   actionCopyAsSvg,
+  actionCut,
   copyText,
 } from "./actionClipboard";
 
-export { actionToggleGridMode } from "./actionToggleGridMode";
-export { actionToggleZenMode } from "./actionToggleZenMode";
-export { actionToggleObjectsSnapMode } from "./actionToggleObjectsSnapMode";
 export { actionToggleArrowBinding } from "./actionToggleArrowBinding";
+export { actionToggleGridMode } from "./actionToggleGridMode";
 export { actionToggleMidpointSnapping } from "./actionToggleMidpointSnapping";
+export { actionToggleObjectsSnapMode } from "./actionToggleObjectsSnapMode";
+export { actionToggleZenMode } from "./actionToggleZenMode";
 
-export { actionToggleStats } from "./actionToggleStats";
-export { actionUnbindText, actionBindText } from "./actionBoundText";
-export { actionLink } from "./actionLink";
+export { actionBindText, actionUnbindText } from "./actionBoundText";
 export { actionToggleElementLock } from "./actionElementLock";
 export { actionToggleLinearEditor } from "./actionLinearEditor";
+export { actionLink } from "./actionLink";
+export { actionToggleStats } from "./actionToggleStats";
 
 export { actionToggleSearchMenu } from "./actionToggleSearchMenu";
 

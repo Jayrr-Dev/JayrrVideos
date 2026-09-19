@@ -3,34 +3,36 @@ import { pointFrom } from "@excalidraw/math";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
+  arrayToMap,
+  ARROW_TYPE,
   BUCKET_FILL_BACKGROUND_PICKS,
   COLOR_PALETTE,
   DEFAULT_ELEMENT_BACKGROUND_COLOR_PALETTE,
-  ARROW_TYPE,
   DEFAULT_FONT_FAMILY,
   DEFAULT_FONT_SIZE,
   FONT_FAMILY,
+  FONT_SIZES,
+  getFontFamilyString,
+  getLineHeight,
+  getStrokeWidthByKey,
+  INNER_PADDING_VALUES,
+  invariant,
+  isTransparent,
+  KEYS,
+  randomInteger,
+  reduceToCommonValue,
   ROUNDNESS,
   STROKE_WIDTH_KEYS,
   VERTICAL_ALIGN,
-  KEYS,
-  randomInteger,
-  arrayToMap,
-  getFontFamilyString,
-  getLineHeight,
-  isTransparent,
-  getStrokeWidthByKey,
-  reduceToCommonValue,
-  invariant,
-  FONT_SIZES,
+  type InnerPaddingValue,
   type StrokeWidthKey,
 } from "@excalidraw/common";
 
 import {
   canBecomePolygon,
-  normalizeStickyNote,
   getNonDeletedElements,
   isNonDeletedElement,
+  normalizeStickyNote,
   syncStickyNoteInk,
 } from "@excalidraw/element";
 
@@ -42,13 +44,14 @@ import {
 
 import { LinearElementEditor } from "@excalidraw/element";
 
-import { newElementWith } from "@excalidraw/element";
-import { getArrowheadForPicker } from "@excalidraw/element";
+import { getArrowheadForPicker, newElementWith } from "@excalidraw/element";
 
 import {
-  getBoundTextElement,
+  canChangeInnerPadding,
   getBaseFontSize,
   getBaseFontSizeUpdate,
+  getBoundTextElement,
+  getContainerElement,
   redrawTextBoundingBox,
 } from "@excalidraw/element";
 
@@ -71,9 +74,9 @@ import {
 } from "@excalidraw/element";
 
 import {
-  updateElbowArrowPoints,
   CaptureUpdateAction,
   toggleLinePolygonState,
+  updateElbowArrowPoints,
 } from "@excalidraw/element";
 
 import { deriveStylesPanelMode } from "@excalidraw/common";
@@ -89,9 +92,9 @@ import type {
   ExcalidrawLinearElement,
   ExcalidrawTextElement,
   FontFamilyValues,
-  StrokeVariability,
   NonDeleted,
   NonDeletedExcalidrawElement,
+  StrokeVariability,
   TextAlign,
   VerticalAlign,
 } from "@excalidraw/element/types";
@@ -101,58 +104,58 @@ import type { ElementUpdate, Scene } from "@excalidraw/element";
 import type { CaptureUpdateActionType } from "@excalidraw/element";
 
 import { trackEvent } from "../analytics";
-import { RadioSelection } from "../components/RadioSelection";
-import { IconButton } from "../components/IconButton";
 import { ColorPicker } from "../components/ColorPicker/ColorPicker";
 import { FontPicker } from "../components/FontPicker/FontPicker";
+import { IconButton } from "../components/IconButton";
 import { IconPicker } from "../components/IconPicker";
+import { RadioSelection } from "../components/RadioSelection";
 import { Range } from "../components/Range";
 import {
   ArrowheadArrowIcon,
   ArrowheadBarIcon,
-  ArrowheadCircleIcon,
-  ArrowheadTriangleIcon,
-  ArrowheadNoneIcon,
-  StrokeStyleDashedIcon,
-  StrokeStyleDottedIcon,
-  TextAlignTopIcon,
-  TextAlignBottomIcon,
-  TextAlignMiddleIcon,
-  FillHachureIcon,
-  FillCrossHatchIcon,
-  FillSolidIcon,
-  SloppinessArchitectIcon,
-  SloppinessArtistIcon,
-  SloppinessCartoonistIcon,
-  StrokeWidthBaseIcon,
-  StrokeWidthBoldIcon,
-  StrokeWidthExtraBoldIcon,
-  FontSizeSmallIcon,
-  FontSizeMediumIcon,
-  FontSizeLargeIcon,
-  FontSizeExtraLargeIcon,
-  EdgeSharpIcon,
-  EdgeRoundIcon,
-  TextAlignLeftIcon,
-  TextAlignCenterIcon,
-  TextAlignRightIcon,
-  FillZigZagIcon,
-  ArrowheadTriangleOutlineIcon,
-  ArrowheadCircleOutlineIcon,
-  ArrowheadDiamondIcon,
-  ArrowheadDiamondOutlineIcon,
-  fontSizeIcon,
-  sharpArrowIcon,
-  roundArrowIcon,
-  elbowArrowIcon,
   ArrowheadCardinalityExactlyOneIcon,
   ArrowheadCardinalityManyIcon,
   ArrowheadCardinalityOneIcon,
   ArrowheadCardinalityOneOrManyIcon,
   ArrowheadCardinalityZeroOrManyIcon,
   ArrowheadCardinalityZeroOrOneIcon,
+  ArrowheadCircleIcon,
+  ArrowheadCircleOutlineIcon,
+  ArrowheadDiamondIcon,
+  ArrowheadDiamondOutlineIcon,
+  ArrowheadNoneIcon,
+  ArrowheadTriangleIcon,
+  ArrowheadTriangleOutlineIcon,
+  EdgeRoundIcon,
+  EdgeSharpIcon,
+  elbowArrowIcon,
+  FillCrossHatchIcon,
+  FillHachureIcon,
+  FillSolidIcon,
+  FillZigZagIcon,
+  FontSizeExtraLargeIcon,
+  fontSizeIcon,
+  FontSizeLargeIcon,
+  FontSizeMediumIcon,
+  FontSizeSmallIcon,
+  roundArrowIcon,
+  sharpArrowIcon,
+  SloppinessArchitectIcon,
+  SloppinessArtistIcon,
+  SloppinessCartoonistIcon,
+  StrokeStyleDashedIcon,
+  StrokeStyleDottedIcon,
   strokeVariabilityConstantIcon,
   strokeVariabilityVariableIcon,
+  StrokeWidthBaseIcon,
+  StrokeWidthBoldIcon,
+  StrokeWidthExtraBoldIcon,
+  TextAlignBottomIcon,
+  TextAlignCenterIcon,
+  TextAlignLeftIcon,
+  TextAlignMiddleIcon,
+  TextAlignRightIcon,
+  TextAlignTopIcon,
 } from "../components/icons";
 
 import { Fonts } from "../fonts";
@@ -165,8 +168,8 @@ import {
 } from "../scene";
 
 import {
-  withCaretPositionPreservation,
   restoreCaretPosition,
+  withCaretPositionPreservation,
 } from "../hooks/useTextEditorFocus";
 
 import { getShortcutKey } from "../shortcut";
@@ -1820,6 +1823,106 @@ export const actionChangeRoundness = register<"sharp" | "round">({
       </fieldset>
     );
   },
+});
+
+export const actionChangeInnerPadding = register<InnerPaddingValue>({
+  name: "changeInnerPadding",
+  label: "labels.innerPadding",
+  trackEvent: false,
+  perform: (elements, appState, value, app) => {
+    invariant(value, "actionChangeInnerPadding: value must be defined");
+
+    const selected = getSelectedElements(elements, appState, {
+      includeBoundTextElement: true,
+    });
+    const containerIds = new Set<string>();
+    for (const element of selected) {
+      if (canChangeInnerPadding(element)) {
+        containerIds.add(element.id);
+      }
+      if (isTextElement(element)) {
+        const container = getContainerElement(
+          element,
+          app.scene.getNonDeletedElementsMap(),
+        );
+        if (container && canChangeInnerPadding(container)) {
+          containerIds.add(container.id);
+        }
+      }
+    }
+
+    const nextElements = elements.map((element) => {
+      if (!containerIds.has(element.id)) {
+        return element;
+      }
+      const next = newElementWith(element, { innerPadding: value });
+      const boundText = getBoundTextElement(
+        next,
+        app.scene.getNonDeletedElementsMap(),
+      );
+      if (boundText) {
+        redrawTextBoundingBox(boundText, next, app.scene);
+      }
+      return next;
+    });
+
+    return {
+      elements: nextElements,
+      captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+    };
+  },
+  PanelComponent: ({ elements, appState, updateData, app }) => (
+    <fieldset>
+      <legend>{t("labels.innerPadding")}</legend>
+      <div className="buttonList">
+        <RadioSelection<InnerPaddingValue>
+          group="inner-padding"
+          options={INNER_PADDING_VALUES.map((padding) => ({
+            value: padding,
+            text: String(padding),
+            icon: <span>{padding}</span>,
+            testId: `innerPadding-${padding}`,
+          }))}
+          value={getFormValue(
+            elements,
+            app,
+            (element) => {
+              const readPadding = (container: typeof element) => {
+                const padding = container.innerPadding;
+                return INNER_PADDING_VALUES.includes(
+                  padding as InnerPaddingValue,
+                )
+                  ? (padding as InnerPaddingValue)
+                  : null;
+              };
+              if (canChangeInnerPadding(element)) {
+                return readPadding(element);
+              }
+              if (isTextElement(element)) {
+                const container = getContainerElement(
+                  element,
+                  app.scene.getNonDeletedElementsMap(),
+                );
+                if (container && canChangeInnerPadding(container)) {
+                  return readPadding(container);
+                }
+              }
+              return null;
+            },
+            (element) =>
+              canChangeInnerPadding(element) ||
+              (isTextElement(element) &&
+                !!getContainerElement(
+                  element,
+                  app.scene.getNonDeletedElementsMap(),
+                )),
+            () => null,
+          )}
+          onChange={(padding) => updateData(padding)}
+        />
+      </div>
+    </fieldset>
+  ),
 });
 
 const getArrowheadOptions = (flip: boolean) => {

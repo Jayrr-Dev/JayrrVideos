@@ -8,8 +8,8 @@ import {
   TEXT_ALIGN,
   VERTICAL_ALIGN,
   getFontString,
-  isProdEnv,
   invariant,
+  isProdEnv,
 } from "@excalidraw/common";
 
 import { pointFrom, pointRotateRads, type Radians } from "@excalidraw/math";
@@ -27,8 +27,8 @@ import { updateStickyNoteLayout } from "./stickyNote";
 import { measureText } from "./textMeasurements";
 import { wrapText } from "./textWrapping";
 import {
-  isBoundToContainer,
   isArrowElement,
+  isBoundToContainer,
   isStickyNoteElement,
   isTextElement,
 } from "./typeChecks";
@@ -121,6 +121,7 @@ export const redrawTextBoundingBox = (
       const nextHeight = computeContainerDimensionForBoundText(
         metrics.height,
         container.type,
+        getContainerInnerPadding(container),
       );
       scene.mutateElement(container, { height: nextHeight });
       updateOriginalContainerCache(container.id, nextHeight);
@@ -130,6 +131,7 @@ export const redrawTextBoundingBox = (
       const nextWidth = computeContainerDimensionForBoundText(
         metrics.width,
         container.type,
+        getContainerInnerPadding(container),
       );
       scene.mutateElement(container, { width: nextWidth });
     }
@@ -208,6 +210,7 @@ export const handleBindTextResize = (
       containerHeight = computeContainerDimensionForBoundText(
         nextHeight,
         container.type,
+        getContainerInnerPadding(container),
       );
 
       // Crossing the opposite edge swaps the anchor for text-driven growth.
@@ -393,10 +396,18 @@ export const getContainerCenter = (
   return { x: center[0], y: center[1] };
 };
 
+export const getContainerInnerPadding = (container: ExcalidrawElement) => {
+  if (isStickyNoteElement(container)) {
+    return STICKY_NOTE_PADDING;
+  }
+  if (typeof container.innerPadding === "number") {
+    return container.innerPadding;
+  }
+  return BOUND_TEXT_PADDING;
+};
+
 export const getContainerCoords = (container: ExcalidrawElement) => {
-  const padding = isStickyNoteElement(container)
-    ? STICKY_NOTE_PADDING
-    : BOUND_TEXT_PADDING;
+  const padding = getContainerInnerPadding(container);
   let offsetX = padding;
   let offsetY = padding;
 
@@ -489,23 +500,29 @@ export const isValidTextContainer = (element: {
 }): element is ExcalidrawTextContainer =>
   VALID_CONTAINER_TYPES.has(element.type);
 
+export const canChangeInnerPadding = (element: ExcalidrawElement) =>
+  isValidTextContainer(element) &&
+  !isArrowElement(element) &&
+  !isStickyNoteElement(element);
+
 export const computeContainerDimensionForBoundText = (
   dimension: number,
   containerType: ExtractSetType<typeof VALID_CONTAINER_TYPES>,
+  padding: number = BOUND_TEXT_PADDING,
 ) => {
   dimension = Math.ceil(dimension);
-  const padding = BOUND_TEXT_PADDING * 2;
+  const pad = padding * 2;
 
   if (containerType === "ellipse") {
-    return Math.round(((dimension + padding) / Math.sqrt(2)) * 2);
+    return Math.round(((dimension + pad) / Math.sqrt(2)) * 2);
   }
   if (containerType === "arrow") {
-    return dimension + padding * 8;
+    return dimension + pad * 8;
   }
   if (containerType === "diamond") {
-    return 2 * (dimension + padding);
+    return 2 * (dimension + pad);
   }
-  return dimension + padding;
+  return dimension + pad;
 };
 
 export const getBoundTextMaxWidth = (
@@ -513,6 +530,7 @@ export const getBoundTextMaxWidth = (
   boundTextElement: ExcalidrawTextElement | null,
 ) => {
   const { width } = container;
+  const padding = getContainerInnerPadding(container);
   if (isArrowElement(container)) {
     const minWidth =
       (boundTextElement?.fontSize ?? DEFAULT_FONT_SIZE) *
@@ -523,20 +541,14 @@ export const getBoundTextMaxWidth = (
     // The width of the largest rectangle inscribed inside an ellipse is
     // Math.round((ellipse.width / 2) * Math.sqrt(2)) which is derived from
     // equation of an ellipse -https://github.com/excalidraw/excalidraw/pull/6172
-    return Math.round((width / 2) * Math.sqrt(2)) - BOUND_TEXT_PADDING * 2;
+    return Math.round((width / 2) * Math.sqrt(2)) - padding * 2;
   }
   if (container.type === "diamond") {
     // The width of the largest rectangle inscribed inside a rhombus is
     // Math.round(width / 2) - https://github.com/excalidraw/excalidraw/pull/6265
-    return Math.round(width / 2) - BOUND_TEXT_PADDING * 2;
+    return Math.round(width / 2) - padding * 2;
   }
-  return (
-    width -
-    (isStickyNoteElement(container)
-      ? STICKY_NOTE_PADDING
-      : BOUND_TEXT_PADDING) *
-      2
-  );
+  return width - padding * 2;
 };
 
 export const getBoundTextMaxHeight = (
@@ -544,6 +556,7 @@ export const getBoundTextMaxHeight = (
   boundTextElement: ExcalidrawTextElementWithContainer,
 ) => {
   const { height } = container;
+  const padding = getContainerInnerPadding(container);
   if (isStickyNoteElement(container)) {
     // the label body ends above the creation-date footer
     return Math.max(0, height - STICKY_NOTE_BODY_INSET_Y);
@@ -559,14 +572,14 @@ export const getBoundTextMaxHeight = (
     // The height of the largest rectangle inscribed inside an ellipse is
     // Math.round((ellipse.height / 2) * Math.sqrt(2)) which is derived from
     // equation of an ellipse - https://github.com/excalidraw/excalidraw/pull/6172
-    return Math.round((height / 2) * Math.sqrt(2)) - BOUND_TEXT_PADDING * 2;
+    return Math.round((height / 2) * Math.sqrt(2)) - padding * 2;
   }
   if (container.type === "diamond") {
     // The height of the largest rectangle inscribed inside a rhombus is
     // Math.round(height / 2) - https://github.com/excalidraw/excalidraw/pull/6265
-    return Math.round(height / 2) - BOUND_TEXT_PADDING * 2;
+    return Math.round(height / 2) - padding * 2;
   }
-  return height - BOUND_TEXT_PADDING * 2;
+  return height - padding * 2;
 };
 
 /** retrieves text from text elements and concatenates to a single string */

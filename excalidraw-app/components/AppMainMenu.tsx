@@ -2,23 +2,30 @@ import {
   eyeIcon,
   LinkIcon,
   presentationIcon,
+  SceneIcon,
 } from "@excalidraw/excalidraw/components/icons";
 import { MainMenu, useExcalidrawAPI } from "@excalidraw/excalidraw/index";
 import React, { useState } from "react";
 
-import { isDevEnv } from "@excalidraw/common";
+import {
+  DEFAULT_SIDEBAR,
+  isDevEnv,
+  SCENE_SIDEBAR_TAB,
+} from "@excalidraw/common";
 
 import type { Theme } from "@excalidraw/element/types";
 
-import { JAYRR_PRESENT_SIDEBAR } from "../present/buildPresentDeck";
-import { LanguageList } from "../app-language/LanguageList";
 import { useAtomValue } from "../app-jotai";
+import { LanguageList } from "../app-language/LanguageList";
+import { isConvexLinked } from "../convexClient";
 import {
   connectGoogleDrive,
   disconnectGoogleDrive,
   googleDriveConnectedAtom,
   isGoogleDriveConfigured,
 } from "../data/connectGoogleDrive";
+import { saveCanvasAsScene } from "../data/jayrrScenes";
+import { JAYRR_PRESENT_SIDEBAR } from "../present/buildPresentDeck";
 
 import { saveDebugState } from "./DebugCanvas";
 
@@ -33,6 +40,12 @@ export const AppMainMenu: React.FC<{
   const driveConnected = useAtomValue(googleDriveConnectedAtom);
   const [driveBusy, setDriveBusy] = useState(false);
   const excalidrawAPI = useExcalidrawAPI();
+  let driveLabel = "Connect Google Drive";
+  if (driveBusy) {
+    driveLabel = "Google Drive…";
+  } else if (driveConnected) {
+    driveLabel = "Disconnect Google Drive";
+  }
 
   const onDriveSelect = async () => {
     if (driveBusy) {
@@ -74,6 +87,41 @@ export const AppMainMenu: React.FC<{
   return (
     <MainMenu>
       <MainMenu.DefaultItems.LoadScene />
+      <MainMenu.Item
+        icon={SceneIcon}
+        onSelect={() => {
+          if (!excalidrawAPI) {
+            return;
+          }
+          if (!isConvexLinked) {
+            props.onToast("Add VITE_CONVEX_URL, then restart the app.");
+            return;
+          }
+          const name = window.prompt("Scene name", "Scene");
+          if (!name) {
+            return;
+          }
+          void saveCanvasAsScene(excalidrawAPI, name)
+            .then(() => {
+              props.onToast(`Saved "${name.trim()}" as a scene`);
+              excalidrawAPI.updateScene({
+                appState: {
+                  openSidebar: {
+                    name: DEFAULT_SIDEBAR.name,
+                    tab: SCENE_SIDEBAR_TAB,
+                  },
+                },
+              });
+            })
+            .catch((error: unknown) => {
+              props.onToast(
+                error instanceof Error ? error.message : "Could not save scene",
+              );
+            });
+        }}
+      >
+        Save as Scene
+      </MainMenu.Item>
       <MainMenu.DefaultItems.SaveToActiveFile />
       <MainMenu.DefaultItems.Export />
       <MainMenu.DefaultItems.SaveAsImage />
@@ -97,15 +145,9 @@ export const AppMainMenu: React.FC<{
         onSelect={() => {
           void onDriveSelect();
         }}
-        aria-label={
-          driveConnected ? "Disconnect Google Drive" : "Connect Google Drive"
-        }
+        aria-label={driveLabel}
       >
-        {driveBusy
-          ? "Google Drive…"
-          : driveConnected
-          ? "Disconnect Google Drive"
-          : "Connect Google Drive"}
+        {driveLabel}
       </MainMenu.Item>
       <MainMenu.DefaultItems.Socials />
       {isDevEnv() && (

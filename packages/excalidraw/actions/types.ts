@@ -5,14 +5,14 @@ import type {
 
 import type { CaptureUpdateActionType } from "@excalidraw/element";
 
+import type React from "react";
 import type {
   AppClassProperties,
   AppState,
-  ExcalidrawProps,
   BinaryFiles,
+  ExcalidrawProps,
   UIAppState,
 } from "../types";
-import type React from "react";
 
 export type ActionSource =
   | "ui"
@@ -105,6 +105,7 @@ export type ActionName =
   | "goToCollaborator"
   | "addToLibrary"
   | "changeRoundness"
+  | "changeInnerPadding"
   | "alignTop"
   | "alignBottom"
   | "alignLeft"

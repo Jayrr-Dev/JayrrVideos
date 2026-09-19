@@ -5,8 +5,8 @@ import {
   getFontString,
 } from "@excalidraw/common";
 
-import type { ExcalidrawProps } from "@excalidraw/excalidraw/types";
 import type { MarkRequired } from "@excalidraw/common/utility-types";
+import type { ExcalidrawProps } from "@excalidraw/excalidraw/types";
 
 import { newTextElement } from "./newElement";
 import { wrapText } from "./textWrapping";
@@ -147,6 +147,14 @@ const ALLOWED_DOMAINS = new Set([
   "giphy.com",
   "reddit.com",
   "forms.microsoft.com",
+  "loom.com",
+  "tiktok.com",
+  "dailymotion.com",
+  "dai.ly",
+  "twitch.tv",
+  "player.twitch.tv",
+  "clips.twitch.tv",
+  "open.spotify.com",
 ]);
 
 const ALLOW_SAME_ORIGIN = new Set([
@@ -162,7 +170,66 @@ const ALLOW_SAME_ORIGIN = new Set([
   "stackblitz.com",
   "reddit.com",
   "forms.microsoft.com",
+  "loom.com",
+  "tiktok.com",
+  "dailymotion.com",
+  "dai.ly",
+  "twitch.tv",
+  "player.twitch.tv",
+  "clips.twitch.tv",
+  "open.spotify.com",
 ]);
+
+const WEBSITE_EMBED_SIZE = { w: 960, h: 600 };
+const VIDEO_EMBED_SIZE = { w: 560, h: 315 };
+
+const RE_LOOM =
+  /^https?:\/\/(?:www\.)?loom\.com\/(?:share|embed)\/([a-zA-Z0-9]+)/;
+const RE_TIKTOK = /^https?:\/\/(?:www\.)?tiktok\.com\/@[^/]+\/video\/(\d+)/;
+const RE_DAILYMOTION =
+  /^https?:\/\/(?:www\.)?(?:dai\.ly\/|dailymotion\.com\/(?:video|embed\/video)\/)([a-zA-Z0-9]+)/;
+const RE_TWITCH_VIDEO = /^https?:\/\/(?:www\.)?twitch\.tv\/videos\/(\d+)/;
+const RE_TWITCH_CLIP =
+  /^https?:\/\/(?:clips\.twitch\.tv\/|(?:www\.)?twitch\.tv\/[^/]+\/clip\/)([a-zA-Z0-9_-]+)/;
+const RE_TWITCH_CHANNEL =
+  /^https?:\/\/(?:www\.)?twitch\.tv\/([a-zA-Z0-9_]{1,25})\/?(?:\?.*)?$/;
+const RE_SPOTIFY =
+  /^https?:\/\/open\.spotify\.com\/(?:embed\/)?(track|album|playlist|episode|show|artist)\/([a-zA-Z0-9]+)/;
+const RE_DIRECT_MEDIA = /^https?:\/\/\S+\.(?:mp4|webm|ogg)(?:\?.*)?$/i;
+
+const embedParentHostname = (): string => {
+  if (typeof window === "undefined") {
+    return "localhost";
+  }
+  return window.location.hostname;
+};
+
+const isSameAppOrigin = (url: string): boolean => {
+  if (typeof window === "undefined") {
+    return false;
+  }
+  try {
+    return new URL(url).origin === window.location.origin;
+  } catch {
+    return false;
+  }
+};
+
+const videoEmbed = (
+  originalLink: string,
+  embedLink: string,
+  size: { w: number; h: number },
+  allowSameOrigin: boolean,
+): IframeDataWithSandbox => {
+  const data: IframeDataWithSandbox = {
+    link: embedLink,
+    intrinsicSize: size,
+    type: "video",
+    sandbox: { allowSameOrigin },
+  };
+  embeddedLinkCache.set(originalLink, data);
+  return data;
+};
 
 export const createSrcDoc = (body: string) => {
   return `<html><body>${body}</body></html>`;
@@ -385,18 +452,105 @@ export const getEmbedLink = (
     return ret;
   }
 
-  embeddedLinkCache.set(link, {
+  const loomId = originalLink.match(RE_LOOM)?.[1];
+  if (loomId) {
+    return videoEmbed(
+      originalLink,
+      `https://www.loom.com/embed/${loomId}`,
+      VIDEO_EMBED_SIZE,
+      allowSameOrigin,
+    );
+  }
+
+  const tiktokId = originalLink.match(RE_TIKTOK)?.[1];
+  if (tiktokId) {
+    return videoEmbed(
+      originalLink,
+      `https://www.tiktok.com/embed/v2/${tiktokId}`,
+      { w: 325, h: 575 },
+      allowSameOrigin,
+    );
+  }
+
+  const dailymotionId = originalLink.match(RE_DAILYMOTION)?.[1];
+  if (dailymotionId) {
+    return videoEmbed(
+      originalLink,
+      `https://www.dailymotion.com/embed/video/${dailymotionId}`,
+      VIDEO_EMBED_SIZE,
+      allowSameOrigin,
+    );
+  }
+
+  const twitchVideoId = originalLink.match(RE_TWITCH_VIDEO)?.[1];
+  if (twitchVideoId) {
+    return videoEmbed(
+      originalLink,
+      `https://player.twitch.tv/?video=${twitchVideoId}&parent=${encodeURIComponent(
+        embedParentHostname(),
+      )}&autoplay=false`,
+      VIDEO_EMBED_SIZE,
+      allowSameOrigin,
+    );
+  }
+
+  const twitchClipId = originalLink.match(RE_TWITCH_CLIP)?.[1];
+  if (twitchClipId) {
+    return videoEmbed(
+      originalLink,
+      `https://clips.twitch.tv/embed?clip=${twitchClipId}&parent=${encodeURIComponent(
+        embedParentHostname(),
+      )}&autoplay=false`,
+      VIDEO_EMBED_SIZE,
+      allowSameOrigin,
+    );
+  }
+
+  const twitchChannel = originalLink.match(RE_TWITCH_CHANNEL)?.[1];
+  const twitchChannelBlocked =
+    twitchChannel === "videos" || twitchChannel === "directory";
+  if (twitchChannel && !twitchChannelBlocked) {
+    return videoEmbed(
+      originalLink,
+      `https://player.twitch.tv/?channel=${twitchChannel}&parent=${encodeURIComponent(
+        embedParentHostname(),
+      )}&autoplay=false`,
+      VIDEO_EMBED_SIZE,
+      allowSameOrigin,
+    );
+  }
+
+  const spotify = originalLink.match(RE_SPOTIFY);
+  if (spotify?.[1] && spotify[2]) {
+    const data: IframeDataWithSandbox = {
+      link: `https://open.spotify.com/embed/${spotify[1]}/${spotify[2]}`,
+      intrinsicSize: { w: 560, h: 352 },
+      type: "generic",
+      sandbox: { allowSameOrigin },
+    };
+    embeddedLinkCache.set(originalLink, data);
+    return data;
+  }
+
+  if (RE_DIRECT_MEDIA.test(originalLink)) {
+    return videoEmbed(originalLink, originalLink, VIDEO_EMBED_SIZE, false);
+  }
+
+  const knownHost = !!matchHostname(originalLink, ALLOWED_DOMAINS);
+  const size = knownHost ? aspectRatio : WEBSITE_EMBED_SIZE;
+  // Cross-origin pages need their own origin to run. Same-origin +
+  // allow-same-origin would drop the sandbox, so never grant it here.
+  const sameOrigin = knownHost
+    ? allowSameOrigin
+    : !isSameAppOrigin(originalLink);
+  const data: IframeDataWithSandbox = {
     link,
-    intrinsicSize: aspectRatio,
+    intrinsicSize: size,
     type,
-    sandbox: { allowSameOrigin },
-  });
-  return {
-    link,
-    intrinsicSize: aspectRatio,
-    type,
-    sandbox: { allowSameOrigin },
+    sandbox: { allowSameOrigin: sameOrigin },
   };
+  embeddedLinkCache.set(originalLink, data);
+  return data;
 };
 
 export const createPlaceholderEmbeddableLabel = (

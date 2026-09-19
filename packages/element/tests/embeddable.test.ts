@@ -230,4 +230,35 @@ describe("Google Drive video embedding", () => {
       ),
     ).toBe(true);
   });
+
+  it("embeds an arbitrary https page", () => {
+    const result = getEmbedLink("https://example.com/docs");
+    expect(result?.type).toBe("generic");
+    if (result?.type === "generic") {
+      expect(result.link).toBe("https://example.com/docs");
+    }
+    expect(result?.intrinsicSize).toEqual({ w: 960, h: 600 });
+    expect(result?.sandbox?.allowSameOrigin).toBe(true);
+  });
+
+  it("rewrites a loom share link to the player", () => {
+    const result = getEmbedLink(
+      "https://www.loom.com/share/abc123def456abc123def456",
+    );
+    expect(result?.type).toBe("video");
+    if (result?.type === "video") {
+      expect(result.link).toBe(
+        "https://www.loom.com/embed/abc123def456abc123def456",
+      );
+    }
+  });
+
+  it("embeds a direct mp4 as video", () => {
+    const url = "https://cdn.example.com/clip.mp4";
+    const result = getEmbedLink(url);
+    expect(result?.type).toBe("video");
+    if (result?.type === "video") {
+      expect(result.link).toBe(url);
+    }
+  });
 });

@@ -1,9 +1,22 @@
 import {
-  Excalidraw,
-  TTDDialogTrigger,
+  APP_NAME,
+  EVENT,
+  VERSION_TIMEOUT,
+  debounce,
+  getFrame,
+  getVersion,
+  isDevEnv,
+  isRunningInIframe,
+  isTestEnv,
+  preventUnload,
+  resolvablePromise,
+} from "@excalidraw/common";
+import {
   CaptureUpdateAction,
-  reconcileElements,
+  Excalidraw,
   ExcalidrawAPIProvider,
+  TTDDialogTrigger,
+  reconcileElements,
   useExcalidrawAPI,
 } from "@excalidraw/excalidraw";
 import { trackEvent } from "@excalidraw/excalidraw/analytics";
@@ -17,64 +30,52 @@ import { OverwriteConfirmDialog } from "@excalidraw/excalidraw/components/Overwr
 import { openConfirmModal } from "@excalidraw/excalidraw/components/OverwriteConfirm/OverwriteConfirmState";
 import { ShareableLinkDialog } from "@excalidraw/excalidraw/components/ShareableLinkDialog";
 import Trans from "@excalidraw/excalidraw/components/Trans";
-import {
-  APP_NAME,
-  EVENT,
-  VERSION_TIMEOUT,
-  debounce,
-  getVersion,
-  getFrame,
-  isTestEnv,
-  preventUnload,
-  resolvablePromise,
-  isRunningInIframe,
-  isDevEnv,
-} from "@excalidraw/common";
-import polyfill from "@excalidraw/excalidraw/polyfill";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { loadFromBlob } from "@excalidraw/excalidraw/data/blob";
 import { t } from "@excalidraw/excalidraw/i18n";
+import polyfill from "@excalidraw/excalidraw/polyfill";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import {
+  isElementLink,
+  isInitializedImageElement,
+  newElementWith,
+} from "@excalidraw/element";
 import { GithubIcon, usersIcon } from "@excalidraw/excalidraw/components/icons";
-import { isElementLink } from "@excalidraw/element";
+import {
+  parseLibraryTokensFromUrl,
+  useHandleLibrary,
+} from "@excalidraw/excalidraw/data/library";
 import {
   bumpElementVersions,
   restoreAppState,
   restoreElements,
 } from "@excalidraw/excalidraw/data/restore";
-import { newElementWith } from "@excalidraw/element";
-import { isInitializedImageElement } from "@excalidraw/element";
 import clsx from "clsx";
-import {
-  parseLibraryTokensFromUrl,
-  useHandleLibrary,
-} from "@excalidraw/excalidraw/data/library";
 
-import type { RemoteExcalidrawElement } from "@excalidraw/excalidraw/data/reconcile";
-import type { RestoredDataState } from "@excalidraw/excalidraw/data/restore";
+import type { ResolutionType } from "@excalidraw/common/utility-types";
+import type { ResolvablePromise } from "@excalidraw/common/utils";
 import type {
   FileId,
   NonDeletedExcalidrawElement,
   OrderedExcalidrawElement,
 } from "@excalidraw/element/types";
+import type { RemoteExcalidrawElement } from "@excalidraw/excalidraw/data/reconcile";
+import type { RestoredDataState } from "@excalidraw/excalidraw/data/restore";
 import type {
   AppState,
-  ExcalidrawImperativeAPI,
   BinaryFiles,
+  ExcalidrawImperativeAPI,
   ExcalidrawInitialDataState,
-  UIAppState,
   ExcalidrawProps,
+  UIAppState,
 } from "@excalidraw/excalidraw/types";
-import type { ResolutionType } from "@excalidraw/common/utility-types";
-import type { ResolvablePromise } from "@excalidraw/common/utils";
 
-import CustomStats from "./CustomStats";
 import {
   Provider,
+  appJotaiStore,
   useAtom,
   useAtomValue,
   useAtomWithInitialValue,
-  appJotaiStore,
 } from "./app-jotai";
 import {
   FIREBASE_STORAGE_PREFIXES,
@@ -93,7 +94,9 @@ import { AppFooter } from "./components/AppFooter";
 import { AppMainMenu } from "./components/AppMainMenu";
 import { AppWelcomeScreen } from "./components/AppWelcomeScreen";
 import { JayrrLibraryMenu } from "./components/JayrrLibraryMenu";
+import { JayrrSceneMenu } from "./components/JayrrSceneMenu";
 import { TopErrorBoundary } from "./components/TopErrorBoundary";
+import CustomStats from "./CustomStats";
 import { JayrrPresentHost } from "./present/JayrrPresentHost";
 
 import {
@@ -110,7 +113,21 @@ import {
   importUsernameFromLocalStorage,
 } from "./data/localStorage";
 
+import { getPreferredLanguage } from "./app-language/language-detector";
+import { useAppLangCode } from "./app-language/language-state";
+import { AIComponents } from "./components/AI";
+import DebugCanvas, {
+  debugRenderer,
+  isVisualDebuggerEnabled,
+  loadSavedDebugState,
+} from "./components/DebugCanvas";
+import { googleDriveConnectedAtom } from "./data/connectGoogleDrive";
+import {
+  embedFrameStatusAtom,
+  resolveProxiedEmbedSrc,
+} from "./data/embedProxy";
 import { loadFilesFromFirebase } from "./data/firebase";
+import { addSelectionToOpenLibrary } from "./data/jayrrLibraries";
 import {
   LibraryIndexedDBAdapter,
   LibraryLocalStorageMigrationAdapter,
@@ -118,22 +135,12 @@ import {
   localStorageQuotaExceededAtom,
 } from "./data/LocalData";
 import { isBrowserStorageStateNewer } from "./data/tabSync";
-import { googleDriveConnectedAtom } from "./data/connectGoogleDrive";
-import { addSelectionToOpenLibrary } from "./data/jayrrLibraries";
+import { useSimulatedCollaborators } from "./debugCollaborators";
 import { ShareDialog, shareDialogStateAtom } from "./share/ShareDialog";
 import { useHandleAppTheme } from "./useHandleAppTheme";
-import { getPreferredLanguage } from "./app-language/language-detector";
-import { useAppLangCode } from "./app-language/language-state";
-import DebugCanvas, {
-  debugRenderer,
-  isVisualDebuggerEnabled,
-  loadSavedDebugState,
-} from "./components/DebugCanvas";
-import { useSimulatedCollaborators } from "./debugCollaborators";
-import { AIComponents } from "./components/AI";
 
-import "./index.scss";
 import { AppSidebar } from "./components/AppSidebar";
+import "./index.scss";
 
 import type { CollabAPI } from "./collab/Collab";
 
@@ -172,6 +179,25 @@ window.addEventListener(
     pwaEvent = event;
   },
 );
+
+const EMBED_PROTOCOLS = new Set(["http:", "https:"]);
+
+/** Any http(s) link except this app. Paste turns it into an embed. */
+const canEmbedPastedLink = (link: string): boolean => {
+  let url: URL;
+  try {
+    url = new URL(link);
+  } catch {
+    return false;
+  }
+  if (!EMBED_PROTOCOLS.has(url.protocol)) {
+    return false;
+  }
+  if (url.origin === window.location.origin) {
+    return false;
+  }
+  return true;
+};
 
 let isSelfEmbedding = false;
 
@@ -362,6 +388,7 @@ const ExcalidrawWrapper = () => {
   const excalidrawAPI = useExcalidrawAPI();
 
   const [errorMessage, setErrorMessage] = useState("");
+  const [presenting, setPresenting] = useState(false);
   const isCollabDisabled = isRunningInIframe();
 
   const { editorTheme, appTheme, setAppTheme } = useHandleAppTheme();
@@ -808,6 +835,34 @@ const ExcalidrawWrapper = () => {
 
   const localStorageQuotaExceeded = useAtomValue(localStorageQuotaExceededAtom);
   const googleDriveConnected = useAtomValue(googleDriveConnectedAtom);
+  const embedFrameStatuses = useAtomValue(embedFrameStatusAtom);
+
+  // Sites that send X-Frame-Options / frame-ancestors get served through the
+  // Convex /embed-proxy route instead of the default iframe.
+  const renderEmbeddable = useCallback<
+    Required<ExcalidrawProps>["renderEmbeddable"]
+  >(
+    (element) => {
+      const src = resolveProxiedEmbedSrc(element.link, embedFrameStatuses);
+      if (!src) {
+        return null;
+      }
+      return (
+        <iframe
+          className="excalidraw__embeddable"
+          data-element-id={element.id}
+          src={src}
+          referrerPolicy="no-referrer-when-downgrade"
+          title="Excalidraw Embedded Content"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowFullScreen={true}
+          // proxied pages are served script-free, so no allow-scripts
+          sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
+        />
+      );
+    },
+    [embedFrameStatuses],
+  );
 
   const imageOptions = useMemo(() => {
     if (!googleDriveConnected) {
@@ -899,9 +954,12 @@ const ExcalidrawWrapper = () => {
       style={{ height: "100%" }}
       className={clsx("excalidraw-app", {
         "is-collaborating": isCollaborating,
+        "is-presenting": presenting,
       })}
     >
       <Excalidraw
+        validateEmbeddable={canEmbedPastedLink}
+        renderEmbeddable={renderEmbeddable}
         viewportStatusFrame={viewportStatusFrame}
         userToFollow={userToFollow}
         onChange={onChange}
@@ -909,6 +967,7 @@ const ExcalidrawWrapper = () => {
         initialData={initialStatePromiseRef.current.promise}
         isCollaborating={isCollaborating}
         onPointerUpdate={collabAPI?.onPointerUpdate}
+        ui={presenting ? false : undefined}
         UIOptions={{
           canvasActions: {
             toggleTheme: true,
@@ -926,6 +985,7 @@ const ExcalidrawWrapper = () => {
         onThemeChange={setAppTheme}
         imageOptions={imageOptions}
         renderLibraryMenu={() => <JayrrLibraryMenu />}
+        renderSceneMenu={() => <JayrrSceneMenu />}
         onAddToLibrary={addSelectionToOpenLibrary}
         renderTopRightUI={() => null}
         onLinkOpen={(element, event) => {
@@ -939,29 +999,36 @@ const ExcalidrawWrapper = () => {
           }
         }}
       >
-        <AppMainMenu
-          onCollabDialogOpen={onCollabDialogOpen}
-          isCollaborating={isCollaborating}
-          isCollabEnabled={!isCollabDisabled}
-          theme={appTheme}
-          refresh={() => forceRefresh((prev) => !prev)}
-          onToast={(message) =>
-            excalidrawAPI?.setToast({ message, closable: true })
-          }
-        />
-        <AppWelcomeScreen
-          onCollabDialogOpen={onCollabDialogOpen}
-          isCollabEnabled={!isCollabDisabled}
-        />
+        {!presenting && (
+          <AppMainMenu
+            onCollabDialogOpen={onCollabDialogOpen}
+            isCollaborating={isCollaborating}
+            isCollabEnabled={!isCollabDisabled}
+            theme={appTheme}
+            refresh={() => forceRefresh((prev) => !prev)}
+            onToast={(message) =>
+              excalidrawAPI?.setToast({ message, closable: true })
+            }
+          />
+        )}
+        {!presenting && (
+          <AppWelcomeScreen
+            onCollabDialogOpen={onCollabDialogOpen}
+            isCollabEnabled={!isCollabDisabled}
+          />
+        )}
         <OverwriteConfirmDialog>
           <OverwriteConfirmDialog.Actions.ExportToImage />
           <OverwriteConfirmDialog.Actions.SaveToDisk />
         </OverwriteConfirmDialog>
         <AppFooter onChange={() => excalidrawAPI?.refresh()} />
-        <JayrrPresentHost />
+        <JayrrPresentHost
+          key="jayrr-present-host"
+          onPresentingChange={setPresenting}
+        />
         {excalidrawAPI && <AIComponents excalidrawAPI={excalidrawAPI} />}
 
-        <TTDDialogTrigger />
+        {!presenting && <TTDDialogTrigger />}
         {isCollaborating && isOffline && (
           <div className="alertalert--warning">
             {t("alerts.collabOfflineWarning")}

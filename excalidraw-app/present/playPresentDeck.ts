@@ -1,13 +1,26 @@
-import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
+import { isEmbeddableElement, isFrameLikeElement } from "@excalidraw/element";
+
 import type { NonDeletedExcalidrawElement } from "@excalidraw/element/types";
 import type { ElementRenderOverrides } from "@excalidraw/excalidraw";
+import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 
 import {
-  boundIdsForElement,
+  idsForPresentObject,
+  JAYRR_PRESENT_EDGE_PAD,
+  JAYRR_PRESENT_FOCUS_PAD,
+  JAYRR_PRESENT_NAME_PAD,
   JAYRR_PRESENT_REVEAL_MS,
   JAYRR_PRESENT_SLIDE_Y,
+  JAYRR_PRESENT_ZOOM_MS,
   type PresentDeck,
+  type PresentEffect,
 } from "./buildPresentDeck";
+import {
+  pauseOtherPresentMedia,
+  pausePresentMedia,
+  playPresentMedia,
+  resetPresentMediaVisibility,
+} from "./playPresentMedia";
 
 type OverrideValues = {
   opacity: number;
@@ -64,12 +77,8 @@ const targetForDeck = (
   for (const frame of deck.frames) {
     for (const object of frame.objects) {
       const shown = revealed.has(object.id);
-      const element = elements.find((item) => item.id === object.id);
-      if (!element) {
-        continue;
-      }
       const pose = shown ? SHOWN : HIDDEN;
-      for (const id of boundIdsForElement(element, elements)) {
+      for (const id of idsForPresentObject(object, elements)) {
         values.set(id, pose);
       }
     }
@@ -77,9 +86,83 @@ const targetForDeck = (
   return values;
 };
 
+const frameRect = (element: NonDeletedExcalidrawElement) => ({
+  x: element.x,
+  y: element.y,
+  width: element.width,
+  height: element.height,
+});
+
+/**
+ * Slide camera is the destination frame's own rectangle — never a union of
+ * children, never a stale element object. Focus/Zoom is the only exception,
+ * and only while staying inside the same frame.
+ */
+const cameraForStep = (
+  deck: PresentDeck,
+  stepIndex: number,
+  elements: readonly NonDeletedExcalidrawElement[],
+  crossedFrame: boolean,
+): {
+  target:
+    | { x: number; y: number; width: number; height: number }
+    | readonly NonDeletedExcalidrawElement[];
+  effect: PresentEffect | null;
+} | null => {
+  const step = deck.steps[stepIndex];
+  if (!step) {
+    return null;
+  }
+  const frameEl = elements.find(
+    (element) => element.id === step.frameId && isFrameLikeElement(element),
+  );
+  const frame = deck.frames.find((item) => item.id === step.frameId);
+
+  if (!crossedFrame && step.type === "reveal") {
+    const object = frame?.objects.find((item) => item.id === step.elementId);
+    if (object?.effect === "focus" || object?.effect === "zoom") {
+      const ids = new Set(idsForPresentObject(object, elements));
+      const focused = elements.filter((element) => ids.has(element.id));
+      if (focused.length > 0) {
+        return { target: focused, effect: object.effect };
+      }
+    }
+  }
+  if (!frameEl) {
+    return null;
+  }
+  return {
+    target: frameRect(frameEl),
+    effect: crossedFrame ? "zoom" : (frame?.effect ?? null),
+  };
+};
+
+const embedIdsForObject = (
+  deck: PresentDeck,
+  objectId: string,
+  frameId: string,
+  elements: readonly NonDeletedExcalidrawElement[],
+): Set<string> => {
+  const ids = new Set<string>();
+  const frame = deck.frames.find((item) => item.id === frameId);
+  const object = frame?.objects.find((item) => item.id === objectId);
+  if (!object) {
+    return ids;
+  }
+  const byId = new Set(idsForPresentObject(object, elements));
+  for (const element of elements) {
+    if (byId.has(element.id) && isEmbeddableElement(element)) {
+      ids.add(element.id);
+    }
+  }
+  return ids;
+};
+
 export class PresentPlayer {
   private raf = 0;
   private current = new Map<string, OverrideValues>();
+  private playing = new Set<string>();
+  private lastStep: number | null = null;
 
   stop(api: ExcalidrawImperativeAPI | null) {
     if (this.raf) {
@@ -87,6 +170,12 @@ export class PresentPlayer {
       this.raf = 0;
     }
     this.current = new Map();
+    if (this.playing.size > 0) {
+      pausePresentMedia(this.playing);
+      this.playing = new Set();
+    }
+    this.lastStep = null;
+    resetPresentMediaVisibility();
     api?.setElementRenderOverrides(null);
   }
 
@@ -97,18 +186,49 @@ export class PresentPlayer {
     elements: readonly NonDeletedExcalidrawElement[];
     animate: boolean;
   }) {
-    const { api, deck, stepIndex, elements, animate } = opts;
-    const target = targetForDeck(deck, stepIndex, elements);
+    const { api, deck, stepIndex, animate } = opts;
+    const fromIndex = this.lastStep;
+    const liveElements = api.getSceneElements();
+    const target = targetForDeck(deck, stepIndex, liveElements);
+    try {
+      this.syncMedia(deck, stepIndex, liveElements);
+    } catch {
+      // Embed pause/play must not block the reveal.
+    }
+    const fromStep = fromIndex === null ? null : deck.steps[fromIndex];
     const step = deck.steps[stepIndex];
-    if (step) {
-      const frame = elements.find((element) => element.id === step.frameId);
-      if (frame) {
-        api.setViewport({
-          target: frame,
-          fit: "contain",
-          animation: true,
-        });
-      }
+    const crossedFrame = Boolean(
+      fromStep && step && fromStep.frameId !== step.frameId,
+    );
+    const camera = cameraForStep(deck, stepIndex, liveElements, crossedFrame);
+    if (camera) {
+      const focused = camera.effect === "focus" || camera.effect === "zoom";
+      const pad = focused ? JAYRR_PRESENT_FOCUS_PAD : JAYRR_PRESENT_EDGE_PAD;
+      // Frame changes must land now. An in-flight zoom (or a thrown prime)
+      // was leaving Back on the previous slide.
+      const shouldSnap = !animate || crossedFrame;
+      api.setViewport({
+        target: camera.target,
+        fit: camera.effect === "focus" ? "none" : "contain",
+        animation: shouldSnap
+          ? false
+          : camera.effect === "zoom"
+            ? { duration: JAYRR_PRESENT_ZOOM_MS }
+            : true,
+        offsets: focused
+          ? {
+              top: pad,
+              bottom: pad,
+              left: pad,
+              right: pad,
+            }
+          : {
+              top: JAYRR_PRESENT_NAME_PAD,
+              bottom: pad,
+              left: pad,
+              right: pad,
+            },
+      });
     }
 
     if (!animate || this.current.size === 0) {
@@ -120,6 +240,7 @@ export class PresentPlayer {
     const from = new Map(this.current);
     const ids = new Set([...from.keys(), ...target.keys()]);
     const start = performance.now();
+
     if (this.raf) {
       cancelAnimationFrame(this.raf);
     }
@@ -152,5 +273,28 @@ export class PresentPlayer {
     };
 
     this.raf = requestAnimationFrame(tick);
+  }
+
+  private syncMedia(
+    deck: PresentDeck,
+    stepIndex: number,
+    elements: readonly NonDeletedExcalidrawElement[],
+  ) {
+    const step = deck.steps[stepIndex];
+    const nextPlaying =
+      step?.type === "reveal"
+        ? embedIdsForObject(deck, step.elementId, step.frameId, elements)
+        : new Set<string>();
+    const sameStep =
+      this.lastStep === stepIndex &&
+      this.playing.size === nextPlaying.size &&
+      [...nextPlaying].every((id) => this.playing.has(id));
+    if (sameStep) {
+      return;
+    }
+    pauseOtherPresentMedia(nextPlaying);
+    this.playing = nextPlaying;
+    this.lastStep = stepIndex;
+    playPresentMedia(nextPlaying);
   }
 }

@@ -1,15 +1,17 @@
 import { isTransparent } from "@excalidraw/common";
 
 import {
-  shouldAllowVerticalAlign,
-  suppportsHorizontalAlign,
+  canChangeInnerPadding,
   getColorTargetElement,
+  getContainerElement,
   hasBoundTextElement,
+  hasStrokeColor,
   isElbowArrow,
   isImageElement,
   isLinearElement,
   isTextElement,
-  hasStrokeColor,
+  shouldAllowVerticalAlign,
+  suppportsHorizontalAlign,
   toolIsArrow,
 } from "@excalidraw/element";
 
@@ -144,6 +146,15 @@ export const getShapeActionPredicates = (
     strokeStyle: forToolOrSelection(hasStrokeStyle),
     sloppiness: forToolOrSelection(hasRoughness),
     roundness: forToolOrSelection(canChangeRoundness),
+    innerPadding:
+      targetElements.some((element) => canChangeInnerPadding(element)) ||
+      targetElements.some((element) => {
+        if (!isTextElement(element)) {
+          return false;
+        }
+        const container = getContainerElement(element, elementsMap);
+        return container ? canChangeInnerPadding(container) : false;
+      }),
     arrowType: forToolOrSelection(toolIsArrow),
     arrowheads: forToolOrSelection(canHaveArrowheads),
 

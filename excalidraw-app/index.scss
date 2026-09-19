@@ -86,6 +86,32 @@
   }
 }
 
+html.jayrr-presenting {
+  .excalidraw-ui-top-left,
+  .App-menu_top,
+  .layer-ui__wrapper__footer,
+  .disable-zen-mode,
+  .default-sidebar-trigger,
+  .scroll-back-to-content,
+  .jayrr-present-hud {
+    display: none !important;
+  }
+
+  iframe.excalidraw__embeddable {
+    pointer-events: none !important;
+  }
+
+  .jayrr-present-trap {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    outline: none;
+    cursor: default;
+    background: transparent;
+    pointer-events: auto;
+  }
+}
+
 .plus-banner {
   display: flex;
   justify-content: center;

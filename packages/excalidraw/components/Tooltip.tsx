@@ -64,6 +64,7 @@ const updateTooltip = (
   tooltip: HTMLDivElement,
   label: string,
   long: boolean,
+  position: "bottom" | "top",
 ) => {
   tooltip.classList.add("excalidraw-tooltip--visible");
   tooltip.style.minWidth = long ? "50ch" : "10ch";
@@ -72,7 +73,7 @@ const updateTooltip = (
   tooltip.textContent = label;
 
   const itemRect = item.getBoundingClientRect();
-  updateTooltipPosition(tooltip, itemRect);
+  updateTooltipPosition(tooltip, itemRect, position);
 };
 
 type TooltipProps = {
@@ -81,6 +82,7 @@ type TooltipProps = {
   long?: boolean;
   style?: React.CSSProperties;
   disabled?: boolean;
+  position?: "bottom" | "top";
 };
 
 export const Tooltip = ({
@@ -89,6 +91,7 @@ export const Tooltip = ({
   long = false,
   style,
   disabled,
+  position = "bottom",
 }: TooltipProps) => {
   useEffect(() => {
     return () =>
@@ -106,6 +109,7 @@ export const Tooltip = ({
           getTooltipDiv(),
           label,
           long,
+          position,
         )
       }
       onPointerLeave={() =>

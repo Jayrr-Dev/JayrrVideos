@@ -1,297 +1,298 @@
 import clsx from "clsx";
 import throttle from "lodash.throttle";
+import { nanoid } from "nanoid";
 import React, { useContext } from "react";
 import { flushSync } from "react-dom";
 import rough from "roughjs/bin/rough";
-import { nanoid } from "nanoid";
 
 import {
   clamp,
-  pointFrom,
   pointDistance,
-  vector,
+  pointFrom,
   pointRotateRads,
-  vectorFromPoint,
-  vectorSubtract,
+  vector,
   vectorDot,
+  vectorFromPoint,
   vectorNormalize,
+  vectorSubtract,
 } from "@excalidraw/math";
 
 import {
-  COLOR_PALETTE,
-  CODES,
-  shouldResizeFromCenter,
-  shouldMaintainAspectRatio,
-  shouldRotateWithDiscreteAngle,
-  isArrowKey,
-  KEYS,
+  addEventListener,
   APP_NAME,
+  AppEventBus,
+  applyDarkModeFilter,
+  arrayToMap,
+  ARROW_TYPE,
+  BIND_MODE_TIMEOUT,
+  CLASSES,
+  CODES,
+  COLOR_PALETTE,
+  createUserAgentDescriptor,
   CURSOR_TYPE,
+  debounce,
+  DEFAULT_COLLISION_THRESHOLD,
+  DEFAULT_REDUCED_GLOBAL_ALPHA,
+  DEFAULT_STICKY_NOTE_SIZE,
   DEFAULT_STROKE_STREAMLINE,
   DEFAULT_STROKE_STREAMLINE_PRECISE,
+  DEFAULT_TEXT_ALIGN,
   DEFAULT_TRANSFORM_HANDLE_SPACING,
   DEFAULT_VERTICAL_ALIGN,
+  deriveStylesPanelMode,
+  distance,
+  DOUBLE_TAP_POSITION_THRESHOLD,
   DRAGGING_THRESHOLD,
+  type EditorInterface,
   ELEMENT_SHIFT_TRANSLATE_AMOUNT,
   ELEMENT_TRANSLATE_AMOUNT,
+  Emitter,
   EVENT,
+  type EXPORT_IMAGE_TYPES,
   FRAME_STYLE,
+  getDateTime,
+  getFeatureFlag,
+  getFontString,
+  getFormFactor,
+  getGridPoint,
+  getLineHeight,
+  getNearestScrollableContainer,
+  getStrokeWidthByKey,
   IMAGE_MIME_TYPES,
   IMAGE_RENDER_TIMEOUT,
+  invariant,
+  isArrowKey,
+  isBrave,
+  isDevEnv,
+  isInputLike,
+  isIOS,
+  isLocalLink,
+  isSafari,
+  isSelectionLikeTool,
+  isShallowEqual,
+  isTestEnv,
+  isToolIcon,
+  isTransparent,
+  isWritableElement,
+  KEYS,
   LINE_CONFIRM_THRESHOLD,
+  loadDesktopUIModePreference,
   MIME_TYPES,
+  MINIMUM_ARROW_SIZE,
   MQ_RIGHT_SIDEBAR_MIN_WIDTH,
+  muteFSAbortError,
+  normalizeEOL,
+  normalizeLink,
+  oneOf,
   POINTER_BUTTON,
+  POINTER_EVENTS,
+  randomInteger,
   ROUNDNESS,
+  sceneCoordsToViewportCoords,
   SCROLL_TIMEOUT,
+  setDesktopUIMode,
+  shouldMaintainAspectRatio,
+  shouldResizeFromCenter,
+  shouldRotateWithDiscreteAngle,
+  type StylesPanelMode,
   TAP_TWICE_TIMEOUT,
   TEXT_TO_CENTER_SNAP_THRESHOLD,
   THEME,
-  TOUCH_CTX_MENU_TIMEOUT,
-  VERTICAL_ALIGN,
-  YOUTUBE_STATES,
-  POINTER_EVENTS,
   TOOL_TYPE,
-  DEFAULT_COLLISION_THRESHOLD,
-  DEFAULT_TEXT_ALIGN,
-  ARROW_TYPE,
-  DEFAULT_REDUCED_GLOBAL_ALPHA,
-  DEFAULT_STICKY_NOTE_SIZE,
-  isLocalLink,
-  normalizeLink,
+  TOUCH_CTX_MENU_TIMEOUT,
   toValidURL,
-  getGridPoint,
-  getLineHeight,
-  debounce,
-  distance,
-  getFontString,
-  getNearestScrollableContainer,
-  isInputLike,
-  isToolIcon,
-  isWritableElement,
-  sceneCoordsToViewportCoords,
   tupleToCoors,
+  updateActiveTool,
+  updateObject,
+  updateStable,
+  VERTICAL_ALIGN,
   viewportCoordsToSceneCoords,
   wrapEvent,
-  updateObject,
-  updateActiveTool,
-  isTransparent,
-  muteFSAbortError,
-  isTestEnv,
-  isDevEnv,
-  updateStable,
-  addEventListener,
-  normalizeEOL,
-  getDateTime,
-  isShallowEqual,
-  arrayToMap,
-  applyDarkModeFilter,
-  AppEventBus,
-  type EXPORT_IMAGE_TYPES,
-  randomInteger,
-  CLASSES,
-  Emitter,
-  MINIMUM_ARROW_SIZE,
-  DOUBLE_TAP_POSITION_THRESHOLD,
-  BIND_MODE_TIMEOUT,
-  invariant,
-  getFeatureFlag,
-  createUserAgentDescriptor,
-  getFormFactor,
-  deriveStylesPanelMode,
-  isIOS,
-  isBrave,
-  isSafari,
-  type EditorInterface,
-  type StylesPanelMode,
-  loadDesktopUIModePreference,
-  setDesktopUIMode,
-  isSelectionLikeTool,
-  oneOf,
-  getStrokeWidthByKey,
+  YOUTUBE_STATES,
 } from "@excalidraw/common";
 
 import {
-  getObservedAppState,
-  getCommonBounds,
-  getElementAbsoluteCoords,
-  bindOrUnbindBindingElements,
-  fixBindingsAfterDeletion,
-  getHoveredElementForBinding,
-  isBindingEnabled,
-  updateBoundElements,
-  LinearElementEditor,
-  newElementWith,
-  newFrameElement,
-  newFreeDrawElement,
-  newEmbeddableElement,
-  newMagicFrameElement,
-  newStickyNoteElement,
-  newIframeElement,
-  newArrowElement,
-  newElement,
-  newImageElement,
-  newLinearElement,
-  newTextElement,
-  refreshTextDimensions,
-  deepCopyElement,
-  duplicateElements,
-  hasBoundTextElement,
-  isArrowElement,
-  isBindingElement,
-  isBindingElementType,
-  isBoundToContainer,
-  isFrameLikeElement,
-  isImageElement,
-  isEmbeddableElement,
-  isInitializedImageElement,
-  isLinearElement,
-  isLinearElementType,
-  isUsingAdaptiveRadius,
-  isIframeElement,
-  isIframeLikeElement,
-  isMagicFrameElement,
-  isTextBindableContainer,
-  isElbowArrow,
-  isBindableElement,
-  isTextElement,
-  isStickyNoteElement,
-  getNormalizedDimensions,
-  isElementCompletelyInViewport,
-  isElementInViewport,
-  isInvisiblySmallElement,
-  getCornerRadius,
-  isPathALoop,
-  createSrcDoc,
-  embeddableURLValidator,
-  maybeParseEmbedSrc,
-  getEmbedLink,
-  getInitializedImageElements,
-  normalizeSVG,
   updateImageCache as _updateImageCache,
-  getBoundTextElement,
-  getContainerCenter,
-  getContainerElement,
-  getColorUpdate,
-  getStickyNoteLayout,
-  getStickyNoteMinSize,
-  isValidTextContainer,
-  redrawTextBoundingBox,
-  hasBoundingBox,
-  getCommonFrameId,
-  getFrameChildren,
-  getFrameChildrenInsertionIndex,
-  isCursorInFrame,
   addElementsToFrame,
-  replaceAllElementsInFrame,
-  removeElementsFromFrame,
-  getElementsInResizingFrame,
-  getElementsInNewFrame,
-  getContainingFrame,
-  elementOverlapsWithFrame,
-  updateFrameMembershipOfSelectedElements,
-  isElementInFrame,
-  getFrameLikeTitle,
-  getElementsOverlappingFrame,
-  filterElementsEligibleAsFrameChildren,
-  hitElementBoundText,
-  hitElementBoundingBoxOnly,
-  hitElementItself,
-  getVisibleSceneBounds,
+  type ApplyToOptions,
+  bindOrUnbindBindingElement,
+  bindOrUnbindBindingElements,
+  calculateFixedPointForNonElbowArrowBinding,
+  CaptureUpdateAction,
+  convertToExcalidrawElements,
+  createSrcDoc,
   cropElement,
-  wrapText,
-  isElementLink,
-  isMeasureTextSupported,
-  normalizeText,
-  measureText,
-  getLineHeightInPx,
-  getApproxMinLineWidth,
-  getApproxMinLineHeight,
-  getMinTextElementWidth,
-  ShapeCache,
-  resolveElementRenderState,
-  getRenderElementWithPositionOverride,
-  editGroupForSelectedElement,
-  getElementsInGroup,
-  getSelectedGroupIdForElement,
-  getSelectedGroupIds,
-  isElementInGroup,
-  isSelectedViaGroup,
-  selectGroupsForSelectedElements,
-  syncInvalidIndices,
-  syncMovedIndices,
-  excludeElementsInFramesFromSelection,
-  getSelectionStateForElements,
-  makeNextSelectedElementIds,
-  getResizeOffsetXY,
-  getResizeArrowDirection,
-  transformElements,
-  getCursorForResizingElement,
-  getElementWithTransformHandleType,
-  getTransformHandleTypeFromCoords,
+  deepCopyElement,
+  DEFAULT_BOUND_TEXT_LABEL_POSITION,
+  doBoundsIntersect,
   dragNewElement,
   dragSelectedElements,
-  getDragOffsetXY,
-  Scene,
-  Store,
-  CaptureUpdateAction,
+  duplicateElements,
+  editGroupForSelectedElement,
+  elementOverlapsWithFrame,
   type ElementUpdate,
-  hitElementBoundingBox,
-  isLineElement,
-  isSimpleArrow,
-  StoreDelta,
-  type ApplyToOptions,
-  positionElementsOnGrid,
-  calculateFixedPointForNonElbowArrowBinding,
-  bindOrUnbindBindingElement,
-  mutateElement,
-  getElementBounds,
-  doBoundsIntersect,
-  isPointInElement,
-  maxBindingDistance_simple,
-  convertToExcalidrawElements,
+  embeddableURLValidator,
   type ExcalidrawElementSkeleton,
+  excludeElementsInFramesFromSelection,
+  filterElementsEligibleAsFrameChildren,
+  fixBindingsAfterDeletion,
+  getActiveTextElement,
+  getApproxMinLineHeight,
+  getApproxMinLineWidth,
+  getBindingStrategyForDraggingBindingElementEndpoints,
+  getBoundTextElement,
+  getColorUpdate,
+  getCommonBounds,
+  getCommonFrameId,
+  getContainerCenter,
+  getContainerElement,
+  getContainingFrame,
+  getCornerRadius,
+  getCursorForResizingElement,
+  getDragOffsetXY,
+  getElementAbsoluteCoords,
+  getElementBounds,
+  getElementsInGroup,
+  getElementsInNewFrame,
+  getElementsInResizingFrame,
+  getElementsOverlappingFrame,
+  getElementWithTransformHandleType,
+  getEmbedLink,
+  getFrameChildren,
+  getFrameChildrenInsertionIndex,
+  getFrameLikeTitle,
+  getHoveredElementForBinding,
+  getInitializedImageElements,
+  getLineHeightInPx,
+  getMinTextElementWidth,
+  getNormalizedDimensions,
+  getObservedAppState,
+  getRenderElementWithPositionOverride,
+  getResizeArrowDirection,
+  getResizeOffsetXY,
+  getSelectedGroupIdForElement,
+  getSelectedGroupIds,
+  getSelectionStateForElements,
   getSnapOutlineMidPoint,
+  getStickyNoteLayout,
+  getStickyNoteMinSize,
+  getTransformHandleTypeFromCoords,
+  getUncroppedWidthAndHeight,
+  getVisibleSceneBounds,
   handleFocusPointDrag,
   handleFocusPointHover,
   handleFocusPointPointerDown,
   handleFocusPointPointerUp,
-  maybeHandleArrowPointlikeDrag,
-  getUncroppedWidthAndHeight,
-  getActiveTextElement,
+  hasBoundingBox,
+  hasBoundTextElement,
+  hitElementBoundingBox,
+  hitElementBoundingBoxOnly,
+  hitElementBoundText,
+  hitElementItself,
+  isArrowElement,
+  isBindableElement,
+  isBindingElement,
+  isBindingElementType,
+  isBindingEnabled,
+  isBoundToContainer,
+  isCursorInFrame,
+  isElbowArrow,
+  isElementCompletelyInViewport,
+  isElementInFrame,
+  isElementInGroup,
+  isElementInViewport,
+  isElementLink,
   isEligibleFrameChildType,
-  getBindingStrategyForDraggingBindingElementEndpoints,
+  isEmbeddableElement,
+  isFrameLikeElement,
+  isIframeElement,
+  isIframeLikeElement,
+  isImageElement,
+  isInitializedImageElement,
+  isInvisiblySmallElement,
+  isLinearElement,
+  isLinearElementType,
+  isLineElement,
+  isMagicFrameElement,
+  isMeasureTextSupported,
   isNonDeletedElement,
-  DEFAULT_BOUND_TEXT_LABEL_POSITION,
+  isPathALoop,
+  isPointInElement,
+  isSelectedViaGroup,
+  isSimpleArrow,
+  isStickyNoteElement,
+  isTextBindableContainer,
+  isTextElement,
+  isUsingAdaptiveRadius,
+  isValidTextContainer,
+  LinearElementEditor,
+  makeNextSelectedElementIds,
+  maxBindingDistance_simple,
+  maybeHandleArrowPointlikeDrag,
+  maybeParseEmbedSrc,
+  measureText,
+  mutateElement,
+  newArrowElement,
+  newElement,
+  newElementWith,
+  newEmbeddableElement,
+  newFrameElement,
+  newFreeDrawElement,
+  newIframeElement,
+  newImageElement,
+  newLinearElement,
+  newMagicFrameElement,
+  newStickyNoteElement,
+  newTextElement,
+  normalizeSVG,
+  normalizeText,
+  positionElementsOnGrid,
+  primeElementCanvasCache,
+  redrawTextBoundingBox,
+  refreshTextDimensions,
+  removeElementsFromFrame,
+  replaceAllElementsInFrame,
+  resolveElementRenderState,
+  Scene,
+  selectGroupsForSelectedElements,
+  ShapeCache,
+  Store,
+  StoreDelta,
+  syncInvalidIndices,
+  syncMovedIndices,
+  transformElements,
+  updateBoundElements,
+  updateFrameMembershipOfSelectedElements,
+  wrapText,
 } from "@excalidraw/element";
 
 import type { GlobalPoint, LocalPoint, Radians } from "@excalidraw/math";
 
 import type {
+  ExcalidrawArrowElement,
+  ExcalidrawBindableElement,
+  ExcalidrawElbowArrowElement,
   ExcalidrawElement,
+  ExcalidrawEmbeddableElement,
+  ExcalidrawFrameLikeElement,
   ExcalidrawFreeDrawElement,
   ExcalidrawGenericElement,
-  ExcalidrawLinearElement,
-  ExcalidrawTextElement,
-  NonDeleted,
-  InitializedExcalidrawImageElement,
-  ExcalidrawImageElement,
-  FileId,
-  NonDeletedExcalidrawElement,
-  ExcalidrawTextContainer,
-  ExcalidrawFrameLikeElement,
-  ExcalidrawMagicFrameElement,
-  ExcalidrawIframeLikeElement,
-  IframeData,
   ExcalidrawIframeElement,
-  ExcalidrawEmbeddableElement,
-  Ordered,
+  ExcalidrawIframeLikeElement,
+  ExcalidrawImageElement,
+  ExcalidrawLinearElement,
+  ExcalidrawMagicFrameElement,
+  ExcalidrawTextContainer,
+  ExcalidrawTextElement,
+  FileId,
+  IframeData,
+  InitializedExcalidrawImageElement,
   MagicGenerationData,
-  ExcalidrawArrowElement,
-  ExcalidrawElbowArrowElement,
-  SceneElementsMap,
+  NonDeleted,
+  NonDeletedExcalidrawElement,
   NonDeletedSceneElementsMap,
-  ExcalidrawBindableElement,
+  Ordered,
+  SceneElementsMap,
 } from "@excalidraw/element/types";
 
 import type {
@@ -303,12 +304,12 @@ import type { Mutable, ValueOf } from "@excalidraw/common/utility-types";
 
 import {
   actionAddToLibrary,
+  actionBindText,
   actionBringForward,
   actionBringToFront,
   actionCopy,
   actionCopyAsPng,
   actionCopyAsSvg,
-  copyText,
   actionCopyStyles,
   actionCut,
   actionDeleteSelected,
@@ -317,23 +318,23 @@ import {
   actionFlipHorizontal,
   actionFlipVertical,
   actionGroup,
+  actionLink,
   actionPasteStyles,
   actionSelectAll,
   actionSendBackward,
   actionSendToBack,
+  actionToggleArrowBinding,
+  actionToggleCropEditor,
+  actionToggleElementLock,
   actionToggleGridMode,
+  actionToggleLinearEditor,
+  actionToggleMidpointSnapping,
+  actionToggleObjectsSnapMode,
   actionToggleStats,
   actionToggleZenMode,
   actionUnbindText,
-  actionBindText,
   actionUngroup,
-  actionLink,
-  actionToggleElementLock,
-  actionToggleLinearEditor,
-  actionToggleObjectsSnapMode,
-  actionToggleArrowBinding,
-  actionToggleMidpointSnapping,
-  actionToggleCropEditor,
+  copyText,
 } from "../actions";
 import { actionWrapTextInContainer } from "../actions/actionBoundText";
 import { actionPaste } from "../actions/actionClipboard";
@@ -367,21 +368,13 @@ import { exportCanvas, loadFromBlob } from "../data";
 import Library, { distributeLibraryItemsOnSquareGrid } from "../data/library";
 import { restoreAppState, restoreElements } from "../data/restore";
 import { getCenter, getDistance } from "../gesture";
+import { History } from "../history";
+import { defaultLang, getLanguage, languages, setLanguage, t } from "../i18n";
 import {
   copyElementRenderOverrides,
   getElementRenderOffsets,
 } from "../renderOverrides";
-import { History } from "../history";
-import { defaultLang, getLanguage, languages, setLanguage, t } from "../i18n";
 
-import {
-  getScrollToContentState,
-  getElementsWithinSelection,
-  getNormalizedZoom,
-  getSelectedElements,
-  hasBackground,
-  isSomeElementSelected,
-} from "../scene";
 import {
   dataURLToString,
   generateIdFromFile,
@@ -396,45 +389,53 @@ import {
   resizeImageFile,
   SVGStringToFile,
 } from "../data/blob";
-
-import { fileOpen } from "../data/filesystem";
 import {
-  showHyperlinkTooltip,
+  getElementsWithinSelection,
+  getNormalizedZoom,
+  getScrollToContentState,
+  getSelectedElements,
+  hasBackground,
+  isSomeElementSelected,
+} from "../scene";
+
+import {
   hideHyperlinkToolip,
   Hyperlink,
+  showHyperlinkTooltip,
 } from "../components/hyperlink/Hyperlink";
+import { fileOpen } from "../data/filesystem";
 
-import { Fonts } from "../fonts";
+import { tryParseSpreadsheet } from "../charts";
+import { ElementCanvasButtons } from "../components/ElementCanvasButtons";
 import { editorJotaiStore, type WritableAtom } from "../editor-jotai";
+import { EraserTrail } from "../eraser";
 import { ImageSceneDataError } from "../errors";
+import { Fonts } from "../fonts";
+import { LaserTrails } from "../laserTrails";
+import { LassoTrail } from "../lasso";
+import { isMaybeMermaidDefinition } from "../mermaid";
+import { withBatchedUpdates, withBatchedUpdatesThrottled } from "../reactUtils";
+import { Renderer } from "../scene/Renderer";
+import { isOverScrollBars } from "../scene/scrollbars";
+import { getShortcutKey } from "../shortcut";
 import {
+  getReferenceSnapPoints,
   getSnapLinesAtPointer,
-  snapDraggedElements,
+  getVisibleGaps,
   isActiveToolNonLinearSnappable,
+  isGridModeEnabled,
+  isSnappingEnabled,
+  SnapCache,
+  snapDraggedElements,
   snapNewElement,
   snapResizingElements,
-  isSnappingEnabled,
-  getVisibleGaps,
-  getReferenceSnapPoints,
-  SnapCache,
-  isGridModeEnabled,
 } from "../snapping";
-import { Renderer } from "../scene/Renderer";
-import {
-  type SetViewportOptions,
-  getViewportForZoomWithScrollConstraints,
-} from "../viewport";
-import { ElementCanvasButtons } from "../components/ElementCanvasButtons";
-import { LaserTrails } from "../laserTrails";
-import { withBatchedUpdates, withBatchedUpdatesThrottled } from "../reactUtils";
 import { isPointHittingTextAutoResizeHandle } from "../textAutoResizeHandle";
+import {
+  getViewportForZoomWithScrollConstraints,
+  type SetViewportOptions,
+} from "../viewport";
 import { textWysiwyg } from "../wysiwyg/textWysiwyg";
-import { isOverScrollBars } from "../scene/scrollbars";
-import { isMaybeMermaidDefinition } from "../mermaid";
-import { LassoTrail } from "../lasso";
-import { EraserTrail } from "../eraser";
-import { getShortcutKey } from "../shortcut";
-import { tryParseSpreadsheet } from "../charts";
 
 import {
   getColorTargetAppStateUpdates,
@@ -442,37 +443,37 @@ import {
 } from "../actions/colorTargets";
 
 import ConvertElementTypePopup, {
-  getConversionTypeFromElements,
   convertElementTypePopupAtom,
   convertElementTypes,
+  getConversionTypeFromElements,
 } from "./ConvertElementTypePopup";
 
 import { activeConfirmDialogAtom } from "./ActiveConfirmDialog";
 import { AppArrowText } from "./App.arrowText";
 import { AppBucketFill } from "./App.bucketFill";
-import { AppToolDrag, TOOL_DRAG_PREVIEW_OPACITY } from "./App.toolDrag";
 import { AppCursor } from "./App.cursor";
 import { AppDrawShape } from "./App.drawshape";
 import { AppFlowchart } from "./App.flowchart";
 import { AppPan } from "./App.pan";
+import { AppToolDrag, TOOL_DRAG_PREVIEW_OPACITY } from "./App.toolDrag";
 import { AppViewport, RIGHT_SIDEBAR_WIDTH } from "./App.viewport";
 import { AppWheel } from "./App.wheel";
+import { AppStateObserver, type OnStateChange } from "./AppStateObserver";
 import BraveMeasureTextError from "./BraveMeasureTextError";
-import { ContextMenu, CONTEXT_MENU_SEPARATOR } from "./ContextMenu";
+import { CONTEXT_MENU_SEPARATOR, ContextMenu } from "./ContextMenu";
+import { CursorHint, CursorHints } from "./CursorHint";
 import { activeEyeDropperAtom } from "./EyeDropper";
-import { ViewportStatusBorder } from "./ViewportStatusFrame/ViewportStatusFrame";
 import LayerUI from "./LayerUI";
 import { ElementCanvasButton } from "./MagicButton";
 import { SVGLayer } from "./SVGLayer";
-import Spinner from "./Spinner";
 import { searchItemInFocusAtom } from "./SearchMenu";
 import { isSidebarDockedAtom } from "./Sidebar/Sidebar";
-import { StaticCanvas, InteractiveCanvas } from "./canvases";
+import Spinner from "./Spinner";
+import { ViewportStatusBorder } from "./ViewportStatusFrame/ViewportStatusFrame";
+import { InteractiveCanvas, StaticCanvas } from "./canvases";
 import NewElementCanvas from "./canvases/NewElementCanvas";
 import { isPointHittingLink } from "./hyperlink/helpers";
-import { CursorHint, CursorHints } from "./CursorHint";
-import { MagicIcon, copyIcon, fullscreenIcon } from "./icons";
-import { AppStateObserver, type OnStateChange } from "./AppStateObserver";
+import { copyIcon, fullscreenIcon, MagicIcon } from "./icons";
 
 import { findShapeByKey, TOGGLE_TOOLS } from "./Tools";
 
@@ -489,37 +490,37 @@ import type { ClipboardData, PastedMixedContent } from "../clipboard";
 import type { ExportedElements } from "../data";
 import type { ContextMenuItems } from "./ContextMenu";
 
+import type { RoughCanvas } from "roughjs/bin/canvas";
+import type { Action, ActionResult } from "../actions/types";
 import type {
   AppClassProperties,
   AppProps,
   AppState,
+  BinaryFileData,
+  BinaryFiles,
+  CollaboratorPointer,
   ElementRenderOffsets,
   ElementRenderOverrides,
-  BinaryFileData,
+  ElementsPendingErasure,
+  EmbedsValidationStatus,
   ExcalidrawImperativeAPI,
-  BinaryFiles,
+  ExcalidrawImperativeAPIEventMap,
+  FrameNameBoundsCache,
+  GenerateDiagramToCode,
   Gesture,
   GestureEvent,
+  KeyboardModifiersObject,
   LibraryItems,
+  NullableGridSize,
+  OnUserFollowedPayload,
   PointerDownState,
   SceneData,
-  FrameNameBoundsCache,
   SidebarName,
   SidebarTabName,
-  KeyboardModifiersObject,
-  CollaboratorPointer,
   ToolType,
-  OnUserFollowedPayload,
-  UnsubscribeCallback,
-  EmbedsValidationStatus,
-  ElementsPendingErasure,
-  ExcalidrawImperativeAPIEventMap,
-  GenerateDiagramToCode,
-  NullableGridSize,
   UIConfig,
+  UnsubscribeCallback,
 } from "../types";
-import type { RoughCanvas } from "roughjs/bin/canvas";
-import type { Action, ActionResult } from "../actions/types";
 
 const AppContext = React.createContext<AppClassProperties>(null!);
 const AppPropsContext = React.createContext<AppProps>(null!);
@@ -806,6 +807,27 @@ class App extends React.Component<AppProps, AppState> {
   private getRenderOverrideConfig = () => ({
     elementRenderOverrides: this.elementRenderOverrides,
   });
+
+  /** Build sharp element bitmaps at `zoom` before a zoom-in viewport move. */
+  public primeVisibleElementCanvasCache = (zoom: AppState["zoom"]) => {
+    primeElementCanvasCache({
+      elements: this.visibleElements,
+      elementsMap: this.scene.getNonDeletedElementsMap(),
+      renderConfig: {
+        imageCache: this.imageCache,
+        isExporting: false,
+        renderGrid: false,
+        canvasBackgroundColor: this.state.viewBackgroundColor,
+        embedsValidationStatus: this.embedsValidationStatus,
+        elementsPendingErasure: this.elementsPendingErasure,
+        pendingFlowchartNodes: this.flowchart.pendingNodes,
+        theme: this.state.theme,
+        ...this.getRenderOverrideConfig(),
+      },
+      appState: this.state,
+      zoom,
+    });
+  };
 
   private getElementRenderState = (
     element: ExcalidrawElement,
@@ -1685,9 +1707,12 @@ class App extends React.Component<AppProps, AppState> {
     //    without the delay youtube will immediately open the video
     //    in fullscreen mode
     setTimeout(() => {
+      const presenting =
+        typeof document !== "undefined" &&
+        document.documentElement.classList.contains("jayrr-presenting");
       this.setState({
         activeEmbeddable: { element: iframeLikeElement, state: "active" },
-        selectedElementIds: { [iframeLikeElement.id]: true },
+        selectedElementIds: presenting ? {} : { [iframeLikeElement.id]: true },
         newElement: null,
         selectionElement: null,
       });
@@ -2086,6 +2111,7 @@ class App extends React.Component<AppProps, AppState> {
                       <iframe
                         ref={(ref) => this.cacheEmbeddableRef(el, ref)}
                         className="excalidraw__embeddable"
+                        data-element-id={el.id}
                         srcDoc={
                           src?.type === "document"
                             ? src.srcdoc(this.state.theme)
@@ -2095,7 +2121,7 @@ class App extends React.Component<AppProps, AppState> {
                           src?.type !== "document" ? src?.link ?? "" : undefined
                         }
                         // https://stackoverflow.com/q/18470015
-                        scrolling="no"
+                        scrolling={src?.type === "video" ? "no" : "auto"}
                         referrerPolicy="no-referrer-when-downgrade"
                         title="Excalidraw Embedded Content"
                         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"

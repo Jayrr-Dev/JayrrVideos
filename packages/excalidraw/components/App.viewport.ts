@@ -26,9 +26,9 @@ import { AnimationController } from "../renderer/animation";
 import {
   constrainScrollState,
   DEFAULT_OVERSCROLL,
+  zoomToFitBounds,
   type SetViewportOptions,
   type SetViewportRect,
-  zoomToFitBounds,
 } from "../viewport";
 
 import type {
@@ -688,6 +688,12 @@ export class AppViewport {
         shouldCacheIgnoreZoom: false,
       });
       return;
+    }
+
+    // Zoom-in would otherwise upscale the current (softer) cache on the first
+    // animation frame. Prime at the destination zoom so frames downscale.
+    if (viewportUpdate.zoom.value > from.zoom.value) {
+      this.app.primeVisibleElementCanvasCache(viewportUpdate.zoom);
     }
 
     const transition = {

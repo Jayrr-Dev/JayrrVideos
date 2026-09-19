@@ -1,4 +1,5 @@
 import clsx from "clsx";
+import { useEffect } from "react";
 
 import {
   CANVAS_SEARCH_TAB,
@@ -33,12 +34,14 @@ const DefaultSidebarTrigger = withInternalFallback(
       React.HTMLAttributes<HTMLDivElement>,
   ) => {
     const { DefaultSidebarTriggerTunnel } = useTunnels();
+    const appState = useUIAppState();
     return (
       <DefaultSidebarTriggerTunnel.In>
         <Sidebar.Trigger
           {...props}
           className="default-sidebar-trigger"
           name={DEFAULT_SIDEBAR.name}
+          tab={appState.defaultSidebarTabPreference || props.tab}
         />
       </DefaultSidebarTriggerTunnel.In>
     );
@@ -79,6 +82,25 @@ export const DefaultSidebar = Object.assign(
       const { DefaultSidebarTabTriggersTunnel } = useTunnels();
 
       const isForceDocked = appState.openSidebar?.tab === CANVAS_SEARCH_TAB;
+      const openTab = appState.openSidebar?.tab;
+
+      useEffect(() => {
+        if (appState.openSidebar?.name !== DEFAULT_SIDEBAR.name) {
+          return;
+        }
+        if (!openTab || openTab === CANVAS_SEARCH_TAB) {
+          return;
+        }
+        if (openTab === appState.defaultSidebarTabPreference) {
+          return;
+        }
+        setAppState({ defaultSidebarTabPreference: openTab });
+      }, [
+        appState.openSidebar?.name,
+        openTab,
+        appState.defaultSidebarTabPreference,
+        setAppState,
+      ]);
 
       return (
         <Sidebar

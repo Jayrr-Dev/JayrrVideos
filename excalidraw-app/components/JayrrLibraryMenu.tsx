@@ -15,8 +15,9 @@ import {
   useExcalidrawAPI,
   useExcalidrawStateValue,
 } from "@excalidraw/excalidraw";
+import DropdownMenu from "@excalidraw/excalidraw/components/dropdownMenu/DropdownMenu";
 import {
-  LoadIcon,
+  DotsHorizontalIcon,
   PlusIcon,
   TrashIcon,
   chevronLeftIcon,
@@ -29,11 +30,14 @@ import type { NonDeletedExcalidrawElement } from "@excalidraw/element/types";
 import { useAtom } from "../app-jotai";
 import { STORAGE_KEYS } from "../app_constants";
 import { api, isConvexLinked } from "../convexClient";
-import { getOwnerKey } from "../data/ownerKey";
 import {
   openLibraryIdAtom,
   serializeFilesForElements,
 } from "../data/jayrrLibraries";
+import { getOwnerKey } from "../data/ownerKey";
+
+import "../../packages/excalidraw/components/LibraryMenuItems.scss";
+import "../../packages/excalidraw/components/LibraryUnit.scss";
 
 import "./JayrrLibraryMenu.scss";
 
@@ -116,6 +120,7 @@ export const JayrrLibraryMenu = () => {
 const JayrrLibraryMenuConnected = () => {
   const excalidrawAPI = useExcalidrawAPI();
   const [openLibraryId, setOpenLibraryId] = useAtom(openLibraryIdAtom);
+  const [openMenuId, setOpenMenuId] = useState<Id<"libraries"> | null>(null);
   const [renamingId, setRenamingId] = useState<Id<"libraries"> | null>(null);
   const [draftName, setDraftName] = useState("");
   const renameInputRef = useRef<HTMLInputElement>(null);
@@ -322,19 +327,6 @@ const JayrrLibraryMenuConnected = () => {
         </div>
 
         <div className="jayrr-library__body">
-          {pendingElements.length > 0 && (
-            <button
-              type="button"
-              className="jayrr-library__pending"
-              onClick={() => {
-                void onAddPending();
-              }}
-            >
-              <span className="library-unit__adder">{PlusIcon}</span>
-              Add selection to this library
-            </button>
-          )}
-
           {assets === undefined && (
             <div className="library-menu-items__no-items__hint">
               Loading assets…
@@ -352,9 +344,18 @@ const JayrrLibraryMenuConnected = () => {
             </div>
           )}
 
-          {assets && assets.length > 0 && (
+          {(pendingElements.length > 0 || (assets && assets.length > 0)) && (
             <div className="library-menu-items-container__grid">
-              {assets.map((asset) => (
+              {pendingElements.length > 0 && (
+                <PendingLibraryUnit
+                  elements={pendingElements}
+                  files={excalidrawAPI?.getFiles() ?? {}}
+                  onAdd={() => {
+                    void onAddPending();
+                  }}
+                />
+              )}
+              {assets?.map((asset) => (
                 <AssetThumb
                   key={asset._id}
                   elementsJson={asset.elementsJson}
@@ -397,78 +398,91 @@ const JayrrLibraryMenuConnected = () => {
             </Button>
           </div>
         )}
-        <ul className="jayrr-library__list">
-          {libraries.map((library) => (
-            <li key={library._id} className="jayrr-library__row">
-              {renamingId === library._id ? (
-                <input
-                  ref={renameInputRef}
-                  className="jayrr-library__rename-input"
-                  value={draftName}
-                  onChange={(event) => setDraftName(event.target.value)}
-                  onBlur={() => {
-                    void commitRename();
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.currentTarget.blur();
-                    }
-                    if (event.key === "Escape") {
-                      setRenamingId(null);
-                    }
-                  }}
-                />
-              ) : (
+        {libraries.length > 0 && (
+          <ul className="jayrr-scene-grid">
+            {libraries.map((library) => (
+              <li key={library._id} className="jayrr-scene-card">
+                {renamingId === library._id ? (
+                  <input
+                    ref={renameInputRef}
+                    className="jayrr-scene-card__name-input"
+                    value={draftName}
+                    onChange={(event) => setDraftName(event.target.value)}
+                    onBlur={() => {
+                      void commitRename();
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        void commitRename();
+                      }
+                      if (event.key === "Escape") {
+                        setRenamingId(null);
+                      }
+                    }}
+                  />
+                ) : (
+                  <span className="jayrr-scene-card__name">{library.name}</span>
+                )}
                 <button
                   type="button"
-                  className="jayrr-library__folder"
+                  className="jayrr-scene-card__preview"
+                  aria-label={`Open ${library.name}`}
                   onClick={() => openLibraryById(library._id)}
                 >
-                  <span className="jayrr-library__folder-icon">{LoadIcon}</span>
-                  <span className="jayrr-library__folder-copy">
-                    <span className="jayrr-library__folder-name">
-                      {library.name}
-                    </span>
-                    <span className="jayrr-library__folder-meta">
-                      {library.assetCount}{" "}
-                      {library.assetCount === 1 ? "asset" : "assets"}
-                    </span>
-                  </span>
+                  <LibraryCardThumbs
+                    libraryId={library._id}
+                    assetCount={library.assetCount}
+                  />
                 </button>
-              )}
-              <div className="jayrr-library__row-actions">
-                <button
-                  type="button"
-                  className="jayrr-library__icon-button"
-                  aria-label={`Rename ${library.name}`}
-                  onClick={() => {
-                    setDraftName(library.name);
-                    setRenamingId(library._id);
-                  }}
-                >
-                  Rename
-                </button>
-                <button
-                  type="button"
-                  className="jayrr-library__icon-button jayrr-library__icon-button--danger"
-                  aria-label={`Delete ${library.name}`}
-                  onClick={() => {
-                    if (
-                      window.confirm(`Delete "${library.name}" and its assets?`)
-                    ) {
-                      void removeLibrary({
-                        ownerKey,
-                        libraryId: library._id,
-                      });
-                    }
-                  }}
-                >
-                  {TrashIcon}
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
+                <DropdownMenu open={openMenuId === library._id}>
+                  <DropdownMenu.Trigger
+                    className="jayrr-scene-card__menu"
+                    aria-label={`${library.name} menu`}
+                    onToggle={() => {
+                      setOpenMenuId((current) =>
+                        current === library._id ? null : library._id,
+                      );
+                    }}
+                  >
+                    {DotsHorizontalIcon}
+                  </DropdownMenu.Trigger>
+                  <DropdownMenu.Content
+                    onClickOutside={() => setOpenMenuId(null)}
+                    onSelect={() => setOpenMenuId(null)}
+                  >
+                    <DropdownMenu.Item
+                      icon={EditGlyph}
+                      onSelect={() => {
+                        setDraftName(library.name);
+                        setRenamingId(library._id);
+                      }}
+                    >
+                      Rename
+                    </DropdownMenu.Item>
+                    <DropdownMenu.Item
+                      icon={TrashIcon}
+                      onSelect={() => {
+                        if (
+                          window.confirm(
+                            `Delete "${library.name}" and its assets?`,
+                          )
+                        ) {
+                          void removeLibrary({
+                            ownerKey,
+                            libraryId: library._id,
+                          });
+                        }
+                      }}
+                    >
+                      Delete
+                    </DropdownMenu.Item>
+                  </DropdownMenu.Content>
+                </DropdownMenu>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
       {libraries.length > 0 && (
         <div className="jayrr-library__footer">
@@ -486,6 +500,60 @@ const JayrrLibraryMenuConnected = () => {
   );
 };
 
+const LibraryCardThumbs = ({
+  libraryId,
+  assetCount,
+}: {
+  libraryId: Id<"libraries">;
+  assetCount: number;
+}) => {
+  const assets = useQuery(
+    api.libraries.listAssets,
+    assetCount > 0 ? { ownerKey, libraryId } : "skip",
+  );
+  const previews = assets?.slice(0, 4) ?? [];
+
+  if (assetCount === 0 || (assets && previews.length === 0)) {
+    return <span className="jayrr-scene-card__empty">Empty</span>;
+  }
+
+  return (
+    <span className="jayrr-library-card__thumbs">
+      {previews.map((asset) => (
+        <AssetSvg key={asset._id} elementsJson={asset.elementsJson} />
+      ))}
+    </span>
+  );
+};
+
+const PendingLibraryUnit = ({
+  elements,
+  files,
+  onAdd,
+}: {
+  elements: readonly NonDeletedExcalidrawElement[];
+  files: BinaryFiles;
+  onAdd: () => void;
+}) => {
+  const hostRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const host = hostRef.current;
+    return paintElementsSvg(host, elements, files);
+  }, [elements, files]);
+
+  return (
+    <div className="library-unit library-unit__active" title="Add to library">
+      <div
+        className="library-unit__dragger library-unit__pulse"
+        ref={hostRef}
+        onClick={onAdd}
+      />
+      <div className="library-unit__adder">{PlusIcon}</div>
+    </div>
+  );
+};
+
 const AssetThumb = ({
   elementsJson,
   onInsert,
@@ -498,38 +566,8 @@ const AssetThumb = ({
   const hostRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    let cancelled = false;
     const host = hostRef.current;
-    const render = async () => {
-      try {
-        const parsed = JSON.parse(
-          elementsJson,
-        ) as NonDeletedExcalidrawElement[];
-        const svg = await exportToSvg({
-          elements: parsed,
-          appState: {
-            exportBackground: false,
-            viewBackgroundColor: "#ffffff",
-          },
-          files: {},
-        });
-        svg.querySelector(".style-fonts")?.remove();
-        if (!cancelled && host) {
-          host.innerHTML = svg.outerHTML;
-        }
-      } catch {
-        if (!cancelled && host) {
-          host.textContent = "Asset";
-        }
-      }
-    };
-    void render();
-    return () => {
-      cancelled = true;
-      if (host) {
-        host.innerHTML = "";
-      }
-    };
+    return paintAssetSvg(host, elementsJson);
   }, [elementsJson]);
 
   return (
@@ -549,6 +587,80 @@ const AssetThumb = ({
     </div>
   );
 };
+
+const AssetSvg = ({ elementsJson }: { elementsJson: string }) => {
+  const hostRef = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    const host = hostRef.current;
+    return paintAssetSvg(host, elementsJson);
+  }, [elementsJson]);
+
+  return <span className="jayrr-library-card__thumb" ref={hostRef} />;
+};
+
+const paintAssetSvg = (host: HTMLElement | null, elementsJson: string) => {
+  try {
+    const parsed = JSON.parse(elementsJson) as NonDeletedExcalidrawElement[];
+    return paintElementsSvg(host, parsed, {});
+  } catch {
+    return () => {};
+  }
+};
+
+const paintElementsSvg = (
+  host: HTMLElement | null,
+  elements: readonly NonDeletedExcalidrawElement[],
+  files: BinaryFiles,
+) => {
+  let cancelled = false;
+  const render = async () => {
+    if (!host) {
+      return;
+    }
+    try {
+      const svg = await exportToSvg({
+        elements,
+        appState: {
+          exportBackground: false,
+          viewBackgroundColor: "#ffffff",
+        },
+        files,
+      });
+      svg.querySelector(".style-fonts")?.remove();
+      if (!cancelled) {
+        host.innerHTML = svg.outerHTML;
+      }
+    } catch {
+      if (!cancelled && host) {
+        host.textContent = "";
+      }
+    }
+  };
+  void render();
+  return () => {
+    cancelled = true;
+    if (host) {
+      host.innerHTML = "";
+    }
+  };
+};
+
+const EditGlyph = (
+  <svg
+    aria-hidden="true"
+    focusable="false"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="M12 20h9" />
+    <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />
+  </svg>
+);
 
 const parseFilesJson = (filesJson?: string): BinaryFiles | null => {
   if (!filesJson) {

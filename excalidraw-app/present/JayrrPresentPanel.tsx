@@ -1,29 +1,582 @@
 import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCorners,
+  useSensor,
+  useSensors,
+  type CollisionDetection,
+  type DragEndEvent,
+  type DragOverEvent,
+  type DraggableAttributes,
+  type DraggableSyntheticListeners,
+  type UniqueIdentifier,
+} from "@dnd-kit/core";
+import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { isFrameLikeElement } from "@excalidraw/element";
+import {
   CaptureUpdateAction,
-  Sidebar,
   newElementWith,
   useExcalidrawAPI,
 } from "@excalidraw/excalidraw";
+import { useExcalidrawContainer } from "@excalidraw/excalidraw/components/App";
 import { FilledButton } from "@excalidraw/excalidraw/components/FilledButton";
-import {
-  HelpIcon,
-  presentationIcon,
-} from "@excalidraw/excalidraw/components/icons";
+import { Island } from "@excalidraw/excalidraw/components/Island";
+import { Switch } from "@excalidraw/excalidraw/components/Switch";
 import { Tooltip } from "@excalidraw/excalidraw/components/Tooltip";
-import { useCallback } from "react";
+import {
+  checkIcon,
+  chevronDownIcon,
+  helpIcon,
+  presentationIcon,
+  settingsIcon,
+} from "@excalidraw/excalidraw/components/icons";
+import { ContextMenu, Popover } from "radix-ui";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 
 import {
-  JAYRR_PRESENT_SIDEBAR,
-  movePresentIds,
+  reorderPresentIds,
   stepCaption,
+  writePresentEffect,
+  writePresentLabel,
   writePresentOrder,
   type PresentDeck,
+  type PresentEffect,
+  type PresentFrame,
 } from "./buildPresentDeck";
+import {
+  getPresentHideFrames,
+  setPresentHideFrames,
+} from "./presentHideFrames";
 
 import "./JayrrPresentPanel.scss";
 
-const PRESENT_HELP =
-  "Each frame is a slide. Shapes inside get a reveal order. Present, then Right or Space for the next beat, Left to go back, Esc to exit.";
+type ObjectOrderMap = Record<string, string[]>;
+
+const focusTargetIcon = (
+  <svg aria-hidden="true" focusable="false" viewBox="0 0 20 20">
+    <circle
+      cx="10"
+      cy="10"
+      r="7.25"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+    />
+    <circle
+      cx="10"
+      cy="10"
+      r="3.4"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+    />
+    <circle cx="10" cy="10" r="1.15" fill="currentColor" />
+  </svg>
+);
+
+const focusZoomIcon = (
+  <svg aria-hidden="true" focusable="false" viewBox="0 0 20 20">
+    <circle
+      cx="8.6"
+      cy="8.6"
+      r="4.7"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+    />
+    <path
+      d="M12.2 12.2 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+    />
+    <path
+      d="M8.6 6.6v4M6.6 8.6h4"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+    />
+  </svg>
+);
+
+const PresentEffectMenu = ({
+  className,
+  effect,
+  disabled,
+  onEffect,
+  children,
+}: {
+  className?: string;
+  effect: PresentEffect | null;
+  disabled: boolean;
+  onEffect: (effect: PresentEffect | null) => void;
+  children: ReactNode;
+}) => {
+  const { container } = useExcalidrawContainer();
+  const triggerClass = className
+    ? `jayrr-present__effect-trigger ${className}`
+    : "jayrr-present__effect-trigger";
+  const body = (
+    <>
+      {children}
+      {effect === "focus" ? (
+        <span className="jayrr-present__focus" role="img" aria-label="Focus">
+          {focusTargetIcon}
+        </span>
+      ) : null}
+      {effect === "zoom" ? (
+        <span
+          className="jayrr-present__focus"
+          role="img"
+          aria-label="Focus Zoom"
+        >
+          {focusZoomIcon}
+        </span>
+      ) : null}
+    </>
+  );
+  if (disabled) {
+    return <div className={triggerClass}>{body}</div>;
+  }
+  return (
+    <ContextMenu.Root>
+      <ContextMenu.Trigger asChild>
+        <div className={triggerClass}>{body}</div>
+      </ContextMenu.Trigger>
+      <ContextMenu.Portal container={container}>
+        <ContextMenu.Content
+          className="jayrr-present__menu"
+          collisionPadding={8}
+          data-prevent-outside-click
+        >
+          <ContextMenu.Label className="jayrr-present__menu-label">
+            Transition
+          </ContextMenu.Label>
+          <ContextMenu.Item
+            className={
+              effect === null
+                ? "jayrr-present__menu-item is-active"
+                : "jayrr-present__menu-item"
+            }
+            onSelect={() => onEffect(null)}
+          >
+            <span className="jayrr-present__menu-check">
+              {effect === null ? checkIcon : null}
+            </span>
+            None
+          </ContextMenu.Item>
+          <ContextMenu.Item
+            className={
+              effect === "focus"
+                ? "jayrr-present__menu-item is-active"
+                : "jayrr-present__menu-item"
+            }
+            onSelect={() => onEffect("focus")}
+          >
+            <span className="jayrr-present__menu-check">
+              {effect === "focus" ? checkIcon : null}
+            </span>
+            Focus
+          </ContextMenu.Item>
+          <ContextMenu.Item
+            className={
+              effect === "zoom"
+                ? "jayrr-present__menu-item is-active"
+                : "jayrr-present__menu-item"
+            }
+            onSelect={() => onEffect("zoom")}
+          >
+            <span className="jayrr-present__menu-check">
+              {effect === "zoom" ? checkIcon : null}
+            </span>
+            Focus Zoom
+          </ContextMenu.Item>
+        </ContextMenu.Content>
+      </ContextMenu.Portal>
+    </ContextMenu.Root>
+  );
+};
+
+const PresentSettingsPopover = () => {
+  const api = useExcalidrawAPI();
+  const { container } = useExcalidrawContainer();
+  const [open, setOpen] = useState(false);
+  const [hideFrames, setHideFrames] = useState(getPresentHideFrames);
+
+  useEffect(() => {
+    api?.updateFrameRendering({ enabled: true });
+  }, [api]);
+
+  return (
+    <Popover.Root open={open} onOpenChange={setOpen}>
+      <Popover.Trigger asChild>
+        <button
+          type="button"
+          className="jayrr-present__settings"
+          aria-label="Present settings"
+          aria-expanded={open}
+        >
+          {settingsIcon}
+        </button>
+      </Popover.Trigger>
+      <Popover.Portal container={container}>
+        <Popover.Content
+          side="bottom"
+          align="end"
+          sideOffset={8}
+          collisionPadding={8}
+          collisionBoundary={container ?? undefined}
+          data-prevent-outside-click
+          className="jayrr-present__settings-popover"
+        >
+          <Island padding={2}>
+            <div className="jayrr-present__settings-head">
+              <h3 className="jayrr-present__settings-title">Settings</h3>
+              <Tooltip
+                label="Hides frame borders and names after you press Present. Objects inside stay on the slide."
+                long
+                position="top"
+              >
+                <span className="jayrr-present__settings-info">{helpIcon}</span>
+              </Tooltip>
+            </div>
+            <div className="jayrr-present__settings-row">
+              <label htmlFor="hideFrames">Hide frames</label>
+              <Switch
+                name="hideFrames"
+                checked={hideFrames}
+                onChange={(checked) => {
+                  setHideFrames(checked);
+                  setPresentHideFrames(checked);
+                }}
+              />
+            </div>
+          </Island>
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
+  );
+};
+const listForId = (
+  frameIds: readonly string[],
+  objectIds: ObjectOrderMap,
+  id: UniqueIdentifier,
+): { listKey: string; ids: string[] } | null => {
+  const sid = String(id);
+  if (frameIds.includes(sid)) {
+    return { listKey: "frames", ids: [...frameIds] };
+  }
+  for (const [frameId, ids] of Object.entries(objectIds)) {
+    if (ids.includes(sid)) {
+      return { listKey: `objects:${frameId}`, ids: [...ids] };
+    }
+  }
+  return null;
+};
+
+const resolveOverId = (
+  frameIds: readonly string[],
+  objectIds: ObjectOrderMap,
+  activeListKey: string,
+  overId: UniqueIdentifier,
+): string | null => {
+  const sid = String(overId);
+  if (activeListKey === "frames") {
+    if (frameIds.includes(sid)) {
+      return sid;
+    }
+    for (const [frameId, ids] of Object.entries(objectIds)) {
+      if (ids.includes(sid)) {
+        return frameId;
+      }
+    }
+    return null;
+  }
+  if (!activeListKey.startsWith("objects:")) {
+    return null;
+  }
+  const frameId = activeListKey.slice("objects:".length);
+  const ids = objectIds[frameId];
+  if (ids?.includes(sid)) {
+    return sid;
+  }
+  return null;
+};
+
+const EditablePresentName = ({
+  index,
+  name,
+  selected,
+  renaming,
+  draftName,
+  attributes,
+  listeners,
+  onSelect,
+  onStartRename,
+  onDraftChange,
+  onCommit,
+  onCancel,
+}: {
+  index: number;
+  name: string;
+  selected: boolean;
+  renaming: boolean;
+  draftName: string;
+  attributes: DraggableAttributes;
+  listeners: DraggableSyntheticListeners;
+  onSelect: () => void;
+  onStartRename: () => void;
+  onDraftChange: (value: string) => void;
+  onCommit: () => void;
+  onCancel: () => void;
+}) => {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!renaming) {
+      return;
+    }
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  }, [renaming]);
+
+  if (renaming) {
+    return (
+      <input
+        ref={inputRef}
+        className="jayrr-present__name-input"
+        value={draftName}
+        aria-label="Name"
+        onChange={(event) => onDraftChange(event.target.value)}
+        onBlur={onCommit}
+        onPointerDown={(event) => event.stopPropagation()}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            onCommit();
+          }
+          if (event.key === "Escape") {
+            event.preventDefault();
+            onCancel();
+          }
+        }}
+      />
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      className={
+        selected ? "jayrr-present__name is-selected" : "jayrr-present__name"
+      }
+      onClick={(event) => {
+        event.stopPropagation();
+        onSelect();
+      }}
+      onDoubleClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onStartRename();
+      }}
+      {...attributes}
+      {...listeners}
+    >
+      {`${index}. ${name}`}
+    </button>
+  );
+};
+
+const SortableFrameBlock = ({
+  id,
+  index,
+  disabled,
+  name,
+  selected,
+  collapsed,
+  renaming,
+  draftName,
+  effect,
+  onSelect,
+  onToggleCollapse,
+  onStartRename,
+  onDraftChange,
+  onCommit,
+  onCancel,
+  onEffect,
+  children,
+}: {
+  id: string;
+  index: number;
+  disabled: boolean;
+  name: string;
+  selected: boolean;
+  collapsed: boolean;
+  renaming: boolean;
+  draftName: string;
+  effect: PresentEffect | null;
+  onSelect: () => void;
+  onToggleCollapse: () => void;
+  onStartRename: () => void;
+  onDraftChange: (value: string) => void;
+  onCommit: () => void;
+  onCancel: () => void;
+  onEffect: (effect: PresentEffect | null) => void;
+  children: ReactNode;
+}) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id, disabled: disabled || renaming });
+
+  return (
+    <li
+      ref={setNodeRef}
+      className={
+        isDragging ? "jayrr-present__frame is-dragging" : "jayrr-present__frame"
+      }
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+      }}
+    >
+      <PresentEffectMenu
+        className="jayrr-present__frame-head"
+        effect={effect}
+        disabled={renaming}
+        onEffect={onEffect}
+      >
+        <EditablePresentName
+          index={index}
+          name={name}
+          selected={selected}
+          renaming={renaming}
+          draftName={draftName}
+          attributes={attributes}
+          listeners={listeners}
+          onSelect={onSelect}
+          onStartRename={onStartRename}
+          onDraftChange={onDraftChange}
+          onCommit={onCommit}
+          onCancel={onCancel}
+        />
+        <button
+          type="button"
+          className={
+            collapsed
+              ? "jayrr-present__collapse-hit is-collapsed"
+              : "jayrr-present__collapse-hit"
+          }
+          aria-expanded={!collapsed}
+          aria-label={collapsed ? "Expand frame" : "Collapse frame"}
+          onClick={(event) => {
+            event.stopPropagation();
+            onToggleCollapse();
+          }}
+        >
+          <span className="jayrr-present__collapse">{chevronDownIcon}</span>
+        </button>
+      </PresentEffectMenu>
+      {collapsed ? null : children}
+    </li>
+  );
+};
+
+const SortableObjectBlock = ({
+  id,
+  index,
+  disabled,
+  name,
+  selected,
+  renaming,
+  draftName,
+  effect,
+  onSelect,
+  onStartRename,
+  onDraftChange,
+  onCommit,
+  onCancel,
+  onEffect,
+}: {
+  id: string;
+  index: number;
+  disabled: boolean;
+  name: string;
+  selected: boolean;
+  renaming: boolean;
+  draftName: string;
+  effect: PresentEffect | null;
+  onSelect: () => void;
+  onStartRename: () => void;
+  onDraftChange: (value: string) => void;
+  onCommit: () => void;
+  onCancel: () => void;
+  onEffect: (effect: PresentEffect | null) => void;
+}) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id, disabled: disabled || renaming });
+
+  return (
+    <li
+      ref={setNodeRef}
+      className={
+        isDragging ? "jayrr-present__row is-dragging" : "jayrr-present__row"
+      }
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+      }}
+    >
+      <PresentEffectMenu
+        effect={effect}
+        disabled={renaming}
+        onEffect={onEffect}
+      >
+        <EditablePresentName
+          index={index}
+          name={name}
+          selected={selected}
+          renaming={renaming}
+          draftName={draftName}
+          attributes={attributes}
+          listeners={listeners}
+          onSelect={onSelect}
+          onStartRename={onStartRename}
+          onDraftChange={onDraftChange}
+          onCommit={onCommit}
+          onCancel={onCancel}
+        />
+      </PresentEffectMenu>
+    </li>
+  );
+};
 
 export const JayrrPresentPanel = ({
   deck,
@@ -41,20 +594,63 @@ export const JayrrPresentPanel = ({
   stopPresent: () => void;
 }) => {
   const api = useExcalidrawAPI();
+  const [frameIds, setFrameIds] = useState<string[]>([]);
+  const [objectIds, setObjectIds] = useState<ObjectOrderMap>({});
+  const [activeId, setActiveId] = useState<UniqueIdentifier | null>(null);
+  const [collapsedFrameIds, setCollapsedFrameIds] = useState<
+    Record<string, boolean>
+  >({});
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [draftName, setDraftName] = useState("");
+  const skipClickRef = useRef(false);
+  const frameIdsRef = useRef(frameIds);
+  const objectIdsRef = useRef(objectIds);
 
-  const writeOrders = useCallback(
-    (orderedIds: readonly string[]) => {
+  frameIdsRef.current = frameIds;
+  objectIdsRef.current = objectIds;
+
+  useEffect(() => {
+    if (activeId !== null) {
+      return;
+    }
+    setFrameIds(deck.frames.map((frame) => frame.id));
+    const nextObjects: ObjectOrderMap = {};
+    for (const frame of deck.frames) {
+      nextObjects[frame.id] = frame.objects.map((object) => object.id);
+    }
+    setObjectIds(nextObjects);
+  }, [activeId, deck]);
+
+  const frameById = useMemo(() => {
+    const map = new Map<string, PresentFrame>();
+    for (const frame of deck.frames) {
+      map.set(frame.id, frame);
+    }
+    return map;
+  }, [deck.frames]);
+
+  const persistOrders = useCallback(
+    (nextFrameIds: readonly string[], nextObjectIds: ObjectOrderMap) => {
       if (!api) {
         return;
       }
+      const orderById = new Map<string, number>();
+      nextFrameIds.forEach((id, index) => {
+        orderById.set(id, index + 1);
+      });
+      for (const ids of Object.values(nextObjectIds)) {
+        ids.forEach((id, index) => {
+          orderById.set(id, index + 1);
+        });
+      }
       const all = api.getSceneElementsIncludingDeleted();
       const next = all.map((element) => {
-        const order = orderedIds.indexOf(element.id);
-        if (order === -1) {
+        const order = orderById.get(element.id);
+        if (order === undefined) {
           return element;
         }
         return newElementWith(element, {
-          customData: writePresentOrder(element, order + 1),
+          customData: writePresentOrder(element, order),
         });
       });
       api.updateScene({
@@ -65,8 +661,142 @@ export const JayrrPresentPanel = ({
     [api],
   );
 
+  const persistPresentName = useCallback(
+    (id: string, name: string) => {
+      if (!api) {
+        return;
+      }
+      const trimmed = name.trim();
+      const all = api.getSceneElementsIncludingDeleted();
+      const next = all.map((element) => {
+        if (element.id !== id) {
+          return element;
+        }
+        if (isFrameLikeElement(element)) {
+          return newElementWith(element, {
+            name: trimmed.length > 0 ? trimmed : null,
+          });
+        }
+        return newElementWith(element, {
+          customData: writePresentLabel(
+            element,
+            trimmed.length > 0 ? trimmed : null,
+          ),
+        });
+      });
+      api.updateScene({
+        elements: next,
+        captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+      });
+    },
+    [api],
+  );
+
+  const persistPresentEffect = useCallback(
+    (ids: readonly string[], effect: PresentEffect | null) => {
+      if (!api || ids.length === 0) {
+        return;
+      }
+      const targets = new Set(ids);
+      const all = api.getSceneElementsIncludingDeleted();
+      const next = all.map((element) => {
+        if (!targets.has(element.id)) {
+          return element;
+        }
+        return newElementWith(element, {
+          customData: writePresentEffect(element, effect),
+        });
+      });
+      api.updateScene({
+        elements: next,
+        captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+      });
+    },
+    [api],
+  );
+
+  const startRename = (id: string, currentName: string) => {
+    if (presenting) {
+      return;
+    }
+    setDraftName(currentName);
+    setRenamingId(id);
+  };
+
+  const commitRename = () => {
+    if (!renamingId) {
+      return;
+    }
+    persistPresentName(renamingId, draftName);
+    setRenamingId(null);
+  };
+
+  const cancelRename = () => {
+    setRenamingId(null);
+  };
+
+  const moveInList = useCallback(
+    (listKey: string, fromId: string, toId: string) => {
+      if (fromId === toId) {
+        return;
+      }
+      if (listKey === "frames") {
+        setFrameIds((ids) =>
+          reorderPresentIds(ids, ids.indexOf(fromId), ids.indexOf(toId)),
+        );
+        return;
+      }
+      const frameId = listKey.slice("objects:".length);
+      setObjectIds((current) => {
+        const ids = current[frameId];
+        if (!ids) {
+          return current;
+        }
+        return {
+          ...current,
+          [frameId]: reorderPresentIds(
+            ids,
+            ids.indexOf(fromId),
+            ids.indexOf(toId),
+          ),
+        };
+      });
+    },
+    [],
+  );
+
+  const collisionDetection: CollisionDetection = useCallback((args) => {
+    const collisions = closestCorners(args);
+    const currentFrames = frameIdsRef.current;
+    const currentObjects = objectIdsRef.current;
+    const activeList = listForId(currentFrames, currentObjects, args.active.id);
+    if (!activeList) {
+      return collisions;
+    }
+    return collisions.filter((collision) => {
+      return (
+        resolveOverId(
+          currentFrames,
+          currentObjects,
+          activeList.listKey,
+          collision.id,
+        ) !== null
+      );
+    });
+  }, []);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 6 },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
+
   const selectId = (id: string) => {
-    if (!api || presenting) {
+    if (!api || presenting || skipClickRef.current) {
+      skipClickRef.current = false;
       return;
     }
     api.updateScene({
@@ -77,174 +807,201 @@ export const JayrrPresentPanel = ({
     });
   };
 
-  const moveFrames = (fromIndex: number, direction: -1 | 1) => {
-    writeOrders(
-      movePresentIds(
-        deck.frames.map((frame) => frame.id),
-        fromIndex,
-        direction,
-      ),
-    );
+  const onDragStart = ({ active }: { active: { id: UniqueIdentifier } }) => {
+    setActiveId(active.id);
   };
 
-  const moveObjects = (
-    frameId: string,
-    fromIndex: number,
-    direction: -1 | 1,
-  ) => {
-    const frame = deck.frames.find((item) => item.id === frameId);
-    if (!frame) {
+  const onDragOver = ({ active, over }: DragOverEvent) => {
+    if (!over) {
       return;
     }
-    writeOrders(
-      movePresentIds(
-        frame.objects.map((object) => object.id),
-        fromIndex,
-        direction,
-      ),
+    const currentFrames = frameIdsRef.current;
+    const currentObjects = objectIdsRef.current;
+    const activeList = listForId(currentFrames, currentObjects, active.id);
+    if (!activeList) {
+      return;
+    }
+    const overId = resolveOverId(
+      currentFrames,
+      currentObjects,
+      activeList.listKey,
+      over.id,
     );
+    if (!overId) {
+      return;
+    }
+    moveInList(activeList.listKey, String(active.id), overId);
+  };
+
+  const onDragEnd = ({ active, over }: DragEndEvent) => {
+    setActiveId(null);
+    if (over && String(active.id) !== String(over.id)) {
+      skipClickRef.current = true;
+    }
+    persistOrders(frameIdsRef.current, objectIdsRef.current);
+  };
+
+  const onDragCancel = () => {
+    setActiveId(null);
   };
 
   return (
-    <Sidebar name={JAYRR_PRESENT_SIDEBAR} className="jayrr-present-sidebar">
-      <Sidebar.Header>
-        <div className="jayrr-present__title-row">
-          <h2 className="jayrr-present__title">Present</h2>
-          <Tooltip label={PRESENT_HELP} long>
-            <span className="jayrr-present__info" aria-label={PRESENT_HELP}>
-              {HelpIcon}
-            </span>
-          </Tooltip>
-          <span className="jayrr-present__sr">
-            Nested reveal order for frames and the shapes inside them.
-          </span>
-        </div>
-      </Sidebar.Header>
-      <div className="jayrr-present">
-        <div className="jayrr-present__actions">
-          {presenting ? (
-            <FilledButton
-              color="muted"
-              variant="outlined"
-              label="Exit"
-              onClick={stopPresent}
-              fullWidth
-            >
-              Exit
-            </FilledButton>
-          ) : (
-            <FilledButton
-              color="primary"
-              label="Present"
-              icon={presentationIcon}
-              onClick={startPresent}
-              fullWidth
-              disabled={deck.frames.length === 0}
-            >
-              Present
-            </FilledButton>
-          )}
-        </div>
-        {deck.frames.length === 0 ? (
-          <p className="jayrr-present__empty">
-            Draw a frame, drop shapes in it, then set the order here.
-          </p>
-        ) : (
-          <ol className="jayrr-present__frames">
-            {deck.frames.map((frame, frameIndex) => (
-              <li key={frame.id} className="jayrr-present__frame">
-                <div className="jayrr-present__row">
-                  <button
-                    type="button"
-                    className={
-                      selectedElementIds[frame.id]
-                        ? "jayrr-present__name is-selected"
-                        : "jayrr-present__name"
-                    }
-                    onClick={() => selectId(frame.id)}
-                  >
-                    {frameIndex + 1}. {frame.label}
-                  </button>
-                  <div className="jayrr-present__move">
-                    <button
-                      type="button"
-                      aria-label="Move frame up"
-                      disabled={presenting || frameIndex === 0}
-                      onClick={() => moveFrames(frameIndex, -1)}
-                    >
-                      ↑
-                    </button>
-                    <button
-                      type="button"
-                      aria-label="Move frame down"
-                      disabled={
-                        presenting || frameIndex === deck.frames.length - 1
-                      }
-                      onClick={() => moveFrames(frameIndex, 1)}
-                    >
-                      ↓
-                    </button>
-                  </div>
-                </div>
-                {frame.objects.length === 0 ? (
-                  <p className="jayrr-present__empty">
-                    No shapes in this frame.
-                  </p>
-                ) : (
-                  <ol className="jayrr-present__objects">
-                    {frame.objects.map((object, objectIndex) => (
-                      <li key={object.id} className="jayrr-present__row">
-                        <button
-                          type="button"
-                          className={
-                            selectedElementIds[object.id]
-                              ? "jayrr-present__name is-selected"
-                              : "jayrr-present__name"
-                          }
-                          onClick={() => selectId(object.id)}
-                        >
-                          {objectIndex + 1}. {object.label}
-                        </button>
-                        <div className="jayrr-present__move">
-                          <button
-                            type="button"
-                            aria-label="Move shape up"
-                            disabled={presenting || objectIndex === 0}
-                            onClick={() =>
-                              moveObjects(frame.id, objectIndex, -1)
-                            }
-                          >
-                            ↑
-                          </button>
-                          <button
-                            type="button"
-                            aria-label="Move shape down"
-                            disabled={
-                              presenting ||
-                              objectIndex === frame.objects.length - 1
-                            }
-                            onClick={() =>
-                              moveObjects(frame.id, objectIndex, 1)
-                            }
-                          >
-                            ↓
-                          </button>
-                        </div>
-                      </li>
-                    ))}
-                  </ol>
-                )}
-              </li>
-            ))}
-          </ol>
-        )}
-        {presenting ? (
-          <p className="jayrr-present__status" aria-live="polite">
-            {stepCaption(deck, stepIndex)}
-          </p>
-        ) : null}
+    <div className="jayrr-present">
+      <div className="jayrr-present__title-row">
+        <h2 className="jayrr-present__title">Present</h2>
+        <span className="jayrr-present__sr">
+          Nested reveal order for frames and the shapes inside them. Drag a
+          block to reorder. Right-click a row to set its transition.
+        </span>
+        <PresentSettingsPopover />
       </div>
-    </Sidebar>
+      <div className="jayrr-present__actions">
+        {presenting ? (
+          <FilledButton
+            color="muted"
+            variant="outlined"
+            label="Exit"
+            onClick={stopPresent}
+            fullWidth
+          >
+            Exit
+          </FilledButton>
+        ) : (
+          <FilledButton
+            color="primary"
+            label="Present"
+            icon={presentationIcon}
+            onClick={startPresent}
+            fullWidth
+            disabled={deck.frames.length === 0}
+          >
+            Present
+          </FilledButton>
+        )}
+      </div>
+      {frameIds.length === 0 ? (
+        <p className="jayrr-present__empty">
+          Draw a frame, drop shapes in it, then set the order here.
+        </p>
+      ) : (
+        <DndContext
+          sensors={sensors}
+          collisionDetection={collisionDetection}
+          modifiers={[restrictToVerticalAxis]}
+          onDragStart={onDragStart}
+          onDragOver={onDragOver}
+          onDragEnd={onDragEnd}
+          onDragCancel={onDragCancel}
+        >
+          <SortableContext
+            items={frameIds}
+            strategy={verticalListSortingStrategy}
+          >
+            <ol
+              className={
+                activeId
+                  ? "jayrr-present__frames is-sorting"
+                  : "jayrr-present__frames"
+              }
+            >
+              {frameIds.map((frameId, frameIndex) => {
+                const frame = frameById.get(frameId);
+                if (!frame) {
+                  return null;
+                }
+                const childIds = objectIds[frame.id] ?? [];
+                return (
+                  <SortableFrameBlock
+                    key={frame.id}
+                    id={frame.id}
+                    index={frameIndex + 1}
+                    disabled={
+                      presenting || renamingId !== null || frameIds.length < 2
+                    }
+                    name={frame.label}
+                    selected={Boolean(selectedElementIds[frame.id])}
+                    collapsed={Boolean(collapsedFrameIds[frame.id])}
+                    renaming={renamingId === frame.id}
+                    draftName={draftName}
+                    effect={frame.effect}
+                    onSelect={() => selectId(frame.id)}
+                    onToggleCollapse={() => {
+                      setCollapsedFrameIds((current) => ({
+                        ...current,
+                        [frame.id]: !current[frame.id],
+                      }));
+                    }}
+                    onStartRename={() => startRename(frame.id, frame.label)}
+                    onDraftChange={setDraftName}
+                    onCommit={commitRename}
+                    onCancel={cancelRename}
+                    onEffect={(effect) =>
+                      persistPresentEffect([frame.id], effect)
+                    }
+                  >
+                    {childIds.length === 0 ? (
+                      <p className="jayrr-present__empty">
+                        No shapes in this frame.
+                      </p>
+                    ) : (
+                      <SortableContext
+                        items={childIds}
+                        strategy={verticalListSortingStrategy}
+                      >
+                        <ol className="jayrr-present__objects">
+                          {childIds.map((objectId, objectIndex) => {
+                            const object = frame.objects.find(
+                              (item) => item.id === objectId,
+                            );
+                            if (!object) {
+                              return null;
+                            }
+                            return (
+                              <SortableObjectBlock
+                                key={object.id}
+                                id={object.id}
+                                index={objectIndex + 1}
+                                disabled={
+                                  presenting ||
+                                  renamingId !== null ||
+                                  childIds.length < 2
+                                }
+                                name={object.label}
+                                selected={Boolean(
+                                  selectedElementIds[object.id],
+                                )}
+                                renaming={renamingId === object.id}
+                                draftName={draftName}
+                                effect={object.effect}
+                                onSelect={() => selectId(object.id)}
+                                onStartRename={() =>
+                                  startRename(object.id, object.label)
+                                }
+                                onDraftChange={setDraftName}
+                                onCommit={commitRename}
+                                onCancel={cancelRename}
+                                onEffect={(effect) =>
+                                  persistPresentEffect(object.memberIds, effect)
+                                }
+                              />
+                            );
+                          })}
+                        </ol>
+                      </SortableContext>
+                    )}
+                  </SortableFrameBlock>
+                );
+              })}
+            </ol>
+          </SortableContext>
+        </DndContext>
+      )}
+      {presenting ? (
+        <p className="jayrr-present__status" aria-live="polite">
+          {stepCaption(deck, stepIndex)}
+        </p>
+      ) : null}
+    </div>
   );
 };
 
@@ -256,7 +1013,11 @@ export const JayrrPresentHud = ({
   onExit: () => void;
 }) => {
   return (
-    <div className="jayrr-present-hud">
+    <div
+      className="jayrr-present-hud"
+      onClick={(event) => event.stopPropagation()}
+      onMouseDown={(event) => event.stopPropagation()}
+    >
       <span>{caption}</span>
       <span className="jayrr-present-hud__keys">
         → next · ← back · Esc exit

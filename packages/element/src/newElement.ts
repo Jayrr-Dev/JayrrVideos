@@ -106,6 +106,7 @@ const _newElementBase = <T extends ExcalidrawElement>(
     boundElements = null,
     link = null,
     locked = DEFAULT_ELEMENT_PROPS.locked,
+    innerPadding,
     ...rest
   }: ElementConstructorOpts & Omit<Partial<ExcalidrawGenericElement>, "type">,
 ) => {
@@ -167,6 +168,7 @@ const _newElementBase = <T extends ExcalidrawElement>(
     link,
     locked,
     customData: rest.customData,
+    ...(innerPadding != null ? { innerPadding } : {}),
   };
   return element;
 };

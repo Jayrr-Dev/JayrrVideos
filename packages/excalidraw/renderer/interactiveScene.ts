@@ -1,16 +1,17 @@
 import {
+  bezierEquation,
   clamp,
+  pointDistance,
   pointFrom,
+  pointRotateRads,
   pointsEqual,
   type GlobalPoint,
   type LocalPoint,
   type Radians,
-  bezierEquation,
-  pointRotateRads,
-  pointDistance,
 } from "@excalidraw/math";
 
 import {
+  applyDarkModeFilter,
   arrayToMap,
   BIND_MODE_TIMEOUT,
   DEFAULT_TRANSFORM_HANDLE_SPACING,
@@ -19,16 +20,18 @@ import {
   invariant,
   shouldRotateWithDiscreteAngle,
   THEME,
-  applyDarkModeFilter,
 } from "@excalidraw/common";
 
 import {
   deconstructDiamondElement,
   deconstructRectanguloidElement,
   elementCenterPoint,
-  getDiamondBaseCorners,
   FOCUS_POINT_SIZE,
+  getActiveTextElement,
+  getDiamondBaseCorners,
+  getElementsInGroup,
   getOmitSidesForEditorInterface,
+  getSelectedGroupIds,
   getTransformHandles,
   getTransformHandlesFromCoords,
   hasBoundingBox,
@@ -40,20 +43,18 @@ import {
   isImageElement,
   isLinearElement,
   isLineElement,
-  maxBindingDistance_simple,
+  isSelectedViaGroup,
   isTextElement,
   LinearElementEditor,
-  getActiveTextElement,
-  getElementsInGroup,
-  getSelectedGroupIds,
-  isSelectedViaGroup,
+  maxBindingDistance_simple,
   selectGroupsFromGivenElements,
 } from "@excalidraw/element";
 
 import { renderSelectionElement } from "@excalidraw/element";
 
-import { getCommonBounds, getElementAbsoluteCoords } from "@excalidraw/element";
 import {
+  getCommonBounds,
+  getElementAbsoluteCoords,
   getGlobalFixedPointForBindableElement,
   isFocusPointVisible,
 } from "@excalidraw/element";
@@ -98,20 +99,20 @@ import {
   bootstrapCanvas,
   fillCircle,
   getNormalizedCanvasDimensions,
-  strokeRectWithRotation_simple,
   snapScrollToDevicePixels,
+  strokeRectWithRotation_simple,
 } from "./helpers";
 
-import type {
-  AppState,
-  AppClassProperties,
-  InteractiveCanvasAppState,
-} from "../types";
 import type {
   InteractiveCanvasRenderConfig,
   InteractiveSceneRenderConfig,
   RenderableElementsMap,
 } from "../scene/types";
+import type {
+  AppClassProperties,
+  AppState,
+  InteractiveCanvasAppState,
+} from "../types";
 
 // The interactive canvas used to be inverted in dark mode via a CSS filter
 // (`invert(93%) hue-rotate(180deg)`), which is prohibitively slow in browsers
@@ -995,6 +996,10 @@ const renderBindingHighlightForBindableElement = (
   context.restore();
 };
 
+const isPresenting = () =>
+  typeof document !== "undefined" &&
+  document.documentElement.classList.contains("jayrr-presenting");
+
 type ElementSelectionBorder = {
   angle: number;
   x1: number;
@@ -1851,11 +1856,9 @@ const _renderInteractiveScene = ({
     !appState.newElement &&
     !appState.selectedLinearElement?.isEditing
   ) {
-    const showBoundingBox = hasBoundingBox(
-      selectedElements,
-      appState,
-      editorInterface,
-    );
+    const showBoundingBox =
+      !isPresenting() &&
+      hasBoundingBox(selectedElements, appState, editorInterface);
 
     const isSingleLinearElementSelected =
       selectedElements.length === 1 && isLinearElement(selectedElements[0]);

@@ -8,7 +8,9 @@
  * @module
  */
 
+import type * as embedProxy from "../embedProxy.js";
 import type * as health from "../health.js";
+import type * as http from "../http.js";
 import type * as libraries from "../libraries.js";
 import type * as scenes from "../scenes.js";
 
@@ -19,7 +21,9 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  embedProxy: typeof embedProxy;
   health: typeof health;
+  http: typeof http;
   libraries: typeof libraries;
   scenes: typeof scenes;
 }>;

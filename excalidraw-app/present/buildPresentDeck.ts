@@ -13,9 +13,18 @@ import type {
 } from "@excalidraw/element/types";
 
 export const JAYRR_PRESENT_KEY = "jayrrPresent";
-export const JAYRR_PRESENT_SIDEBAR = "jayrrPresent";
+export const JAYRR_PRESENT_TAB = "jayrrPresent";
 export const JAYRR_PRESENT_REVEAL_MS = 320;
 export const JAYRR_PRESENT_SLIDE_Y = 18;
+/** Viewport px above the slide so the frame name stays on screen. */
+export const JAYRR_PRESENT_NAME_PAD = 36;
+export const JAYRR_PRESENT_EDGE_PAD = 16;
+/** Viewport inset when a reveal step is tagged Focus, so the shape sits centered. */
+export const JAYRR_PRESENT_FOCUS_PAD = 72;
+/** Longer ease so Focus Zoom can settle instead of snapping. */
+export const JAYRR_PRESENT_ZOOM_MS = 850;
+
+export type PresentEffect = "focus" | "zoom";
 
 export type PresentRevealStep = {
   type: "reveal";
@@ -34,12 +43,16 @@ export type PresentObject = {
   id: string;
   label: string;
   order: number | null;
+  effect: PresentEffect | null;
+  groupId: string | null;
+  memberIds: string[];
 };
 
 export type PresentFrame = {
   id: string;
   label: string;
   order: number | null;
+  effect: PresentEffect | null;
   objects: PresentObject[];
 };
 
@@ -48,30 +61,121 @@ export type PresentDeck = {
   steps: PresentStep[];
 };
 
-const readPresentOrder = (element: ExcalidrawElement): number | null => {
+type PresentBag = {
+  order?: number;
+  label?: string;
+  effect?: PresentEffect;
+};
+
+const readPresentEffect = (value: unknown): PresentEffect | null => {
+  if (value === "focus" || value === "zoom") {
+    return value;
+  }
+  return null;
+};
+
+const readPresentBag = (element: ExcalidrawElement): PresentBag => {
   const data = element.customData;
   if (!data) {
-    return null;
+    return {};
   }
   const present = data[JAYRR_PRESENT_KEY];
   if (!present || typeof present !== "object") {
-    return null;
+    return {};
   }
+  const bag: PresentBag = {};
   const order = Reflect.get(present, "order");
-  if (typeof order !== "number" || !Number.isFinite(order)) {
-    return null;
+  if (typeof order === "number" && Number.isFinite(order)) {
+    bag.order = order;
   }
-  return order;
+  const label = Reflect.get(present, "label");
+  if (typeof label === "string" && label.trim()) {
+    bag.label = label.trim();
+  }
+  const effect = readPresentEffect(Reflect.get(present, "effect"));
+  if (effect) {
+    bag.effect = effect;
+  }
+  return bag;
+};
+
+const presentEffectOf = (
+  elements: readonly ExcalidrawElement[],
+): PresentEffect | null => {
+  for (const element of elements) {
+    const effect = readPresentBag(element).effect;
+    if (effect) {
+      return effect;
+    }
+  }
+  return null;
+};
+
+const readPresentOrder = (element: ExcalidrawElement): number | null => {
+  return readPresentBag(element).order ?? null;
+};
+
+const writePresentBag = (
+  element: ExcalidrawElement,
+  patch: {
+    order?: number | null;
+    label?: string | null;
+    effect?: PresentEffect | null;
+  },
+): ExcalidrawElement["customData"] => {
+  const current = readPresentBag(element);
+  const next: PresentBag = { ...current };
+  if (patch.order === null) {
+    delete next.order;
+  } else if (patch.order !== undefined) {
+    next.order = patch.order;
+  }
+  if (patch.label === null || patch.label === "") {
+    delete next.label;
+  } else if (patch.label !== undefined) {
+    next.label = patch.label.trim();
+  }
+  if (patch.effect === null) {
+    delete next.effect;
+  } else if (patch.effect !== undefined) {
+    next.effect = patch.effect;
+  }
+  const customData: Record<string, unknown> = {
+    ...(element.customData ?? {}),
+  };
+  if (
+    next.order === undefined &&
+    next.label === undefined &&
+    next.effect === undefined
+  ) {
+    delete customData[JAYRR_PRESENT_KEY];
+    return Object.keys(customData).length
+      ? (customData as ExcalidrawElement["customData"])
+      : undefined;
+  }
+  customData[JAYRR_PRESENT_KEY] = next;
+  return customData as ExcalidrawElement["customData"];
 };
 
 export const writePresentOrder = (
   element: ExcalidrawElement,
   order: number,
 ): ExcalidrawElement["customData"] => {
-  return {
-    ...element.customData,
-    [JAYRR_PRESENT_KEY]: { order },
-  };
+  return writePresentBag(element, { order });
+};
+
+export const writePresentLabel = (
+  element: ExcalidrawElement,
+  label: string | null,
+): ExcalidrawElement["customData"] => {
+  return writePresentBag(element, { label });
+};
+
+export const writePresentEffect = (
+  element: ExcalidrawElement,
+  effect: PresentEffect | null,
+): ExcalidrawElement["customData"] => {
+  return writePresentBag(element, { effect });
 };
 
 const comparePresentable = (
@@ -104,6 +208,10 @@ export const isPresentableObject = (element: ExcalidrawElement): boolean => {
 };
 
 export const getPresentLabel = (element: ExcalidrawElement): string => {
+  const customLabel = readPresentBag(element).label;
+  if (customLabel) {
+    return customLabel;
+  }
   if (isFrameLikeElement(element)) {
     const name = element.name?.trim();
     if (name) {
@@ -117,7 +225,59 @@ export const getPresentLabel = (element: ExcalidrawElement): string => {
       return line.length > 40 ? `${line.slice(0, 37)}…` : line;
     }
   }
-  return element.type;
+  return sentenceCaseType(element.type);
+};
+
+const sentenceCaseType = (type: string): string => {
+  const spaced = type
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/note$/i, " note")
+    .replace(/[_-]+/g, " ")
+    .toLowerCase()
+    .trim();
+  if (!spaced) {
+    return type;
+  }
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+};
+
+const outerGroupId = (element: ExcalidrawElement): string | null => {
+  if (element.groupIds.length === 0) {
+    return null;
+  }
+  return element.groupIds[element.groupIds.length - 1] ?? null;
+};
+
+const groupPresentLabel = (members: readonly ExcalidrawElement[]): string => {
+  for (const member of members) {
+    const customLabel = readPresentBag(member).label;
+    if (customLabel) {
+      return customLabel;
+    }
+  }
+  for (const member of members) {
+    if (!isTextElement(member)) {
+      continue;
+    }
+    const label = getPresentLabel(member);
+    if (label !== sentenceCaseType(member.type)) {
+      return label;
+    }
+  }
+  return "Group";
+};
+
+const minPresentOrder = (orders: readonly (number | null)[]): number | null => {
+  let min: number | null = null;
+  for (const order of orders) {
+    if (order === null) {
+      continue;
+    }
+    if (min === null || order < min) {
+      min = order;
+    }
+  }
+  return min;
 };
 
 export const boundIdsForElement = (
@@ -128,6 +288,22 @@ export const boundIdsForElement = (
   const bound = getBoundTextElement(element, arrayToMap(elements));
   if (bound) {
     ids.push(bound.id);
+  }
+  return ids;
+};
+
+export const idsForPresentObject = (
+  object: PresentObject,
+  elements: readonly ExcalidrawElement[],
+): string[] => {
+  const ids: string[] = [];
+  const byId = arrayToMap(elements);
+  for (const memberId of object.memberIds) {
+    const element = byId.get(memberId);
+    if (!element) {
+      continue;
+    }
+    ids.push(...boundIdsForElement(element, elements));
   }
   return ids;
 };
@@ -175,16 +351,82 @@ export const buildPresentDeck = (
       });
     });
 
-    objects.sort(comparePresentable);
+    const usedIds = new Set<string>();
+    const clustered: {
+      id: string;
+      label: string;
+      order: number | null;
+      effect: PresentEffect | null;
+      index: number;
+      groupId: string | null;
+      memberIds: string[];
+    }[] = [];
+
+    for (const object of objects) {
+      if (usedIds.has(object.element.id)) {
+        continue;
+      }
+      const groupId = outerGroupId(object.element);
+      if (!groupId) {
+        usedIds.add(object.element.id);
+        clustered.push({
+          id: object.element.id,
+          label: getPresentLabel(object.element),
+          order: object.order,
+          effect: presentEffectOf([object.element]),
+          index: object.index,
+          groupId: null,
+          memberIds: [object.element.id],
+        });
+        continue;
+      }
+      const members = objects.filter(
+        (item) => outerGroupId(item.element) === groupId,
+      );
+      for (const member of members) {
+        usedIds.add(member.element.id);
+      }
+      const representative = members[0];
+      if (!representative) {
+        continue;
+      }
+      if (members.length < 2) {
+        clustered.push({
+          id: representative.element.id,
+          label: getPresentLabel(representative.element),
+          order: representative.order,
+          effect: presentEffectOf([representative.element]),
+          index: representative.index,
+          groupId: null,
+          memberIds: [representative.element.id],
+        });
+        continue;
+      }
+      clustered.push({
+        id: representative.element.id,
+        label: groupPresentLabel(members.map((item) => item.element)),
+        order: minPresentOrder(members.map((item) => item.order)),
+        effect: presentEffectOf(members.map((item) => item.element)),
+        index: representative.index,
+        groupId,
+        memberIds: members.map((item) => item.element.id),
+      });
+    }
+
+    clustered.sort(comparePresentable);
 
     frames.push({
       id: frame.element.id,
       label: getPresentLabel(frame.element),
       order: frame.order,
-      objects: objects.map((object) => ({
-        id: object.element.id,
-        label: getPresentLabel(object.element),
+      effect: presentEffectOf([frame.element]),
+      objects: clustered.map((object) => ({
+        id: object.id,
+        label: object.label,
         order: object.order,
+        effect: object.effect,
+        groupId: object.groupId,
+        memberIds: object.memberIds,
       })),
     });
   }
@@ -204,23 +446,64 @@ export const buildPresentDeck = (
   return { frames, steps };
 };
 
-export const movePresentIds = (
+/**
+ * A step Next/Back can stop on. Every reveal lands; a bare `showFrame` only
+ * lands when it is a slide of its own (empty frame or frame-level effect),
+ * otherwise it is skipped because the slide would look blank.
+ */
+export const isPresentLandableStep = (
+  deck: PresentDeck,
+  step: PresentStep,
+): boolean => {
+  if (step.type === "reveal") {
+    return true;
+  }
+  const frame = deck.frames.find((item) => item.id === step.frameId);
+  return Boolean(frame?.effect) || frame?.objects.length === 0;
+};
+
+/**
+ * Next landable step in `direction`, or null at either end. Symmetric: the
+ * same rule decides where Right and Left stop, so Back always retraces Next.
+ */
+export const nextPresentStepIndex = (
+  deck: PresentDeck,
+  fromIndex: number,
+  direction: 1 | -1,
+): number | null => {
+  for (
+    let next = fromIndex + direction;
+    next >= 0 && next < deck.steps.length;
+    next += direction
+  ) {
+    const step = deck.steps[next];
+    if (step && isPresentLandableStep(deck, step)) {
+      return next;
+    }
+  }
+  return null;
+};
+
+export const reorderPresentIds = (
   ids: readonly string[],
   fromIndex: number,
-  direction: -1 | 1,
+  toIndex: number,
 ): string[] => {
-  const toIndex = fromIndex + direction;
-  if (fromIndex < 0 || toIndex < 0 || toIndex >= ids.length) {
+  if (
+    fromIndex === toIndex ||
+    fromIndex < 0 ||
+    toIndex < 0 ||
+    fromIndex >= ids.length ||
+    toIndex >= ids.length
+  ) {
     return [...ids];
   }
   const next = [...ids];
-  const current = next[fromIndex];
-  const swap = next[toIndex];
-  if (current === undefined || swap === undefined) {
+  const [moved] = next.splice(fromIndex, 1);
+  if (moved === undefined) {
     return [...ids];
   }
-  next[fromIndex] = swap;
-  next[toIndex] = current;
+  next.splice(toIndex, 0, moved);
   return next;
 };
 

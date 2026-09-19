@@ -6,6 +6,7 @@ export default defineSchema({
     ownerKey: v.string(),
     name: v.string(),
     sceneJson: v.string(),
+    previewDataUrl: v.optional(v.string()),
     updatedAt: v.number(),
   }).index("by_ownerKey", ["ownerKey"]),
 

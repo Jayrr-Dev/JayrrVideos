@@ -83,6 +83,8 @@ type _ExcalidrawElementBase = Readonly<{
   created: number | null;
   link: string | null;
   locked: boolean;
+  /** Inset for bound text inside this container. Falls back to BOUND_TEXT_PADDING. */
+  innerPadding?: number;
   customData?: Record<string, any>;
 }>;
 

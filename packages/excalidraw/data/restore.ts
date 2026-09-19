@@ -6,67 +6,62 @@ import {
 } from "@excalidraw/math";
 
 import {
-  colorToHex,
+  arrayToMap,
   COLOR_TOP_PICKS_SLOTS,
+  colorToHex,
   type CombineBrandsIfNeeded,
+  DEFAULT_ELEMENT_PROPS,
   DEFAULT_FONT_FAMILY,
   DEFAULT_FONT_SIZE,
+  DEFAULT_GRID_SIZE,
+  DEFAULT_GRID_STEP,
+  DEFAULT_SIDEBAR,
   DEFAULT_STROKE_STREAMLINE,
   DEFAULT_TEXT_ALIGN,
   DEFAULT_VERTICAL_ALIGN,
   FONT_FAMILY,
-  ROUNDNESS,
-  DEFAULT_SIDEBAR,
-  DEFAULT_ELEMENT_PROPS,
-  DEFAULT_GRID_SIZE,
-  DEFAULT_GRID_STEP,
-  randomId,
-  getUpdatedTimestamp,
-  updateActiveTool,
-  arrayToMap,
-  getSizeFromPoints,
-  normalizeLink,
   getLineHeight,
+  getSizeFromPoints,
+  getUpdatedTimestamp,
+  isTransparent,
+  normalizeLink,
+  randomId,
+  ROUNDNESS,
   STROKE_WIDTH,
   STROKE_WIDTH_KEYS,
   type StrokeWidthKey,
-  isTransparent,
+  updateActiveTool,
 } from "@excalidraw/common";
 import {
-  calculateFixedPointForNonElbowArrowBinding,
-  getNonDeletedElements,
-  normalizeArrowhead,
-  isPointInElement,
-  isValidPolygon,
-  projectFixedPointOntoDiagonal,
-  isNonDeletedElement,
-} from "@excalidraw/element";
-import { normalizeFixedPoint } from "@excalidraw/element";
-import {
-  updateElbowArrowPoints,
-  validateElbowPoints,
-} from "@excalidraw/element";
-import { LinearElementEditor } from "@excalidraw/element";
-import {
   bumpVersion,
+  calculateFixedPointForNonElbowArrowBinding,
+  detectLineHeight,
+  getBoundTextElement,
+  getContainerElement,
+  getNonDeletedElements,
   getStickyNoteLayout,
-  isStickyNoteBoundText,
-  normalizeStickyNote,
-  normalizeStickyNoteBackgroundColor,
-  normalizeStickyNoteFontSize,
-  normalizeStickyNoteStrokeColor,
-} from "@excalidraw/element";
-import { getBoundTextElement, getContainerElement } from "@excalidraw/element";
-import { isStickyNoteElement } from "@excalidraw/element";
-import { detectLineHeight } from "@excalidraw/element";
-import {
   isArrowBoundToElement,
   isArrowElement,
   isElbowArrow,
   isLinearElement,
   isLineElement,
+  isNonDeletedElement,
+  isPointInElement,
+  isStickyNoteBoundText,
+  isStickyNoteElement,
   isTextElement,
   isUsingAdaptiveRadius,
+  isValidPolygon,
+  LinearElementEditor,
+  normalizeArrowhead,
+  normalizeFixedPoint,
+  normalizeStickyNote,
+  normalizeStickyNoteBackgroundColor,
+  normalizeStickyNoteFontSize,
+  normalizeStickyNoteStrokeColor,
+  projectFixedPointOntoDiagonal,
+  updateElbowArrowPoints,
+  validateElbowPoints,
 } from "@excalidraw/element";
 
 import {
@@ -98,8 +93,8 @@ import type {
   NonDeleted,
   NonDeletedSceneElementsMap,
   OrderedExcalidrawElement,
-  StrokeVariability,
   StrokeRoundness,
+  StrokeVariability,
 } from "@excalidraw/element/types";
 
 import type { MarkOptional, Mutable } from "@excalidraw/common/utility-types";
@@ -430,8 +425,9 @@ const repairBinding = <T extends ExcalidrawArrowElement>(
 };
 
 const restoreElementWithProperties = <
-  T extends Required<Omit<ExcalidrawElement, "customData">> & {
+  T extends Required<Omit<ExcalidrawElement, "customData" | "innerPadding">> & {
     customData?: ExcalidrawElement["customData"];
+    innerPadding?: ExcalidrawElement["innerPadding"];
     /** @deprecated */
     boundElementIds?: readonly ExcalidrawElement["id"][];
     /** @deprecated */
@@ -446,7 +442,12 @@ const restoreElementWithProperties = <
     // @ts-ignore TS complains here but type checks the call sites fine.
     keyof K
   > &
-    Partial<Pick<ExcalidrawElement, "type" | "x" | "y" | "customData">>,
+    Partial<
+      Pick<
+        ExcalidrawElement,
+        "type" | "x" | "y" | "customData" | "innerPadding"
+      >
+    >,
 ): T => {
   const base: Pick<T, keyof ExcalidrawElement> = {
     type: extra.type || element.type,
@@ -497,6 +498,11 @@ const restoreElementWithProperties = <
   if ("customData" in element || "customData" in extra) {
     base.customData =
       "customData" in extra ? extra.customData : element.customData;
+  }
+
+  if ("innerPadding" in element || "innerPadding" in extra) {
+    base.innerPadding =
+      "innerPadding" in extra ? extra.innerPadding : element.innerPadding;
   }
 
   const ret = {

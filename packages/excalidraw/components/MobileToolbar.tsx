@@ -1,7 +1,7 @@
-import { useState, useEffect } from "react";
 import clsx from "clsx";
+import { useEffect, useState } from "react";
 
-import { KEYS, capitalizeString } from "@excalidraw/common";
+import { capitalizeString, KEYS } from "@excalidraw/common";
 
 import { t } from "../i18n";
 
@@ -23,21 +23,20 @@ import {
 } from "./Tools";
 
 import {
-  TextIcon,
-  ImageIcon,
-  DotsIcon,
-  frameToolIcon,
-  EmbedIcon,
-  laserPointerToolIcon,
-  drawShapeToolIcon,
   bucketFillIcon,
-  mermaidLogoIcon,
+  DotsIcon,
+  drawShapeToolIcon,
+  EmbedIcon,
+  ImageIcon,
+  laserPointerToolIcon,
   MagicIcon,
+  mermaidLogoIcon,
   stickyNoteToolIcon,
+  TextIcon,
 } from "./icons";
 
-import "./ToolIcon.scss";
 import "./MobileToolbar.scss";
+import "./ToolIcon.scss";
 
 import type { AppClassProperties, UIAppState } from "../types";
 
@@ -74,7 +73,6 @@ export const MobileToolbar = ({ app, setAppState }: MobileToolbarProps) => {
     }
   }, [activeTool.type]);
 
-  const frameToolSelected = activeTool.type === "frame";
   const drawShapeToolSelected = activeTool.type === "autoshape";
   const laserToolSelected = activeTool.type === "laser";
   const embeddableToolSelected = activeTool.type === "embeddable";
@@ -104,20 +102,18 @@ export const MobileToolbar = ({ app, setAppState }: MobileToolbarProps) => {
   const WIDTH = 36;
   const GAP = 4;
 
-  // hand, selection, freedraw, eraser, rectangle, arrow, others
-  const MIN_TOOLS = 7;
+  // hand, frame, selection, freedraw, eraser, rectangle, arrow, others
+  const MIN_TOOLS = 8;
   const MIN_WIDTH = MIN_TOOLS * WIDTH + (MIN_TOOLS - 1) * GAP;
   const ADDITIONAL_WIDTH = WIDTH + GAP;
 
   const showTextToolOutside = toolbarWidth >= MIN_WIDTH + 1 * ADDITIONAL_WIDTH;
   const showImageToolOutside = toolbarWidth >= MIN_WIDTH + 2 * ADDITIONAL_WIDTH;
-  const showFrameToolOutside = toolbarWidth >= MIN_WIDTH + 3 * ADDITIONAL_WIDTH;
 
   const extraTools: readonly typeof activeTool.type[] = (
     [
       "text",
       "stickynote",
-      "frame",
       "embeddable",
       "laser",
       "bucketfill",
@@ -125,9 +121,6 @@ export const MobileToolbar = ({ app, setAppState }: MobileToolbarProps) => {
     ] as const
   ).filter((tool) => {
     if (showTextToolOutside && tool === "text") {
-      return false;
-    }
-    if (showFrameToolOutside && tool === "frame") {
       return false;
     }
     return true;
@@ -138,8 +131,6 @@ export const MobileToolbar = ({ app, setAppState }: MobileToolbarProps) => {
       ? TextIcon
       : activeTool.type === "image"
       ? ImageIcon
-      : activeTool.type === "frame"
-      ? frameToolIcon
       : activeTool.type === "stickynote"
       ? stickyNoteToolIcon
       : activeTool.type === "embeddable"
@@ -166,6 +157,9 @@ export const MobileToolbar = ({ app, setAppState }: MobileToolbarProps) => {
     >
       {/* Hand Tool */}
       <HandToolButton {...toolProps} hideKeyBinding />
+
+      {/* Frame Tool */}
+      <FrameToolButton {...toolProps} hideShortcut />
 
       {/* Selection Tool */}
       <SelectionToolPopover {...toolProps} setAppState={setAppState} />
@@ -224,9 +218,6 @@ export const MobileToolbar = ({ app, setAppState }: MobileToolbarProps) => {
 
       {/* Image */}
       {showImageToolOutside && <ImageToolButton {...toolProps} hideShortcut />}
-
-      {/* Frame Tool */}
-      {showFrameToolOutside && <FrameToolButton {...toolProps} hideShortcut />}
 
       {/* Other Shapes */}
       <DropdownMenu open={isOtherShapesMenuOpen}>
@@ -293,19 +284,6 @@ export const MobileToolbar = ({ app, setAppState }: MobileToolbarProps) => {
           >
             {t("toolBar.stickynote")}
           </DropdownMenu.Item>
-
-          {!showFrameToolOutside && (
-            <DropdownMenu.Item
-              onSelect={() => app.setActiveTool({ type: "frame" })}
-              icon={frameToolIcon}
-              shortcut={KEYS.F.toLocaleUpperCase()}
-              data-testid="toolbar-frame"
-              selected={frameToolSelected}
-              disabled={isToolButtonDisabled(app, "frame")}
-            >
-              {t("toolBar.frame")}
-            </DropdownMenu.Item>
-          )}
           <DropdownMenu.Item
             onSelect={() => app.setActiveTool({ type: "embeddable" })}
             icon={EmbedIcon}
