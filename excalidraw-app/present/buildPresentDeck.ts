@@ -119,6 +119,7 @@ export type PresentStep =
 export type PresentSound = {
   id: string;
   name: string;
+  path?: string;
 };
 
 export type PresentObject = {
@@ -365,7 +366,12 @@ const readPresentSound = (value: unknown): PresentSound | null => {
   if (typeof name !== "string" || !name.trim()) {
     return null;
   }
-  return { id: id.trim(), name: name.trim() };
+  const path = Reflect.get(value, "path");
+  return {
+    id: id.trim(),
+    name: name.trim(),
+    path: typeof path === "string" && path.trim() ? path.trim() : undefined,
+  };
 };
 
 const readPresentBag = (element: ExcalidrawElement): PresentBag => {

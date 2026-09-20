@@ -46,6 +46,7 @@ import { LiveWidgetToolbar } from "../ui/LiveWidgetToolbar";
 import { useRegisterWidgetToolbar } from "../widgetToolbarRegistry";
 
 import {
+  EMOTION_BANDS,
   EMOTION_QUESTION,
   emotionsFromAnswers,
   type EmotionPick,
@@ -63,6 +64,7 @@ import {
 import {
   MBTI_BANDS,
   MBTI_QUESTIONS,
+  averageMbti,
   mbtiFromAnswers,
   type MbtiResult,
 } from "./jevMbtiScale";
@@ -102,7 +104,7 @@ type TurnIq = {
 };
 
 const jevScoringOn = (config: TranscribeConfig) =>
-  config.jevIq || config.jevMbti;
+  config.jevIq || config.jevMbti || config.jevEmotion;
 
 const questionsForConfig = (config: TranscribeConfig) => {
   const questions: Array<
@@ -111,7 +113,10 @@ const questionsForConfig = (config: TranscribeConfig) => {
     | typeof MBTI_QUESTIONS[number]
   > = [];
   if (config.jevIq) {
-    questions.push(...IQ_QUESTIONS, EMOTION_QUESTION);
+    questions.push(...IQ_QUESTIONS);
+  }
+  if (config.jevEmotion) {
+    questions.push(EMOTION_QUESTION);
   }
   if (config.jevMbti) {
     questions.push(...MBTI_QUESTIONS);
@@ -617,7 +622,7 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
     });
     return {
       result: scoring.jevIq ? compositeFromAnswers(result.answers) : null,
-      emotion: scoring.jevIq ? emotionsFromAnswers(result.answers) : [],
+      emotion: scoring.jevEmotion ? emotionsFromAnswers(result.answers) : [],
       mbti: scoring.jevMbti ? mbtiFromAnswers(result.answers) : null,
     };
   }, []);
@@ -768,6 +773,32 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
     }
     return map;
   }, [scores]);
+
+  const mbtiBySpeaker = useMemo(() => {
+    const groups = new Map<number, MbtiResult[]>();
+    const add = (speaker: number | null, mbti: MbtiResult | null) => {
+      if (speaker === null || !mbti) {
+        return;
+      }
+      const list = groups.get(speaker) ?? [];
+      list.push(mbti);
+      groups.set(speaker, list);
+    };
+    for (const row of scores) {
+      add(row.speaker, row.mbti);
+    }
+    if (live) {
+      add(live.speaker, live.mbti);
+    }
+    const map = new Map<number, MbtiResult>();
+    for (const [speaker, rows] of groups) {
+      const average = averageMbti(rows);
+      if (average) {
+        map.set(speaker, average);
+      }
+    }
+    return map;
+  }, [live, scores]);
 
   const start = async () => {
     if (busy) {
@@ -1016,6 +1047,38 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
               ))}
             </div>
           </div>
+          <div className="jayrr-called-embed__card">
+            <div className="jayrr-called-embed__title jayrr-called-embed__title--row">
+              <div className="jayrr-called-embed__label">Jev Emotion</div>
+              <button
+                type="button"
+                className={
+                  config.jevEmotion
+                    ? "jayrr-called-embed__switch is-on"
+                    : "jayrr-called-embed__switch"
+                }
+                aria-pressed={config.jevEmotion}
+                aria-label="Score speech with Jev Emotion"
+                onClick={() => {
+                  const next = { ...config, jevEmotion: !config.jevEmotion };
+                  resetIq();
+                  applyConfig(next, true);
+                }}
+              >
+                <span className="jayrr-called-embed__knob" />
+              </button>
+            </div>
+            <div className="jayrr-called-embed__bands jayrr-called-embed__bands--emotion">
+              {EMOTION_BANDS.map((band) => (
+                <span
+                  key={band.tone}
+                  className={`jayrr-called-embed__emo jayrr-called-embed__emo--${band.tone}`}
+                >
+                  {band.label}
+                </span>
+              ))}
+            </div>
+          </div>
         </div>
       ) : (
         <>
@@ -1077,7 +1140,7 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
                             </button>
                             {jevScoringOn(config) ? (
                               <div className="jayrr-called-embed__who-badges">
-                                {config.jevIq
+                                {config.jevEmotion
                                   ? emotions.map((emotion) => (
                                       <EmotionBadge
                                         key={emotion.id}
@@ -1108,15 +1171,23 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
                 )}
               </div>
             </div>
-            <aside className="jayrr-called-embed__now">
+            <aside
+              className={
+                config.jevMbti
+                  ? "jayrr-called-embed__now jayrr-called-embed__now--mbti"
+                  : "jayrr-called-embed__now"
+              }
+            >
               <div className="jayrr-called-embed__now-label">Speaker</div>
               <div className="jayrr-called-embed__now-list">
                 {speakers.map((speaker) => {
-                  const live = liveSpeaker === speaker;
-                  if (editingSpeaker === speaker) {
-                    return (
+                  const liveNow = liveSpeaker === speaker;
+                  const speakerMbti = config.jevMbti
+                    ? mbtiBySpeaker.get(speaker)
+                    : undefined;
+                  const nameControl =
+                    editingSpeaker === speaker ? (
                       <input
-                        key={speaker}
                         className="jayrr-called-embed__who-input"
                         style={speakerHueStyle(speaker, speakers)}
                         autoFocus
@@ -1131,22 +1202,25 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
                           }
                         }}
                       />
+                    ) : (
+                      <button
+                        type="button"
+                        className={
+                          liveNow
+                            ? "jayrr-called-embed__now-name is-live"
+                            : "jayrr-called-embed__now-name"
+                        }
+                        style={speakerHueStyle(speaker, speakers)}
+                        onClick={() => setEditingSpeaker(speaker)}
+                      >
+                        {speakerLabel(speaker, names)}
+                      </button>
                     );
-                  }
                   return (
-                    <button
-                      key={speaker}
-                      type="button"
-                      className={
-                        live
-                          ? "jayrr-called-embed__now-name is-live"
-                          : "jayrr-called-embed__now-name"
-                      }
-                      style={speakerHueStyle(speaker, speakers)}
-                      onClick={() => setEditingSpeaker(speaker)}
-                    >
-                      {speakerLabel(speaker, names)}
-                    </button>
+                    <div key={speaker} className="jayrr-called-embed__now-row">
+                      {nameControl}
+                      {speakerMbti ? <MbtiBadge mbti={speakerMbti} /> : null}
+                    </div>
                   );
                 })}
               </div>

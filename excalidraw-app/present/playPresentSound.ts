@@ -1,4 +1,5 @@
 import { api, convexClient } from "../convexClient";
+import { jayrrSoundPlayUrls } from "../sounds/jayrrSoundPlayback";
 
 import type { Id } from "../../convex/_generated/dataModel";
 import type { PresentDeck, PresentSound } from "./buildPresentDeck";
@@ -16,17 +17,21 @@ const stopAudio = (audio: HTMLAudioElement | null) => {
   audio.load();
 };
 
-const resolveUrl = async (sound: PresentSound) => {
+const resolveUrls = async (sound: PresentSound) => {
+  const localUrls = jayrrSoundPlayUrls(null, sound.path ?? "");
   if (!convexClient) {
-    return null;
+    return localUrls;
   }
   try {
     const row = await convexClient.query(api.sounds.get, {
       soundId: sound.id as Id<"sounds">,
     });
-    return row?.url ?? null;
+    if (!row) {
+      return localUrls;
+    }
+    return jayrrSoundPlayUrls(row.url, row.path || sound.path || "");
   } catch {
-    return null;
+    return localUrls;
   }
 };
 
@@ -49,21 +54,57 @@ const playUrl = async (
 };
 
 const playBed = async (sound: PresentSound, key: string) => {
-  const url = await resolveUrl(sound);
-  if (!url || bedKey !== key) {
+  const immediate = jayrrSoundPlayUrls(null, sound.path ?? "");
+  stopAudio(bed);
+  for (const url of immediate) {
+    if (bedKey !== key) {
+      return;
+    }
+    bed = await playUrl(bed, url, true);
+    if (bed && !bed.paused) {
+      return;
+    }
+  }
+  const urls = await resolveUrls(sound);
+  if (urls.length === 0 || bedKey !== key) {
     return;
   }
-  stopAudio(bed);
-  bed = await playUrl(bed, url, true);
+  for (const url of urls) {
+    if (bedKey !== key) {
+      return;
+    }
+    if (immediate.includes(url)) {
+      continue;
+    }
+    bed = await playUrl(bed, url, true);
+    if (bed && !bed.paused) {
+      return;
+    }
+  }
 };
 
 const playSfx = async (sound: PresentSound) => {
-  const url = await resolveUrl(sound);
-  if (!url) {
+  const immediate = jayrrSoundPlayUrls(null, sound.path ?? "");
+  stopAudio(sfx);
+  for (const url of immediate) {
+    sfx = await playUrl(sfx, url, false);
+    if (sfx && !sfx.paused) {
+      return;
+    }
+  }
+  const urls = await resolveUrls(sound);
+  if (urls.length === 0) {
     return;
   }
-  stopAudio(sfx);
-  sfx = await playUrl(sfx, url, false);
+  for (const url of urls) {
+    if (immediate.includes(url)) {
+      continue;
+    }
+    sfx = await playUrl(sfx, url, false);
+    if (sfx && !sfx.paused) {
+      return;
+    }
+  }
 };
 
 export const stopPresentSounds = () => {

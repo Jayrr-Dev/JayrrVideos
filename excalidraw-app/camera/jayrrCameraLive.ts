@@ -13,6 +13,7 @@ import {
   isJayrrDisplay,
   readJayrrCamera,
 } from "./jayrrCamera";
+import { getJayrrCameraCutout } from "./jayrrCameraCutout";
 
 const videos = new Map<string, HTMLVideoElement>();
 
@@ -67,20 +68,20 @@ const clipFill = (
 
 const drawFitted = (
   context: CanvasRenderingContext2D,
-  video: HTMLVideoElement,
+  source: CanvasImageSource,
+  sourceW: number,
+  sourceH: number,
   width: number,
   height: number,
   contain: boolean,
 ) => {
-  const sourceW = video.videoWidth || width;
-  const sourceH = video.videoHeight || height;
   const scale = contain
     ? Math.min(width / sourceW, height / sourceH)
     : Math.max(width / sourceW, height / sourceH);
   const drawW = sourceW * scale;
   const drawH = sourceH * scale;
   context.drawImage(
-    video,
+    source,
     (width - drawW) / 2,
     (height - drawH) / 2,
     drawW,
@@ -185,7 +186,26 @@ export const paintJayrrCameraLive = (
       context.translate(width, 0);
       context.scale(-1, 1);
     }
-    drawFitted(context, video, width, height, isJayrrDisplay(camera));
+    const cutout = getJayrrCameraCutout(element.id);
+    let source: CanvasImageSource = video;
+    let sourceW = video.videoWidth || width;
+    let sourceH = video.videoHeight || height;
+    if (cutout) {
+      if (cutout.width > 1 && cutout.height > 1) {
+        source = cutout;
+        sourceW = cutout.width;
+        sourceH = cutout.height;
+      }
+    }
+    drawFitted(
+      context,
+      source,
+      sourceW,
+      sourceH,
+      width,
+      height,
+      isJayrrDisplay(camera),
+    );
     paintCaption(context, readCaption(element.id), width, height);
   } catch {
     // A bad video frame must not wipe the rest of the scene.

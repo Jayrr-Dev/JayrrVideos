@@ -114,6 +114,27 @@ export const list = query({
   },
 });
 
+/** Recent recordings across all folders — for the video editor picker. */
+export const listRecent = query({
+  args: {
+    limit: v.optional(v.number()),
+  },
+  returns: v.array(recordingRow),
+  handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
+    const limit = Math.min(
+      80,
+      Math.max(1, Math.floor(args.limit ?? 40)),
+    );
+    const rows = await ctx.db
+      .query("presentRecordings")
+      .withIndex("by_user_and_created", (q) => q.eq("userId", user._id))
+      .order("desc")
+      .take(limit);
+    return rows.map(mapRecording);
+  },
+});
+
 export const save = mutation({
   args: {
     sceneId: v.optional(v.id("scenes")),

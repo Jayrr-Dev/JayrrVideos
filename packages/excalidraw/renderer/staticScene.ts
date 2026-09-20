@@ -5,24 +5,22 @@ import {
   THEME,
   throttleRAF,
 } from "@excalidraw/common";
-import { isElementLink } from "@excalidraw/element";
-import { createPlaceholderEmbeddableLabel } from "@excalidraw/element";
-import { getBoundTextElement } from "@excalidraw/element";
 import {
+  createPlaceholderEmbeddableLabel,
+  elementOverlapsWithFrame,
+  getBoundTextElement,
+  getTargetFrame,
+  isElementLink,
   isEmbeddableElement,
   isIframeLikeElement,
   isTextElement,
-} from "@excalidraw/element";
-import {
-  elementOverlapsWithFrame,
-  getTargetFrame,
   shouldApplyFrameClip,
 } from "@excalidraw/element";
 
 import {
   getRenderElementWithPositionOverride,
-  resolveElementRenderState,
   renderElement,
+  resolveElementRenderState,
 } from "@excalidraw/element";
 
 import { getElementAbsoluteCoords } from "@excalidraw/element";
@@ -37,8 +35,8 @@ import type {
 } from "@excalidraw/element/types";
 
 import {
-  EXTERNAL_LINK_IMG,
   ELEMENT_LINK_IMG,
+  EXTERNAL_LINK_IMG,
   getLinkHandleFromCoords,
 } from "../components/hyperlink/helpers";
 
@@ -378,7 +376,7 @@ const _renderStaticScene = ({
     const isTranslated = (state: ElementRenderState) =>
       state.offset.x !== 0 || state.offset.y !== 0;
     if (
-      renderState.scale === 1 &&
+      !renderState.lockView &&
       ((element.frameId === frame.id &&
         (isTranslated(renderState) || isTranslated(frameState))) ||
         shouldApplyFrameClip(

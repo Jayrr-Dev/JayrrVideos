@@ -815,6 +815,12 @@ export type ElementRenderOverride = Readonly<{
    */
   scale?: number;
   /**
+   * Keep this element's center at a fixed CSS-pixel position. Offset and
+   * scale are resolved at draw time from the renderer's actual viewport so
+   * a camera move cannot desync them.
+   */
+  lockScreen?: Readonly<{ x: number; y: number; zoom: number }>;
+  /**
    * Masks a text element without editing its string. Ignored for other types.
    * Omitted, or progress at 1: draw the document text.
    * typewriter uncovers glyphs in reading order. words fades each word in

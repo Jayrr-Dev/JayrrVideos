@@ -16,6 +16,10 @@
   background: #111;
 }
 
+.jayrr-camera-window__cutout {
+  display: none;
+}
+
 .jayrr-camera-window__video.is-mirror {
   transform: scaleX(-1);
 }

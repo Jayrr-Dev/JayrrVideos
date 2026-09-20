@@ -1305,12 +1305,6 @@ const SortableFrameBlock = ({
             onCancel={onCancel}
           />
         </PresentEffectMenu>
-        <PresentSoundCue
-          sound={sound}
-          label="Frame sound"
-          disabled={renaming}
-          onSound={onSound}
-        />
         <button
           type="button"
           className={
@@ -1327,6 +1321,12 @@ const SortableFrameBlock = ({
         >
           <span className="jayrr-present__collapse">{chevronDownIcon}</span>
         </button>
+        <PresentSoundCue
+          sound={sound}
+          label="Frame sound"
+          disabled={renaming}
+          onSound={onSound}
+        />
       </div>
       {collapsed ? null : children}
     </li>
@@ -1392,6 +1392,7 @@ const SortableObjectBlock = ({
   onCommit: () => void;
   onCancel: () => void;
   onEffect: (effect: PresentEffect | null) => void;
+  onCamera: (camera: PresentCamera | null) => void;
   onMotion: (motion: PresentMotion | null) => void;
   onExit: (exit: PresentExit | null) => void;
   onTranslation: (translation: PresentTranslation | null) => void;
@@ -1423,6 +1424,7 @@ const SortableObjectBlock = ({
     >
       <PresentEffectMenu
         effect={effect}
+        camera={camera}
         motion={motion}
         exit={exit}
         translation={translation}
@@ -1434,6 +1436,7 @@ const SortableObjectBlock = ({
         disabled={renaming}
         placeIds={placeIds}
         onEffect={onEffect}
+        onCamera={onCamera}
         onMotion={onMotion}
         onExit={onExit}
         onTranslation={onTranslation}
@@ -1456,13 +1459,13 @@ const SortableObjectBlock = ({
           onCancel={onCancel}
         />
       </PresentEffectMenu>
+      <span className="jayrr-present__sound-gutter" aria-hidden="true" />
       <PresentSoundCue
         sound={sound}
         label="Object sound"
         disabled={renaming}
         onSound={onSound}
       />
-      <span className="jayrr-present__sound-gutter" aria-hidden="true" />
     </li>
   );
 };
@@ -1736,6 +1739,29 @@ export const JayrrPresentPanel = ({
         }
         return newElementWith(element, {
           customData: writePresentEffect(element, effect),
+        });
+      });
+      api.updateScene({
+        elements: next,
+        captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+      });
+    },
+    [api],
+  );
+
+  const persistPresentCamera = useCallback(
+    (ids: readonly string[], camera: PresentCamera | null) => {
+      if (!api || ids.length === 0) {
+        return;
+      }
+      const targets = new Set(ids);
+      const all = api.getSceneElementsIncludingDeleted();
+      const next = all.map((element) => {
+        if (!targets.has(element.id)) {
+          return element;
+        }
+        return newElementWith(element, {
+          customData: writePresentCamera(element, camera),
         });
       });
       api.updateScene({
@@ -2058,6 +2084,7 @@ export const JayrrPresentPanel = ({
                                   renaming={renamingId === object.id}
                                   draftName={draftName}
                                   effect={object.effect}
+                                  camera={object.camera}
                                   motion={object.motion}
                                   exit={object.exit}
                                   translation={object.translation}
@@ -2084,6 +2111,12 @@ export const JayrrPresentPanel = ({
                                     persistPresentEffect(
                                       object.memberIds,
                                       effect,
+                                    )
+                                  }
+                                  onCamera={(camera) =>
+                                    persistPresentCamera(
+                                      object.memberIds,
+                                      camera,
                                     )
                                   }
                                   onMotion={(motion) =>

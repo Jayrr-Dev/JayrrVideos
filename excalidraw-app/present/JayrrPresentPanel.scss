@@ -251,10 +251,10 @@
 
     img,
     video {
+      display: block;
       width: 100%;
       height: 100%;
       object-fit: cover;
-      display: block;
     }
   }
 
@@ -325,38 +325,14 @@
 
   .jayrr-present__recording-thumb img,
   .jayrr-present__recording-thumb video {
+    position: absolute;
+    inset: 0;
+    display: block;
     width: 100%;
     height: 100%;
     object-fit: cover;
     pointer-events: none;
-  }
-
-  .jayrr-present__recording-play {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #fff;
-    background: rgb(0 0 0 / 22%);
-    pointer-events: none;
-  }
-
-  .jayrr-present__recording-thumb:hover .jayrr-present__recording-play {
-    background: rgb(0 0 0 / 38%);
-  }
-
-  .jayrr-present__recording-play svg {
-    width: 1.35rem;
-    height: 1.35rem;
-  }
-
-  .jayrr-present__recording-probe {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    opacity: 0;
-    pointer-events: none;
+    background: #1a1a1a;
   }
 
   .jayrr-present__recording-badges {
@@ -479,7 +455,7 @@
 
   .jayrr-present__row {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 1.55rem 1.5rem;
+    grid-template-columns: minmax(0, 1fr) 1.5rem 1.55rem;
     align-items: center;
     gap: 0.15rem;
     border-radius: var(--border-radius-md);
@@ -494,7 +470,7 @@
 
   .jayrr-present__frame-head {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 1.55rem 1.5rem;
+    grid-template-columns: minmax(0, 1fr) 1.5rem 1.55rem;
     align-items: center;
     gap: 0.15rem;
     border-radius: var(--border-radius-md);
@@ -856,6 +832,7 @@
   }
 
   .jayrr-present__sound-cue {
+    justify-self: end;
     display: flex;
     align-items: center;
     justify-content: center;

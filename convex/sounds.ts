@@ -22,6 +22,8 @@ const soundRow = v.object({
   durationSec: v.number(),
   sampleRate: v.number(),
   centroidHz: v.number(),
+  loudnessDb: v.union(v.number(), v.null()),
+  hasAudio: v.boolean(),
   url: v.union(v.string(), v.null()),
 });
 
@@ -37,6 +39,8 @@ const toSoundRow = async (ctx: QueryCtx, row: Doc<"sounds">) => {
     durationSec: row.durationSec,
     sampleRate: row.sampleRate,
     centroidHz: row.centroidHz,
+    loudnessDb: row.loudnessDb ?? null,
+    hasAudio: Boolean(row.storageId),
     url,
   };
 };

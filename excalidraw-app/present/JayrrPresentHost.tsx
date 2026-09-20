@@ -108,6 +108,8 @@ export const JayrrPresentHost = ({
     startPresent,
     stopPresent,
     goNext,
+    seekStep,
+    clearPreview,
   } = usePresentPlayback(elements);
   const trapRef = useRef<HTMLDivElement | null>(null);
   usePresentCursorIdle(presenting);
@@ -350,18 +352,18 @@ export const JayrrPresentHost = ({
                 {presentationIcon}
               </Sidebar.TabTrigger>
               <Sidebar.TabTrigger
-                tab={JAYRR_EDITOR_TAB}
-                title="Video editor"
-                aria-label="Video editor"
-              >
-                {editorTabIcon}
-              </Sidebar.TabTrigger>
-              <Sidebar.TabTrigger
                 tab={JAYRR_RECORDINGS_TAB}
                 title="Recordings"
                 aria-label="Recordings"
               >
                 {recordingsTabIcon}
+              </Sidebar.TabTrigger>
+              <Sidebar.TabTrigger
+                tab={JAYRR_EDITOR_TAB}
+                title="Video editor"
+                aria-label="Video editor"
+              >
+                {editorTabIcon}
               </Sidebar.TabTrigger>
             </DefaultSidebar.TabTriggers>
             <DefaultSidebar.TrailingTabTriggers>
@@ -378,7 +380,13 @@ export const JayrrPresentHost = ({
             </DefaultSidebar.TrailingTabTriggers>
             <Sidebar.Tab tab={JAYRR_EDITOR_TAB}>
               <TopErrorBoundary compact>
-                <JayrrEditorPanel />
+                <JayrrEditorPanel
+                  deck={deck}
+                  presenting={presenting}
+                  stepIndex={stepIndex}
+                  seekStep={seekStep}
+                  clearPreview={clearPreview}
+                />
               </TopErrorBoundary>
             </Sidebar.Tab>
             <Sidebar.Tab tab={JAYRR_CALLED_OBJECTS_TAB}>

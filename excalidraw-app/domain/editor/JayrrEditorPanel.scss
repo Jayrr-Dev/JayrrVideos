@@ -1,0 +1,269 @@
+.excalidraw {
+  .jayrr-editor-panel {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .jayrr-editor-panel__info {
+    display: inline-flex;
+    color: var(--color-gray-70);
+    flex-shrink: 0;
+
+    svg {
+      width: 1rem;
+      height: 1rem;
+    }
+  }
+
+  .jayrr-editor-panel__body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    flex: 1;
+    min-height: 0;
+    padding: 0 0.75rem 1rem;
+  }
+
+  .jayrr-editor-panel__transport {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+  }
+
+  .jayrr-editor-panel__clock {
+    font-size: 0.8rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-primary-color);
+    margin-left: 0.15rem;
+  }
+
+  .jayrr-editor-panel__zoom {
+    margin-left: auto;
+    display: inline-flex;
+    gap: 0.25rem;
+  }
+
+  .jayrr-editor-panel__zoom-btn {
+    border: 1px solid var(--default-border-color);
+    background: var(--color-surface-low);
+    color: var(--text-primary-color);
+    border-radius: var(--border-radius-md);
+    font-size: 0.7rem;
+    padding: 0.2rem 0.45rem;
+    cursor: pointer;
+  }
+
+  .jayrr-editor-panel__zoom-btn.is-active {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+    background: var(--color-surface-mid);
+  }
+
+  .jayrr-editor-panel__empty {
+    margin: 0.5rem 0 0;
+    font-size: 0.85rem;
+    color: var(--color-gray-60);
+  }
+
+  .jayrr-editor-timeline {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    border: 1px solid var(--default-border-color);
+    border-radius: var(--border-radius-md);
+    background: var(--color-surface-low);
+    overflow: hidden;
+  }
+
+  .jayrr-editor-timeline__head {
+    display: grid;
+    grid-template-columns: 2.75rem 1fr 3.25rem;
+    gap: 0;
+    border-bottom: 1px solid var(--default-border-color);
+    background: var(--color-surface-mid);
+    flex-shrink: 0;
+  }
+
+  .jayrr-editor-timeline__col-label {
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: var(--color-gray-60);
+    padding: 0.35rem 0.4rem;
+  }
+
+  .jayrr-editor-timeline__col-label--ruler {
+    padding-left: 0.35rem;
+  }
+
+  .jayrr-editor-timeline__body {
+    flex: 1;
+    min-height: 12rem;
+    overflow: auto;
+    position: relative;
+    cursor: ns-resize;
+    outline: none;
+  }
+
+  .jayrr-editor-timeline__body:focus-visible {
+    box-shadow: inset 0 0 0 2px var(--color-primary);
+  }
+
+  .jayrr-editor-timeline__tracks {
+    position: relative;
+    display: grid;
+    grid-template-columns: 2.75rem 1fr 3.25rem;
+    min-width: 100%;
+  }
+
+  .jayrr-editor-timeline__ruler {
+    position: relative;
+    border-right: 1px solid var(--default-border-color);
+    background: var(--island-bg-color);
+  }
+
+  .jayrr-editor-timeline__tick {
+    position: absolute;
+    left: 0.2rem;
+    transform: translateY(-50%);
+    font-size: 0.6rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-gray-60);
+    pointer-events: none;
+    white-space: nowrap;
+  }
+
+  .jayrr-editor-timeline__lane {
+    position: relative;
+    border-right: 1px solid var(--default-border-color);
+  }
+
+  .jayrr-editor-timeline__lane--audio {
+    border-right: none;
+  }
+
+  .jayrr-editor-timeline__playhead {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--color-primary);
+    box-shadow: 0 0 0 1px rgb(0 0 0 / 12%);
+    pointer-events: none;
+    z-index: 3;
+  }
+
+  .jayrr-editor-timeline__playhead::before {
+    content: "";
+    position: absolute;
+    left: 2.35rem;
+    top: -4px;
+    width: 0;
+    height: 0;
+    border-left: 5px solid var(--color-primary);
+    border-top: 5px solid transparent;
+    border-bottom: 5px solid transparent;
+  }
+
+  .jayrr-editor-clip {
+    position: absolute;
+    left: 0.2rem;
+    right: 0.2rem;
+    display: flex;
+    align-items: flex-start;
+    margin: 0;
+    padding: 0.2rem 0.35rem;
+    border: 1px solid transparent;
+    border-radius: var(--border-radius-md);
+    text-align: left;
+    cursor: pointer;
+    overflow: hidden;
+    z-index: 1;
+  }
+
+  .jayrr-editor-clip:disabled {
+    cursor: default;
+    opacity: 0.7;
+  }
+
+  .jayrr-editor-clip__label {
+    font-size: 0.65rem;
+    line-height: 1.2;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+  }
+
+  .jayrr-editor-clip--showFrame {
+    background: #dbeafe;
+    border-color: #93c5fd;
+    color: #1e3a8a;
+  }
+
+  .jayrr-editor-clip--reveal {
+    background: #e0e7ff;
+    border-color: #a5b4fc;
+    color: #312e81;
+  }
+
+  .jayrr-editor-clip--move {
+    background: #fce7f3;
+    border-color: #f9a8d4;
+    color: #9d174d;
+  }
+
+  .jayrr-editor-clip--flushExits {
+    background: #f3f4f6;
+    border-color: #d1d5db;
+    color: #374151;
+  }
+
+  .jayrr-editor-clip--sound {
+    background: #d1fae5;
+    border-color: #6ee7b7;
+    color: #065f46;
+  }
+
+  .jayrr-editor-clip.is-active {
+    box-shadow: 0 0 0 2px var(--color-primary);
+    z-index: 2;
+  }
+
+  .theme--dark {
+    .jayrr-editor-clip--showFrame {
+      background: #1e3a5f;
+      border-color: #3b82f6;
+      color: #bfdbfe;
+    }
+
+    .jayrr-editor-clip--reveal {
+      background: #2e2a5a;
+      border-color: #818cf8;
+      color: #c7d2fe;
+    }
+
+    .jayrr-editor-clip--move {
+      background: #4a1d36;
+      border-color: #ec4899;
+      color: #fbcfe8;
+    }
+
+    .jayrr-editor-clip--flushExits {
+      background: #374151;
+      border-color: #6b7280;
+      color: #e5e7eb;
+    }
+
+    .jayrr-editor-clip--sound {
+      background: #064e3b;
+      border-color: #34d399;
+      color: #a7f3d0;
+    }
+  }
+}

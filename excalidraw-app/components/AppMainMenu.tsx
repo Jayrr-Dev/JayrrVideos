@@ -21,6 +21,7 @@ import type { Theme } from "@excalidraw/element/types";
 import { useAtomValue } from "../app-jotai";
 import { LanguageList } from "../app-language/LanguageList";
 import { isConvexLinked } from "../convexClient";
+import { JayrrFeatureFlags } from "../domain/flags";
 import {
   connectGoogleDrive,
   disconnectGoogleDrive,
@@ -204,6 +205,7 @@ export const AppMainMenu: React.FC<{
         )}
         <MainMenu.Separator />
         {isConvexLinked ? <SignOutMenuItem /> : null}
+        {isConvexLinked ? <JayrrFeatureFlags /> : null}
         <MainMenu.DefaultItems.Preferences />
         <MainMenu.DefaultItems.ToggleTheme
           allowSystemTheme

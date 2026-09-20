@@ -135,6 +135,7 @@
     appearance: none;
     width: 0.85rem;
     height: 0.85rem;
+    margin-top: calc((0.28rem - 0.85rem) / 2);
     border-radius: 50%;
     background: #fff;
     border: none;
@@ -168,10 +169,22 @@
     cursor: pointer;
   }
 
+  .jayrr-video-player__volume-slider::-webkit-slider-runnable-track {
+    height: 0.28rem;
+    border-radius: 999px;
+  }
+
+  .jayrr-video-player__volume-slider::-moz-range-track {
+    height: 0.28rem;
+    border-radius: 999px;
+    background: transparent;
+  }
+
   .jayrr-video-player__volume-slider::-webkit-slider-thumb {
     appearance: none;
     width: 0.75rem;
     height: 0.75rem;
+    margin-top: calc((0.28rem - 0.75rem) / 2);
     border-radius: 50%;
     background: #fff;
     border: none;

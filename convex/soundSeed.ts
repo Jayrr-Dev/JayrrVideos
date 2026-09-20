@@ -23,6 +23,7 @@ const soundDoc = v.object({
   durationSec: v.number(),
   sampleRate: v.number(),
   centroidHz: v.number(),
+  loudnessDb: v.optional(v.number()),
   search: v.string(),
 });
 
@@ -83,7 +84,10 @@ export const insertSounds = mutation({
         .withIndex("by_path", (q) => q.eq("path", file.path))
         .unique();
       if (existing) {
-        await ctx.db.patch(existing._id, file);
+        await ctx.db.patch(existing._id, {
+          ...file,
+          storageId: existing.storageId,
+        });
       } else {
         await ctx.db.insert("sounds", file);
       }

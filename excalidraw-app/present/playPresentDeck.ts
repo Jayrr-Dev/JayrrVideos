@@ -47,10 +47,17 @@ import {
   samplePresentTranslationOffset,
 } from "./presentTranslation";
 
+type OverlayLockScreen = {
+  x: number;
+  y: number;
+  zoom: number;
+};
+
 type OverrideValues = {
   opacity: number;
   offset: { x: number; y: number };
   scale?: number;
+  lockScreen?: OverlayLockScreen;
   textClip?: {
     kind: PresentTextEffect["kind"];
     progress: number;
@@ -130,39 +137,32 @@ const toOverrides = (
             progress: value.textClip.progress,
           }
         : undefined;
+    const lockScreen = value.lockScreen;
     const posed =
-      value.opacity < 100 ||
-      value.offset.x !== 0 ||
-      value.offset.y !== 0 ||
-      (value.scale !== undefined && value.scale !== 1);
-    if (!posed && !textClip && value.scale === undefined) {
+      value.opacity < 100 || value.offset.x !== 0 || value.offset.y !== 0;
+    if (
+      !posed &&
+      !textClip &&
+      value.scale === undefined &&
+      lockScreen === undefined
+    ) {
       continue;
     }
     const scale =
       value.scale !== undefined && Number.isFinite(value.scale)
         ? value.scale
         : undefined;
-    if (posed && textClip) {
-      next.set(id, {
-        opacity: value.opacity,
-        offset: { x: value.offset.x, y: value.offset.y },
-        ...(scale !== undefined ? { scale } : {}),
-        textClip,
-      });
-    } else if (posed) {
-      next.set(id, {
-        opacity: value.opacity,
-        offset: { x: value.offset.x, y: value.offset.y },
-        ...(scale !== undefined ? { scale } : {}),
-      });
-    } else if (textClip) {
-      next.set(id, {
-        textClip,
-        ...(scale !== undefined ? { scale } : {}),
-      });
-    } else if (scale !== undefined) {
-      next.set(id, { scale });
-    }
+    next.set(id, {
+      ...(posed
+        ? {
+            opacity: value.opacity,
+            offset: { x: value.offset.x, y: value.offset.y },
+          }
+        : {}),
+      ...(scale !== undefined ? { scale } : {}),
+      ...(lockScreen ? { lockScreen } : {}),
+      ...(textClip ? { textClip } : {}),
+    });
   }
   return next;
 };
@@ -777,6 +777,8 @@ export class PresentPlayer {
   private pending: GoToOpts | null = null;
   /** Viewport as it was before the first Focus/Zoom on this slide. */
   private viewBeforeFocus: SavedView | null = null;
+  /** Last viewport we wrote. Snapshot can lag a frame and spring the overlay. */
+  private lastView: SavedView | null = null;
   private overlayAnchors = new Map<string, OverlayAnchor>();
   private overlayIds = new Set<string>();
 
@@ -785,6 +787,7 @@ export class PresentPlayer {
     this.camGen += 1;
     this.pending = null;
     this.viewBeforeFocus = null;
+    this.lastView = null;
     this.overlayAnchors = new Map();
     this.overlayIds = new Set();
     if (this.raf) {
@@ -830,15 +833,24 @@ export class PresentPlayer {
     this.runGoTo(opts);
   }
 
+  private committedView(api: ExcalidrawImperativeAPI): SavedView {
+    return this.lastView ?? snapshotView(api);
+  }
+
+  private commitView(api: ExcalidrawImperativeAPI, view: SavedView) {
+    this.lastView = view;
+    writeView(api, view);
+  }
+
   private pinOverlays(
     api: ExcalidrawImperativeAPI,
     values: Map<string, OverrideValues>,
     capture: boolean,
+    view = this.committedView(api),
   ) {
     if (this.overlayIds.size === 0) {
       return values;
     }
-    const view = snapshotView(api);
     const zoom = view.zoom.value;
     if (zoom <= 0) {
       return values;
@@ -880,6 +892,11 @@ export class PresentPlayer {
           y: anchor.screenY / zoom - view.scrollY - cy,
         },
         scale: anchor.zoom / zoom,
+        lockScreen: {
+          x: anchor.screenX,
+          y: anchor.screenY,
+          zoom: anchor.zoom,
+        },
       });
     }
     return next;
@@ -889,8 +906,14 @@ export class PresentPlayer {
     api: ExcalidrawImperativeAPI,
     values: Map<string, OverrideValues>,
     capture: boolean,
+    view?: SavedView,
   ) {
-    const pinned = this.pinOverlays(api, values, capture);
+    const pinned = this.pinOverlays(
+      api,
+      values,
+      capture,
+      view ?? this.committedView(api),
+    );
     const overrides = toOverrides(pinned);
     publishPresentRenderOverrides(overrides);
     api.setElementRenderOverrides(overrides);
@@ -952,7 +975,7 @@ export class PresentPlayer {
     if (crossedFrame) {
       this.viewBeforeFocus = null;
     } else if (objectCamera && !this.viewBeforeFocus) {
-      this.viewBeforeFocus = snapshotView(api);
+      this.viewBeforeFocus = this.committedView(api);
     }
 
     this.gen += 1;
@@ -988,7 +1011,11 @@ export class PresentPlayer {
           : null;
       if (!dest && cameraRect) {
         if (destEffect === "focus") {
-          dest = panToRect(cameraRect, size, snapshotView(api).zoom.value);
+          dest = panToRect(
+            cameraRect,
+            size,
+            this.committedView(api).zoom.value,
+          );
         } else if (destEffect === "zoom" || destEffect === "scale") {
           const fit = containRect(
             cameraRect,
@@ -1082,7 +1109,7 @@ export class PresentPlayer {
         return null;
       }
       const size = editorSize(api);
-      const fromView = snapshotView(api);
+      const fromView = this.committedView(api);
       let destZoom: number = fromView.zoom.value;
       if (destActiveEffect === "zoom") {
         const fit = containRect(camera.target, size, ZOOM_INSET);
@@ -1134,7 +1161,8 @@ export class PresentPlayer {
         leavingFocus ||
         destActiveEffect === "zoom" ||
         destActiveEffect === "scale" ||
-        destActiveEffect === "focus";
+        destActiveEffect === "focus" ||
+        crossedFrame;
       if (waitForZoom && animate) {
         applyCamera(playEnter);
         return;
@@ -1178,12 +1206,12 @@ export class PresentPlayer {
       this.flushPending(gen);
     };
     if (duration <= 0) {
-      writeView(api, dest);
-      this.paint(api, this.current, false);
+      this.commitView(api, dest);
+      this.paint(api, this.current, false, dest);
       finish();
       return;
     }
-    const from = snapshotView(api);
+    const from = this.committedView(api);
     const start = performance.now();
     const tick = (now: number) => {
       if (this.camGen !== camGen) {
@@ -1191,14 +1219,15 @@ export class PresentPlayer {
       }
       const t = easeOutCubic(Math.min(1, (now - start) / duration));
       if (t < 1) {
-        writeView(api, mixView(from, dest, t));
-        this.paint(api, this.current, false);
+        const view = mixView(from, dest, t);
+        this.commitView(api, view);
+        this.paint(api, this.current, false, view);
         this.camRaf = requestAnimationFrame(tick);
         return;
       }
       this.camRaf = 0;
-      writeView(api, dest);
-      this.paint(api, this.current, false);
+      this.commitView(api, dest);
+      this.paint(api, this.current, false, dest);
       finish();
     };
     this.camRaf = requestAnimationFrame(tick);
@@ -1224,7 +1253,7 @@ export class PresentPlayer {
       if (!cameraFollow) {
         return;
       }
-      writeView(
+      this.commitView(
         api,
         viewForFollow(
           cameraFollow,
@@ -1235,8 +1264,8 @@ export class PresentPlayer {
     };
     const finish = () => {
       this.current = to;
-      this.paint(api, to, true);
       writeFollow(to, 1);
+      this.paint(api, to, true);
       onDone();
       this.flushPending(gen);
     };
@@ -1277,6 +1306,13 @@ export class PresentPlayer {
           });
           continue;
         }
+        if (this.overlayAnchors.has(id) && b.opacity >= 99) {
+          mixed.set(id, {
+            opacity: lerp(a.opacity, b.opacity, motionT),
+            offset: { x: b.offset.x, y: b.offset.y },
+          });
+          continue;
+        }
         mixed.set(id, {
           opacity: lerp(a.opacity, b.opacity, motionT),
           offset: {
@@ -1299,8 +1335,8 @@ export class PresentPlayer {
         }
       }
       this.current = mixed;
-      this.paint(api, mixed, false);
       writeFollow(mixed, motionT);
+      this.paint(api, mixed, false);
       if (elapsed < total) {
         this.raf = requestAnimationFrame(tick);
         return;

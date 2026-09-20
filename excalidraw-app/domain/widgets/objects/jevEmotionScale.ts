@@ -186,6 +186,25 @@ const slug = (label: string) =>
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_|_$/g, "");
 
+export const EMOTION_BANDS: readonly {
+  tone: EmotionTone;
+  label: string;
+}[] = [
+  { tone: "uncertain", label: "Uncertain" },
+  { tone: "unplanned", label: "Unplanned" },
+  { tone: "compare", label: "Compare" },
+  { tone: "beyond", label: "Beyond" },
+  { tone: "seem", label: "Seem" },
+  { tone: "together", label: "Together" },
+  { tone: "short", label: "Short" },
+  { tone: "heart", label: "Heart" },
+  { tone: "connect", label: "Connect" },
+  { tone: "hurt", label: "Hurt" },
+  { tone: "good", label: "Good" },
+  { tone: "assess", label: "Assess" },
+  { tone: "wronged", label: "Wronged" },
+];
+
 export const EMOTIONS: readonly EmotionDef[] = CLUSTERS.flatMap((cluster) =>
   cluster.labels.map((label) => ({
     id: slug(label),

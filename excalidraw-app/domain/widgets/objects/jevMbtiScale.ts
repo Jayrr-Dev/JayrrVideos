@@ -82,9 +82,16 @@ export const MBTI_QUESTIONS = MBTI_PAIRS.map((pair) => ({
   options: pair.options,
 }));
 
+export type MbtiPairScore = {
+  letter: MbtiLetter;
+  left: number;
+  right: number;
+};
+
 export type MbtiResult = {
   type: string;
   letters: Record<MbtiPairId, MbtiLetter>;
+  pairs: Record<MbtiPairId, MbtiPairScore>;
   confidence: number;
 };
 
@@ -96,46 +103,86 @@ type ChoiceAnswer = {
   confidence?: number;
 };
 
-const pickLetter = (
+const typeFromLetters = (letters: Record<MbtiPairId, MbtiLetter>) =>
+  `${letters.ei}${letters.sn}${letters.tf}${letters.jp}`;
+
+const pickPair = (
   answer: ChoiceAnswer,
   left: MbtiLetter,
   right: MbtiLetter,
-): { letter: MbtiLetter; confidence: number } => {
+): MbtiPairScore => {
   const leftP = answer.probabilities?.[left] ?? 0;
   const rightP = answer.probabilities?.[right] ?? 0;
+  if (leftP > 0 || rightP > 0) {
+    const letter = leftP >= rightP ? left : right;
+    return { letter, left: leftP, right: rightP };
+  }
   if (answer.choice === left || answer.choice === right) {
-    const letter = answer.choice;
+    const confidence =
+      typeof answer.confidence === "number" ? answer.confidence : 1;
     return {
-      letter,
-      confidence:
-        answer.probabilities?.[letter] ??
-        (typeof answer.confidence === "number" ? answer.confidence : 0),
+      letter: answer.choice,
+      left: answer.choice === left ? confidence : 1 - confidence,
+      right: answer.choice === right ? confidence : 1 - confidence,
     };
   }
-  if (leftP >= rightP) {
-    return { letter: left, confidence: leftP };
+  return { letter: left, left: 0, right: 0 };
+};
+
+const resultFromPairs = (
+  pairs: Record<MbtiPairId, MbtiPairScore>,
+): MbtiResult => {
+  const letters = {} as Record<MbtiPairId, MbtiLetter>;
+  let confidence = 0;
+  for (const pair of MBTI_PAIRS) {
+    letters[pair.id] = pairs[pair.id]?.letter ?? pair.left;
+    confidence += Math.max(
+      pairs[pair.id]?.left ?? 0,
+      pairs[pair.id]?.right ?? 0,
+    );
   }
-  return { letter: right, confidence: rightP };
+  return {
+    type: typeFromLetters(letters),
+    letters,
+    pairs,
+    confidence: confidence / MBTI_PAIRS.length,
+  };
 };
 
 export const mbtiFromAnswers = (
   answers: ReadonlyArray<{ id: string; type: string }>,
 ): MbtiResult => {
   const byId = new Map(answers.map((answer) => [answer.id, answer]));
-  const letters = {} as Record<MbtiPairId, MbtiLetter>;
-  let confidence = 0;
+  const pairs = {} as Record<MbtiPairId, MbtiPairScore>;
   for (const pair of MBTI_PAIRS) {
     const answer = byId.get(pair.id);
     if (!answer || answer.type !== "choice") {
       throw new Error(`Jev omitted the ${pair.id} preference.`);
     }
-    const picked = pickLetter(answer as ChoiceAnswer, pair.left, pair.right);
-    letters[pair.id] = picked.letter;
-    confidence += picked.confidence;
+    pairs[pair.id] = pickPair(answer as ChoiceAnswer, pair.left, pair.right);
   }
-  return {
-    type: `${letters.ei}${letters.sn}${letters.tf}${letters.jp}`,
-    letters,
-    confidence: confidence / MBTI_PAIRS.length,
-  };
+  return resultFromPairs(pairs);
+};
+
+export const averageMbti = (rows: readonly MbtiResult[]): MbtiResult | null => {
+  if (rows.length === 0) {
+    return null;
+  }
+  const pairs = {} as Record<MbtiPairId, MbtiPairScore>;
+  for (const pair of MBTI_PAIRS) {
+    let left = 0;
+    let right = 0;
+    for (const row of rows) {
+      left += row.pairs[pair.id]?.left ?? 0;
+      right += row.pairs[pair.id]?.right ?? 0;
+    }
+    left /= rows.length;
+    right /= rows.length;
+    pairs[pair.id] = {
+      letter: left >= right ? pair.left : pair.right,
+      left,
+      right,
+    };
+  }
+  return resultFromPairs(pairs);
 };

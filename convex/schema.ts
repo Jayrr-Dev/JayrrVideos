@@ -65,6 +65,7 @@ export default defineSchema({
     durationSec: v.number(),
     sampleRate: v.number(),
     centroidHz: v.number(),
+    loudnessDb: v.optional(v.number()),
     search: v.string(),
     storageId: v.optional(v.id("_storage")),
   })
@@ -91,6 +92,13 @@ export default defineSchema({
     recordingCount: v.number(),
     updatedAt: v.number(),
   }).index("by_user", ["userId"]),
+
+  featureFlags: defineTable({
+    userId: v.id("users"),
+    key: v.string(),
+    value: v.string(),
+    updatedAt: v.number(),
+  }).index("by_user_and_key", ["userId", "key"]),
 
   presentRecordings: defineTable({
     userId: v.id("users"),

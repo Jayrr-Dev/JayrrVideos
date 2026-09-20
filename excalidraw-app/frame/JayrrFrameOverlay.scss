@@ -97,13 +97,3 @@
     gap: 1px;
   }
 }
-
-.jayrr-frame-picker__popover {
-  z-index: var(--zIndex-ui-styles-popup);
-  padding: 0.6rem 0.7rem;
-  border-radius: var(--border-radius-md);
-  background: var(--island-bg-color);
-  box-shadow: var(--shadow-island);
-  border: 1px solid var(--dialog-border-color);
-  pointer-events: var(--ui-pointerEvents, all);
-}

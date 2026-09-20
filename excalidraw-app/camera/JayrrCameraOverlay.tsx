@@ -6,6 +6,8 @@ import { createPortal } from "react-dom";
 
 import type { NonDeletedExcalidrawElement } from "@excalidraw/element/types";
 
+import { useAtomValue } from "../app-jotai";
+import { cameraCutoutAtom } from "../domain/flags";
 import {
   getTranscribeEnabled,
   listenDisplayAudio,
@@ -18,6 +20,7 @@ import {
   readJayrrCamera,
   type JayrrCamera,
 } from "./jayrrCamera";
+import { startJayrrCameraCutout } from "./jayrrCameraCutout";
 import { setJayrrCameraVideo } from "./jayrrCameraLive";
 import {
   acquireJayrrCamera,
@@ -45,6 +48,8 @@ const CameraVideo = ({
   api: NonNullable<ReturnType<typeof useExcalidrawAPI>>;
 }) => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const cutoutRef = useRef<HTMLCanvasElement | null>(null);
+  const cutout = useAtomValue(cameraCutoutAtom);
   const display = isJayrrDisplay(camera);
   const cameraId = display ? null : camera.deviceId;
   const nonce = display ? camera.nonce ?? 0 : 0;
@@ -150,14 +155,29 @@ const CameraVideo = ({
     };
   }, [api, cameraId, display, elementId, nonce, surface]);
 
+  useEffect(() => {
+    const video = videoRef.current;
+    const canvas = cutoutRef.current;
+    if (!video || !canvas || display || cutout === "off") {
+      return;
+    }
+    if (!streamReady) {
+      return;
+    }
+    return startJayrrCameraCutout(elementId, video, canvas, cutout);
+  }, [cutout, display, elementId, streamReady]);
+
   return (
-    <video
-      ref={videoRef}
-      className="jayrr-camera-window__video"
-      autoPlay
-      muted
-      playsInline
-    />
+    <>
+      <video
+        ref={videoRef}
+        className="jayrr-camera-window__video"
+        autoPlay
+        muted
+        playsInline
+      />
+      <canvas ref={cutoutRef} className="jayrr-camera-window__cutout" />
+    </>
   );
 };
 

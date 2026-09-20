@@ -3,7 +3,6 @@ import DropdownMenu from "@excalidraw/excalidraw/components/dropdownMenu/Dropdow
 import {
   chevronLeftIcon,
   DotsHorizontalIcon,
-  playerPlayIcon,
   TrashIcon,
 } from "@excalidraw/excalidraw/components/icons";
 import { useAction, useMutation, useQuery } from "convex/react";
@@ -68,6 +67,67 @@ type FolderRow = {
 
 const recordingLabel = (row: RecordingRow) => {
   return row.name ?? "Untitled";
+};
+
+const thumbVideoSrc = (url: string) => {
+  return url.includes("#") ? url : `${url}#t=1`;
+};
+
+const thumbSeekTime = (mediaDuration: number, durationHintMs?: number) => {
+  const hinted =
+    durationHintMs != null && durationHintMs > 400 ? durationHintMs / 1000 : 0;
+  const duration =
+    Number.isFinite(mediaDuration) && mediaDuration > 0.4
+      ? mediaDuration
+      : hinted;
+  if (duration > 2) {
+    return Math.min(duration * 0.2, 2);
+  }
+  if (duration > 0.4) {
+    return duration * 0.35;
+  }
+  return 1;
+};
+
+const paintThumbFrame = (
+  video: HTMLVideoElement,
+  onSize?: (video: HTMLVideoElement) => void,
+  durationHintMs?: number,
+) => {
+  onSize?.(video);
+  if (video.readyState < 1) {
+    return;
+  }
+  const seekTo = thumbSeekTime(video.duration, durationHintMs);
+  if (Math.abs(video.currentTime - seekTo) < 0.08) {
+    return;
+  }
+  video.currentTime = seekTo;
+};
+
+const RecordingThumbMedia = ({
+  url,
+  durationMs,
+  onSize,
+}: {
+  url: string;
+  durationMs?: number;
+  onSize?: (video: HTMLVideoElement) => void;
+}) => {
+  return (
+    <video
+      src={thumbVideoSrc(url)}
+      muted
+      playsInline
+      preload="auto"
+      onLoadedMetadata={(event) =>
+        paintThumbFrame(event.currentTarget, onSize, durationMs)
+      }
+      onLoadedData={(event) =>
+        paintThumbFrame(event.currentTarget, onSize, durationMs)
+      }
+    />
+  );
 };
 
 const EditGlyph = (
@@ -207,30 +267,11 @@ const RecordingCard = ({
           onPreview();
         }}
       >
-        {row.posterUrl ? (
-          <img src={row.posterUrl} alt="" />
-        ) : (
-          <video
-            src={row.url}
-            muted
-            playsInline
-            preload="metadata"
-            onLoadedMetadata={(event) => rememberSize(event.currentTarget)}
-          />
-        )}
-        {row.posterUrl && !row.width ? (
-          <video
-            className="jayrr-present__recording-probe"
-            src={row.url}
-            muted
-            playsInline
-            preload="metadata"
-            onLoadedMetadata={(event) => rememberSize(event.currentTarget)}
-          />
-        ) : null}
-        <span className="jayrr-present__recording-play" aria-hidden="true">
-          {playerPlayIcon}
-        </span>
+        <RecordingThumbMedia
+          url={row.url}
+          durationMs={row.durationMs}
+          onSize={rememberSize}
+        />
         <span className="jayrr-present__recording-badges">
           {quality ? (
             <span className="jayrr-present__recording-quality">{quality}</span>
@@ -358,11 +399,10 @@ const FolderCard = ({
           <span className="jayrr-present__folder-thumbs">
             {thumbs.map((row) => (
               <span key={row._id} className="jayrr-present__folder-thumb">
-                {row.posterUrl ? (
-                  <img src={row.posterUrl} alt="" />
-                ) : (
-                  <video src={row.url} muted playsInline preload="metadata" />
-                )}
+                <RecordingThumbMedia
+                  url={row.url}
+                  durationMs={row.durationMs}
+                />
               </span>
             ))}
           </span>

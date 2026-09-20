@@ -119,6 +119,29 @@ export type RenderPositionOffset = Readonly<{ x: number; y: number }>;
 
 const ZERO_RENDER_OFFSET: RenderPositionOffset = { x: 0, y: 0 };
 
+const applyLockScreen = (
+  element: ExcalidrawElement,
+  renderState: ElementRenderState,
+  appState: { scrollX: number; scrollY: number; zoom: { value: number } },
+): ElementRenderState => {
+  const lock = renderState.lockScreen;
+  const zoom = appState.zoom.value;
+  if (!lock || zoom <= 0) {
+    return renderState;
+  }
+  const cx = element.x + element.width / 2;
+  const cy = element.y + element.height / 2;
+  return {
+    ...renderState,
+    offset: {
+      x: lock.x / zoom - appState.scrollX - cx,
+      y: lock.y / zoom - appState.scrollY - cy,
+    },
+    scale: lock.zoom / zoom,
+    lockView: true,
+  };
+};
+
 /** Bound labels follow their container; a label's own offset is ignored. */
 export const getElementRenderOffset = (
   element: ExcalidrawElement,
@@ -165,6 +188,10 @@ export type ElementRenderState = Readonly<{
   offset: RenderPositionOffset;
   /** Uniform scale around the element's center. Omitted scale is 1. */
   scale: number;
+  /** Skip frame clipping so a viewport-locked overlay can draw outside its frame. */
+  lockView: boolean;
+  /** CSS-pixel center + capture zoom. Offset/scale are finalized at draw. */
+  lockScreen?: Readonly<{ x: number; y: number; zoom: number }>;
 }>;
 
 /** Resolve visual state at the drawing boundary, preserving document cache keys. */
@@ -215,11 +242,14 @@ export const resolveElementRenderState = (
     allElementsMap,
     elementRenderOverrides,
   );
+  const lockScreen = elementRenderOverrides?.get(element.id)?.lockScreen;
 
   return {
     opacity,
     offset: offset ?? ZERO_RENDER_OFFSET,
     scale: scale ?? 1,
+    lockView: scale !== undefined || lockScreen !== undefined,
+    ...(lockScreen ? { lockScreen } : {}),
   };
 };
 
@@ -737,13 +767,18 @@ const generateElementWithCanvas = (
   renderConfig: StaticCanvasRenderConfig,
   appState: StaticCanvasAppState | InteractiveCanvasAppState,
 ) => {
-  const zoom: Zoom = renderConfig
+  const lockZoom = renderConfig.elementRenderOverrides?.get(element.id)
+    ?.lockScreen?.zoom;
+  const zoom: Zoom = lockZoom
+    ? { value: lockZoom as NormalizedZoomValue }
+    : renderConfig
     ? appState.zoom
     : {
         value: 1 as NormalizedZoomValue,
       };
   const prevElementWithCanvas = elementWithCanvasCache.get(element);
   const shouldRegenerateBecauseZoom =
+    !lockZoom &&
     prevElementWithCanvas &&
     prevElementWithCanvas.zoomValue !== zoom.value &&
     !appState?.shouldCacheIgnoreZoom;
@@ -817,6 +852,7 @@ const drawElementFromCanvas = (
   appState: StaticCanvasAppState | InteractiveCanvasAppState,
   allElementsMap: NonDeletedSceneElementsMap,
   positionOffset: RenderPositionOffset,
+  skipSnap = false,
 ) => {
   const element = elementWithCanvas.element;
   // the ratio the cached bitmap was generated with (`generateElementCanvas`);
@@ -896,7 +932,7 @@ const drawElementFromCanvas = (
 
   const transform = context.getTransform();
 
-  if (canSnapElement(element, appState)) {
+  if (!skipSnap && canSnapElement(element, appState)) {
     // blit the cached bitmap on whole device pixels. Nearest-neighbor at a
     // fractional offset is a pixel-exact copy shifted to the nearest pixel
     // — except at an exact half pixel, where a GPU-accelerated canvas
@@ -1030,6 +1066,8 @@ export const renderElement = (
     appState.openDialog?.name === "elementLinkSelector" &&
     !appState.selectedElementIds[element.id] &&
     !appState.hoveredElementIds[element.id];
+
+  renderState = applyLockScreen(element, renderState, appState);
 
   context.save();
   context.globalAlpha =
@@ -1314,6 +1352,7 @@ const drawElement = (
           appState,
           allElementsMap,
           renderState.offset,
+          renderState.lockView,
         );
       }
 
@@ -1442,7 +1481,7 @@ const drawElement = (
 
         // see `canSnapElement` for why not during zoom gestures or at
         // other angles
-        if (canSnapElement(element, appState)) {
+        if (!renderState.lockView && canSnapElement(element, appState)) {
           // Disabling smoothing makes output much sharper, especially for
           // text. Unless for non-right angles, where the aliasing is really
           // terrible on Chromium.
@@ -1494,6 +1533,7 @@ const drawElement = (
           appState,
           allElementsMap,
           renderState.offset,
+          renderState.lockView,
         );
 
         // reset

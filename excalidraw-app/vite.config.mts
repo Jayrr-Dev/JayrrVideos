@@ -9,6 +9,7 @@ import { VitePWA } from "vite-plugin-pwa";
 import Sitemap from "vite-plugin-sitemap";
 import svgrPlugin from "vite-plugin-svgr";
 import { woff2BrowserPlugin } from "../scripts/woff2/woff2-vite-plugins";
+import { soundLibraryProxy } from "./soundLibraryProxy";
 import { sttStreamProxy } from "./sttStreamProxy";
 
 process.on("uncaughtException", (error) => {
@@ -155,6 +156,7 @@ export default defineConfig(({ mode }) => {
     },
     plugins: [
       sttStreamProxy(),
+      soundLibraryProxy(),
       Sitemap({
         hostname: "https://excalidraw.com",
         outDir: "build",
@@ -351,6 +353,7 @@ export default defineConfig(({ mode }) => {
         "marked",
         "dompurify",
       ],
+      exclude: ["@mediapipe/tasks-vision", "segmo"],
     },
   };
 });

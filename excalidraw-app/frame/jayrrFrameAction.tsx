@@ -12,7 +12,7 @@ import { useExcalidrawContainer } from "@excalidraw/excalidraw/components/App";
 import { getDropdownMenuItemClassName } from "@excalidraw/excalidraw/components/dropdownMenu/common";
 import { getSelectedElements } from "@excalidraw/excalidraw/scene";
 import { Popover } from "radix-ui";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 import type { OrderedExcalidrawElement } from "@excalidraw/element/types";
 import type { Action } from "@excalidraw/excalidraw/actions/types";
@@ -33,7 +33,29 @@ import {
 
 import "./JayrrFrameOverlay.scss";
 
-const frameIcon = (
+const aspectIcon = (
+  <svg aria-hidden="true" focusable="false" viewBox="0 0 20 20">
+    <rect
+      x="3.2"
+      y="5.2"
+      width="13.6"
+      height="9.6"
+      rx="1.4"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+    />
+    <path
+      d="M6.4 12.4 13.6 7.6"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+    />
+  </svg>
+);
+
+const gridIcon = (
   <svg aria-hidden="true" focusable="false" viewBox="0 0 20 20">
     <rect
       x="3"
@@ -81,6 +103,9 @@ const FrameSelect = <T extends string>({
   value,
   values,
   labels,
+  compact,
+  icon,
+  active,
   onChange,
 }: {
   id: string;
@@ -88,36 +113,50 @@ const FrameSelect = <T extends string>({
   value: T;
   values: readonly T[];
   labels: Record<T, string>;
+  compact: boolean;
+  icon: ReactNode;
+  active: boolean;
   onChange: (next: T) => void;
 }) => {
   const { container } = useExcalidrawContainer();
   const layerUi = container?.querySelector<HTMLElement>(".layer-ui__wrapper");
   const [open, setOpen] = useState(false);
   const labelId = `jayrr-frame-${id}-label`;
+  const trigger = compact ? (
+    <IconButton
+      type="button"
+      icon={icon}
+      className={active || open ? "ToolIcon--checked" : undefined}
+      aria-label={label}
+      title={label}
+    />
+  ) : (
+    <button
+      type="button"
+      className="dropdown-select jayrr-frame-picker__select"
+      aria-labelledby={labelId}
+      aria-haspopup="listbox"
+      aria-expanded={open}
+    >
+      {labels[value]}
+    </button>
+  );
 
   return (
-    <div className="jayrr-frame-picker__field">
-      <span className="jayrr-frame-picker__label" id={labelId}>
-        {label}
-      </span>
+    <div className={compact ? undefined : "jayrr-frame-picker__field"}>
+      {compact ? null : (
+        <span className="jayrr-frame-picker__label" id={labelId}>
+          {label}
+        </span>
+      )}
       <Popover.Root open={open} onOpenChange={setOpen} modal={false}>
-        <Popover.Trigger asChild>
-          <button
-            type="button"
-            className="dropdown-select jayrr-frame-picker__select"
-            aria-labelledby={labelId}
-            aria-haspopup="listbox"
-            aria-expanded={open}
-          >
-            {labels[value]}
-          </button>
-        </Popover.Trigger>
+        <Popover.Trigger asChild>{trigger}</Popover.Trigger>
         <Popover.Portal container={layerUi ?? container}>
           <Popover.Content
             className="jayrr-frame-picker__menu dropdown-menu"
             align="start"
-            side="bottom"
-            sideOffset={4}
+            side={compact ? "right" : "bottom"}
+            sideOffset={compact ? 8 : 4}
             data-prevent-outside-click
             style={{ zIndex: "var(--zIndex-ui-styles-popup)" }}
             onCloseAutoFocus={(event) => event.preventDefault()}
@@ -148,33 +187,6 @@ const FrameSelect = <T extends string>({
   );
 };
 
-const FrameFields = ({
-  settings,
-  onChange,
-}: {
-  settings: JayrrFrameSettings;
-  onChange: (next: Partial<JayrrFrameSettings>) => void;
-}) => (
-  <div className="jayrr-frame-picker__fields">
-    <FrameSelect
-      id="aspect"
-      label="Aspect ratio"
-      value={settings.aspect}
-      values={JAYRR_FRAME_ASPECTS}
-      labels={ASPECT_LABELS}
-      onChange={(aspect) => onChange({ aspect })}
-    />
-    <FrameSelect
-      id="grid"
-      label="Grid overlay"
-      value={settings.grid}
-      values={JAYRR_FRAME_GRIDS}
-      labels={GRID_LABELS}
-      onChange={(grid) => onChange({ grid })}
-    />
-  </div>
-);
-
 const FramePanel = ({
   settings,
   onChange,
@@ -182,55 +194,51 @@ const FramePanel = ({
   settings: JayrrFrameSettings;
   onChange: (next: Partial<JayrrFrameSettings>) => void;
 }) => {
-  const mode = useStylesPanelMode();
-  const { container } = useExcalidrawContainer();
-  const layerUi = container?.querySelector<HTMLElement>(".layer-ui__wrapper");
-  const [open, setOpen] = useState(false);
-  const fields = <FrameFields settings={settings} onChange={onChange} />;
-  const active = settings.aspect !== "free" || settings.grid !== "none";
+  const compact = useStylesPanelMode() !== "full";
+  const aspect = (
+    <FrameSelect
+      id="aspect"
+      label="Aspect ratio"
+      value={settings.aspect}
+      values={JAYRR_FRAME_ASPECTS}
+      labels={ASPECT_LABELS}
+      compact={compact}
+      icon={aspectIcon}
+      active={settings.aspect !== "free"}
+      onChange={(next) => onChange({ aspect: next })}
+    />
+  );
+  const grid = (
+    <FrameSelect
+      id="grid"
+      label="Grid overlay"
+      value={settings.grid}
+      values={JAYRR_FRAME_GRIDS}
+      labels={GRID_LABELS}
+      compact={compact}
+      icon={gridIcon}
+      active={settings.grid !== "none"}
+      onChange={(next) => onChange({ grid: next })}
+    />
+  );
 
-  if (mode === "full") {
+  if (compact) {
     return (
-      <fieldset className="jayrr-frame-picker">
-        <legend>Frame</legend>
-        {fields}
-      </fieldset>
+      <>
+        <div className="compact-action-item">{aspect}</div>
+        <div className="compact-action-item">{grid}</div>
+      </>
     );
   }
 
   return (
-    <div className="compact-action-item">
-      <Popover.Root open={open} onOpenChange={setOpen}>
-        <Popover.Trigger asChild>
-          <IconButton
-            type="toggle"
-            icon={frameIcon}
-            checked={active}
-            aria-label="Frame size and grid"
-            title="Frame size and grid"
-          />
-        </Popover.Trigger>
-        <Popover.Portal container={layerUi ?? container}>
-          <Popover.Content
-            className="jayrr-frame-picker__popover"
-            align="start"
-            side="bottom"
-            sideOffset={6}
-            style={{ zIndex: "var(--zIndex-ui-styles-popup)" }}
-            onPointerDownOutside={(event) => {
-              if (
-                event.target instanceof Element &&
-                event.target.closest(".jayrr-frame-picker__menu")
-              ) {
-                event.preventDefault();
-              }
-            }}
-          >
-            {fields}
-          </Popover.Content>
-        </Popover.Portal>
-      </Popover.Root>
-    </div>
+    <fieldset className="jayrr-frame-picker">
+      <legend>Frame</legend>
+      <div className="jayrr-frame-picker__fields">
+        {aspect}
+        {grid}
+      </div>
+    </fieldset>
   );
 };
 

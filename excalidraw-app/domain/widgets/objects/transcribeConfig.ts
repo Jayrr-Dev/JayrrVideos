@@ -5,12 +5,14 @@ import { JAYRR_CALLED_OBJECT_KEY } from "../model";
 export type TranscribeConfig = {
   jevIq: boolean;
   jevMbti: boolean;
+  jevEmotion: boolean;
   sourceId: string;
 };
 
 export const DEFAULT_TRANSCRIBE: TranscribeConfig = {
   jevIq: false,
   jevMbti: false,
+  jevEmotion: false,
   sourceId: "mic",
 };
 
@@ -25,6 +27,7 @@ export const readTranscribeConfig = (
   return {
     jevIq: (bag as { jevIq?: unknown }).jevIq === true,
     jevMbti: (bag as { jevMbti?: unknown }).jevMbti === true,
+    jevEmotion: (bag as { jevEmotion?: unknown }).jevEmotion === true,
     sourceId: typeof sourceId === "string" && sourceId ? sourceId : "mic",
   };
 };
@@ -41,6 +44,7 @@ export const writeTranscribeConfig = (
   bag.kind = "transcribe";
   bag.jevIq = config.jevIq;
   bag.jevMbti = config.jevMbti;
+  bag.jevEmotion = config.jevEmotion;
   bag.sourceId = config.sourceId;
   return {
     ...(element.customData ?? {}),

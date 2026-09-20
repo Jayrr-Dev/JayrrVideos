@@ -24,4 +24,7 @@ export { JayrrAuthPage } from "./JayrrAuthPage";
 export { JayrrConfirmDialog } from "./JayrrConfirmDialog";
 export { JayrrLibraryMenu } from "./JayrrLibraryMenu";
 export { JayrrSceneMenu } from "./JayrrSceneMenu";
-export { JayrrSoundLibraryDialog } from "./JayrrSoundLibraryDialog";
+export {
+  JayrrSoundLibraryDialog,
+  type JayrrSoundPick,
+} from "./JayrrSoundLibraryDialog";

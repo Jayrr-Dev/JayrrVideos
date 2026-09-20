@@ -3,6 +3,27 @@ import { usePaginatedQuery, useQuery } from "convex/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { api, convexClient, isConvexLinked } from "../../convexClient";
+import {
+  peekLoudnessDb,
+  subscribeLoudnessCache,
+  subscribeLoudnessDb,
+} from "../../data/jayrrSoundLoudness";
+import {
+  centroidHzColor,
+  centroidHzLabel,
+  DECIBEL_FILTERS,
+  formatLoudnessDb,
+  loudnessDbColor,
+  loudnessDbLabel,
+  matchesDecibelFilter,
+  matchesPitchFilter,
+  PITCH_FILTERS,
+  type MetricFilterOption,
+} from "../../data/jayrrSoundMetrics";
+import {
+  assignAndPlayAudio,
+  jayrrSoundPlayUrls,
+} from "../../sounds/jayrrSoundPlayback";
 
 import { Dialog, Tooltip } from "./editor";
 
@@ -11,21 +32,23 @@ import "./JayrrSoundLibraryDialog.scss";
 import type { MutableRefObject } from "react";
 import type { Id } from "../../../convex/_generated/dataModel";
 
-import { api, convexClient, isConvexLinked } from "../../convexClient";
-
-import { Dialog, Tooltip } from "./editor";
-
-import "./JayrrSoundLibraryDialog.scss";
-
-import type { MutableRefObject } from "react";
-import type { Id } from "../../../convex/_generated/dataModel";
+export type JayrrSoundPick = {
+  id: string;
+  name: string;
+  path: string;
+};
 
 type JayrrSoundLibraryDialogProps = {
   onClose: () => void;
+  selectedId?: string | null;
+  onSelect?: (sound: JayrrSoundPick | null) => void;
 };
 
-const INFO =
-  "Browse the Flatten sound library. Search the whole tree, open a folder, and play OGG previews stored in Convex.";
+const INFO_BROWSE =
+  "Browse Flatten sounds stored in Convex. Pitch is spectral centroid in Hz. Loudness is RMS dB from the catalog, or a decode of the preview.";
+
+const INFO_PICK =
+  "Pick a sound for this present cue. Preview with play, then click a row. Pitch is spectral centroid. Loudness is RMS dB.";
 
 const formatClock = (durationSec: number) => {
   const total = Math.max(0, Math.ceil(durationSec));
@@ -49,6 +72,161 @@ const pauseIcon = (
   </svg>
 );
 
+const PitchMark = ({ hz }: { hz: number }) => (
+  <span
+    className="jayrr-sound-library__metric"
+    style={{ color: centroidHzColor(hz) }}
+    title={centroidHzLabel(hz)}
+  >
+    {hz} Hz
+  </span>
+);
+
+const LoudnessMark = ({
+  sources,
+  stored,
+}: {
+  sources: string[];
+  stored: number | null;
+}) => {
+  const [db, setDb] = useState<number | null>(stored);
+
+  useEffect(() => {
+    if (stored != null) {
+      setDb(stored);
+      return;
+    }
+    setDb(null);
+    if (sources.length === 0) {
+      return;
+    }
+    return subscribeLoudnessDb(sources, setDb);
+  }, [sources, stored]);
+
+  if (db == null) {
+    return (
+      <span className="jayrr-sound-library__metric is-empty" title="Loudness">
+        — dB
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className="jayrr-sound-library__metric"
+      style={{ color: loudnessDbColor(db) }}
+      title={loudnessDbLabel(db)}
+    >
+      {formatLoudnessDb(db)}
+    </span>
+  );
+};
+
+const SoundStats = ({
+  clock,
+  centroidHz,
+  loudnessDb,
+  path,
+  url,
+}: {
+  clock: string;
+  centroidHz: number;
+  loudnessDb: number | null;
+  path: string;
+  url: string | null;
+}) => {
+  const sources = useMemo(() => jayrrSoundPlayUrls(url, path), [path, url]);
+  return (
+    <span className="jayrr-sound-library__stats">
+      <PitchMark hz={centroidHz} />
+      <LoudnessMark sources={sources} stored={loudnessDb} />
+      <span className="jayrr-sound-library__clock">{clock}</span>
+    </span>
+  );
+};
+
+const MetricFilter = ({
+  unit,
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  unit: string;
+  label: string;
+  value: number;
+  options: readonly MetricFilterOption[];
+  onChange: (id: number) => void;
+}) => {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const selected = options.find((option) => option.id === value) ?? options[0];
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    const node = wrapRef.current;
+    const doc = node?.ownerDocument ?? document;
+    const onPointer = (event: PointerEvent) => {
+      if (!node?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+    doc.addEventListener("pointerdown", onPointer);
+    return () => {
+      doc.removeEventListener("pointerdown", onPointer);
+    };
+  }, [open]);
+
+  return (
+    <div className="jayrr-sound-library__filter" ref={wrapRef}>
+      <button
+        type="button"
+        aria-label={label}
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        className={
+          value
+            ? "jayrr-sound-library__filter-btn is-on"
+            : "jayrr-sound-library__filter-btn"
+        }
+        style={value && selected?.color ? { color: selected.color } : undefined}
+        onClick={() => {
+          setOpen((current) => !current);
+        }}
+      >
+        {unit}
+      </button>
+      {open ? (
+        <ul className="jayrr-sound-library__filter-menu" role="listbox">
+          {options.map((option) => (
+            <li key={option.id}>
+              <button
+                type="button"
+                role="option"
+                aria-selected={option.id === value}
+                className={
+                  option.id === value
+                    ? "jayrr-sound-library__filter-option is-on"
+                    : "jayrr-sound-library__filter-option"
+                }
+                style={option.color ? { color: option.color } : undefined}
+                onClick={() => {
+                  onChange(option.id);
+                  setOpen(false);
+                }}
+              >
+                {option.name}
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+};
+
 const RING_R = 7.25;
 const RING_C = 2 * Math.PI * RING_R;
 
@@ -70,7 +248,12 @@ const PlayMark = ({
       aria-hidden="true"
     >
       <svg className="jayrr-sound-library__ring" viewBox="0 0 20 20">
-        <circle className="jayrr-sound-library__ring-track" cx="10" cy="10" r={RING_R} />
+        <circle
+          className="jayrr-sound-library__ring-track"
+          cx="10"
+          cy="10"
+          r={RING_R}
+        />
         <circle
           className="jayrr-sound-library__ring-fill"
           cx="10"
@@ -84,25 +267,32 @@ const PlayMark = ({
     </span>
   );
 };
+
+export const JayrrSoundLibraryDialog = ({
   onClose,
+  selectedId = null,
+  onSelect,
 }: JayrrSoundLibraryDialogProps) => {
   const [folder, setFolder] = useState("");
   const [search, setSearch] = useState("");
   const [playingPath, setPlayingPath] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [playError, setPlayError] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const pickMode = Boolean(onSelect);
+  const info = pickMode ? INFO_PICK : INFO_BROWSE;
 
   if (!isConvexLinked) {
     return (
       <Dialog
         className="jayrr-sound-library"
-        size={820}
+        size={900}
         onCloseRequest={onClose}
         title={
           <span className="jayrr-sound-library__title-row">
             Sound Library
-            <Tooltip label={INFO} long position="top">
+            <Tooltip label={info} long position="top">
               <span
                 className="jayrr-sound-library__info"
                 aria-label="More info"
@@ -113,7 +303,7 @@ const PlayMark = ({
           </span>
         }
       >
-        <p className="visually-hidden">{INFO}</p>
+        <p className="visually-hidden">{info}</p>
         <p className="jayrr-sound-library__empty">
           Add VITE_CONVEX_URL, then restart the app.
         </p>
@@ -125,13 +315,19 @@ const PlayMark = ({
     <JayrrSoundLibraryDialogConnected
       audioRef={audioRef}
       folder={folder}
+      info={info}
       onClose={onClose}
+      onSelect={onSelect}
       isPlaying={isPlaying}
+      pickMode={pickMode}
+      playError={playError}
       playingPath={playingPath}
       progress={progress}
       search={search}
+      selectedId={selectedId}
       setFolder={setFolder}
       setIsPlaying={setIsPlaying}
+      setPlayError={setPlayError}
       setPlayingPath={setPlayingPath}
       setProgress={setProgress}
       setSearch={setSearch}
@@ -142,26 +338,38 @@ const PlayMark = ({
 const JayrrSoundLibraryDialogConnected = ({
   audioRef,
   folder,
+  info,
   isPlaying,
   onClose,
+  onSelect,
+  pickMode,
+  playError,
   playingPath,
   progress,
   search,
+  selectedId,
   setFolder,
   setIsPlaying,
+  setPlayError,
   setPlayingPath,
   setProgress,
   setSearch,
 }: {
   audioRef: MutableRefObject<HTMLAudioElement | null>;
   folder: string;
+  info: string;
   isPlaying: boolean;
   onClose: () => void;
+  onSelect?: (sound: JayrrSoundPick | null) => void;
+  pickMode: boolean;
+  playError: string | null;
   playingPath: string | null;
   progress: number;
   search: string;
+  selectedId: string | null;
   setFolder: (folder: string) => void;
   setIsPlaying: (playing: boolean) => void;
+  setPlayError: (error: string | null) => void;
   setPlayingPath: (path: string | null) => void;
   setProgress: (progress: number) => void;
   setSearch: (search: string) => void;
@@ -172,6 +380,31 @@ const JayrrSoundLibraryDialogConnected = ({
     { folder, search },
     { initialNumItems: 40 },
   );
+  const [pitchFilter, setPitchFilter] = useState(0);
+  const [dbFilter, setDbFilter] = useState(0);
+  const [loudnessGen, setLoudnessGen] = useState(0);
+
+  useEffect(() => {
+    if (dbFilter === 0) {
+      return;
+    }
+    return subscribeLoudnessCache(() => {
+      setLoudnessGen((n) => n + 1);
+    });
+  }, [dbFilter]);
+
+  const visibleSounds = useMemo(() => {
+    // Recompute when async loudness cache notifies (loudnessGen bumps).
+    void loudnessGen;
+    return sounds.results.filter((row) => {
+      if (!matchesPitchFilter(row.centroidHz, pitchFilter)) {
+        return false;
+      }
+      const db =
+        row.loudnessDb ?? peekLoudnessDb(jayrrSoundPlayUrls(row.url, row.path));
+      return matchesDecibelFilter(db, dbFilter);
+    });
+  }, [dbFilter, loudnessGen, pitchFilter, sounds.results]);
 
   const children = useMemo(() => {
     if (!folders) {
@@ -206,25 +439,17 @@ const JayrrSoundLibraryDialogConnected = ({
     };
   }, [audioRef, isPlaying, setProgress]);
 
+  const closeDialog = () => {
+    audioRef.current?.pause();
+    setIsPlaying(false);
+    onClose();
+  };
+
   const playSound = async (
     url: string | null,
     path: string,
     soundId: string,
   ) => {
-    let nextUrl = url;
-    if (!nextUrl && convexClient) {
-      try {
-        const row = await convexClient.query(api.sounds.get, {
-          soundId: soundId as Id<"sounds">,
-        });
-        nextUrl = row?.url ?? null;
-      } catch {
-        nextUrl = null;
-      }
-    }
-    if (!nextUrl) {
-      return;
-    }
     if (!audioRef.current) {
       audioRef.current = new Audio();
     }
@@ -235,6 +460,7 @@ const JayrrSoundLibraryDialogConnected = ({
       return;
     }
     if (playingPath === path && audio.src && audio.paused) {
+      setPlayError(null);
       void audio.play().then(
         () => {
           setIsPlaying(true);
@@ -245,46 +471,78 @@ const JayrrSoundLibraryDialogConnected = ({
           }
           setIsPlaying(false);
           setPlayingPath(null);
+          setPlayError("Couldn’t resume this sound.");
         },
       );
       return;
     }
+
+    let convexUrl = url;
+    const urls = jayrrSoundPlayUrls(convexUrl, path);
+    if (urls.length === 0) {
+      setPlayError("No audio URL for this sound.");
+      return;
+    }
+
     audio.pause();
-    audio.src = nextUrl;
     setPlayingPath(path);
     setProgress(0);
-    void audio.play().then(
-      () => {
-        setIsPlaying(true);
-      },
-      (error: unknown) => {
-        if (error instanceof DOMException && error.name === "AbortError") {
-          return;
-        }
-        setIsPlaying(false);
-        setPlayingPath(null);
-      },
-    );
+    setPlayError(null);
     audio.onended = () => {
       setIsPlaying(false);
       setPlayingPath(null);
       setProgress(0);
     };
+
+    for (const src of urls) {
+      const ok = await assignAndPlayAudio(audio, src);
+      if (ok) {
+        setIsPlaying(true);
+        return;
+      }
+    }
+
+    if (!convexUrl && convexClient) {
+      try {
+        const row = await convexClient.query(api.sounds.get, {
+          soundId: soundId as Id<"sounds">,
+        });
+        convexUrl = row?.url ?? null;
+      } catch {
+        convexUrl = null;
+      }
+      if (convexUrl && !urls.includes(convexUrl)) {
+        const ok = await assignAndPlayAudio(audio, convexUrl);
+        if (ok) {
+          setIsPlaying(true);
+          return;
+        }
+      }
+    }
+
+    setIsPlaying(false);
+    setPlayingPath(null);
+    setPlayError("Couldn’t play this sound.");
+  };
+
+  const pickSound = (sound: JayrrSoundPick) => {
+    onSelect?.(sound);
+    closeDialog();
   };
 
   return (
     <Dialog
-      className="jayrr-sound-library"
-      size={820}
-      onCloseRequest={() => {
-        audioRef.current?.pause();
-        setIsPlaying(false);
-        onClose();
-      }}
+      className={
+        pickMode
+          ? "jayrr-sound-library jayrr-sound-library--pick"
+          : "jayrr-sound-library"
+      }
+      size={900}
+      onCloseRequest={closeDialog}
       title={
         <span className="jayrr-sound-library__title-row">
           Sound Library
-          <Tooltip label={INFO} long position="top">
+          <Tooltip label={info} long position="top">
             <span className="jayrr-sound-library__info" aria-label="More info">
               {helpIcon}
             </span>
@@ -292,7 +550,7 @@ const JayrrSoundLibraryDialogConnected = ({
         </span>
       }
     >
-      <p className="visually-hidden">{INFO}</p>
+      <p className="visually-hidden">{info}</p>
       <div className="jayrr-sound-library__body">
         <div className="jayrr-sound-library__col jayrr-sound-library__col--folders">
           <nav aria-label="Folder" className="jayrr-sound-library__crumbs">
@@ -343,32 +601,108 @@ const JayrrSoundLibraryDialogConnected = ({
         </div>
         <div className="jayrr-sound-library__col jayrr-sound-library__col--sounds">
           <div className="jayrr-sound-library__toolbar">
-            <input
-              aria-label="Search sounds"
-              className="jayrr-sound-library__search"
-              onChange={(event) => {
-                setSearch(event.target.value);
-              }}
-              placeholder="Search sounds"
-              type="search"
-              value={search}
-            />
+            <div className="jayrr-sound-library__toolbar-row">
+              <input
+                aria-label="Search sounds"
+                className="jayrr-sound-library__search"
+                onChange={(event) => {
+                  setSearch(event.target.value);
+                }}
+                placeholder="Search sounds"
+                type="search"
+                value={search}
+              />
+              <MetricFilter
+                unit="Hz"
+                label="Filter by pitch"
+                value={pitchFilter}
+                options={PITCH_FILTERS}
+                onChange={setPitchFilter}
+              />
+              <MetricFilter
+                unit="dB"
+                label="Filter by loudness"
+                value={dbFilter}
+                options={DECIBEL_FILTERS}
+                onChange={setDbFilter}
+              />
+            </div>
+            {playError ? (
+              <p className="jayrr-sound-library__error">{playError}</p>
+            ) : null}
           </div>
           <ul className="jayrr-sound-library__sounds">
-            {sounds.results.map((row) => {
+            {visibleSounds.map((row) => {
               const active = playingPath === row.path;
               const playing = active && isPlaying;
+              const selected = selectedId === row._id;
               const remain = active
                 ? Math.max(0, row.durationSec * (1 - progress))
                 : row.durationSec;
+              const rowClass = [
+                "jayrr-sound-library__row",
+                playing ? "is-playing" : "",
+                selected ? "is-selected" : "",
+              ]
+                .filter(Boolean)
+                .join(" ");
+
+              if (pickMode) {
+                return (
+                  <li key={row._id}>
+                    <div className={rowClass}>
+                      <button
+                        type="button"
+                        className="jayrr-sound-library__play-hit"
+                        aria-label={
+                          playing ? `Pause ${row.name}` : `Play ${row.name}`
+                        }
+                        onClick={() => {
+                          void playSound(row.url, row.path, row._id);
+                        }}
+                      >
+                        <PlayMark
+                          playing={playing}
+                          progress={active ? progress : 0}
+                        />
+                      </button>
+                      <button
+                        type="button"
+                        className="jayrr-sound-library__pick"
+                        aria-label={`Use ${row.name}`}
+                        onClick={() => {
+                          pickSound({
+                            id: row._id,
+                            name: row.name,
+                            path: row.path,
+                          });
+                        }}
+                      >
+                        <span className="jayrr-sound-library__meta">
+                          <span className="jayrr-sound-library__name">
+                            {row.name}
+                          </span>
+                          <span className="jayrr-sound-library__path">
+                            {row.folderPath}
+                          </span>
+                        </span>
+                        <SoundStats
+                          clock={formatClock(remain)}
+                          centroidHz={row.centroidHz}
+                          loudnessDb={row.loudnessDb}
+                          path={row.path}
+                          url={row.url}
+                        />
+                      </button>
+                    </div>
+                  </li>
+                );
+              }
+
               return (
                 <li key={row._id}>
                   <button
-                    className={
-                      playing
-                        ? "jayrr-sound-library__row is-playing"
-                        : "jayrr-sound-library__row"
-                    }
+                    className={rowClass}
                     onClick={() => {
                       void playSound(row.url, row.path, row._id);
                     }}
@@ -377,7 +711,10 @@ const JayrrSoundLibraryDialogConnected = ({
                       playing ? `Pause ${row.name}` : `Play ${row.name}`
                     }
                   >
-                    <PlayMark playing={playing} progress={active ? progress : 0} />
+                    <PlayMark
+                      playing={playing}
+                      progress={active ? progress : 0}
+                    />
                     <span className="jayrr-sound-library__meta">
                       <span className="jayrr-sound-library__name">
                         {row.name}
@@ -386,9 +723,13 @@ const JayrrSoundLibraryDialogConnected = ({
                         {row.folderPath}
                       </span>
                     </span>
-                    <span className="jayrr-sound-library__clock">
-                      {formatClock(remain)}
-                    </span>
+                    <SoundStats
+                      clock={formatClock(remain)}
+                      centroidHz={row.centroidHz}
+                      loudnessDb={row.loudnessDb}
+                      path={row.path}
+                      url={row.url}
+                    />
                   </button>
                 </li>
               );
@@ -412,6 +753,25 @@ const JayrrSoundLibraryDialogConnected = ({
             <p className="jayrr-sound-library__empty">
               No sounds yet. Run yarn seed:sounds after Convex is linked.
             </p>
+          ) : null}
+          {sounds.status !== "LoadingFirstPage" &&
+          sounds.results.length > 0 &&
+          visibleSounds.length === 0 ? (
+            <p className="jayrr-sound-library__empty">
+              No sounds match these Hz or dB filters.
+            </p>
+          ) : null}
+          {pickMode && selectedId ? (
+            <button
+              className="jayrr-sound-library__clear"
+              onClick={() => {
+                onSelect?.(null);
+                closeDialog();
+              }}
+              type="button"
+            >
+              Clear sound
+            </button>
           ) : null}
         </div>
       </div>

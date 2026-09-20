@@ -2,760 +2,771 @@
 import React from "react";
 
 const drawings = {
-  "lock": [
+  lock: [
     {
-      "d": "M7 11 10 11 9 20 6 20Z",
-      "fill": "#f4ce19",
-      "stroke": "none"
+      d: "M7 11 10 11 9 20 6 20Z",
+      fill: "#f4ce19",
+      stroke: "none",
     },
     {
-      "d": "M5 10 20 9.5 19.5 21 4.5 20.5Z",
-      "fill": "none",
-      "strokeWidth": 2.1
+      d: "M5 10 20 9.5 19.5 21 4.5 20.5Z",
+      fill: "none",
+      strokeWidth: 2.1,
     },
     {
-      "d": "M8 10 8 6C8 1 17 1 17 6L17 9.5",
-      "fill": "none",
-      "strokeWidth": 2.1
+      d: "M8 10 8 6C8 1 17 1 17 6L17 9.5",
+      fill: "none",
+      strokeWidth: 2.1,
     },
     {
-      "d": "M12 13C9 12 9 16 11 16L10.5 18.5 13.5 18.5 13 16C15 14 14 13 12 13Z",
-      "fill": "currentColor",
-      "strokeWidth": 0.9
-    }
+      d: "M12 13C9 12 9 16 11 16L10.5 18.5 13.5 18.5 13 16C15 14 14 13 12 13Z",
+      fill: "currentColor",
+      strokeWidth: 0.9,
+    },
   ],
-  "unlock": [
+  unlock: [
     {
-      "d": "M7 11 10 11 9 20 6 20Z",
-      "fill": "#f4ce19",
-      "stroke": "none"
+      d: "M7 11 10 11 9 20 6 20Z",
+      fill: "#f4ce19",
+      stroke: "none",
     },
     {
-      "d": "M5 10 20 9.5 19.5 21 4.5 20.5Z",
-      "fill": "none",
-      "strokeWidth": 2.1
+      d: "M5 10 20 9.5 19.5 21 4.5 20.5Z",
+      fill: "none",
+      strokeWidth: 2.1,
     },
     {
-      "d": "M8 10 8 6C8 1 17 1 17 6",
-      "fill": "none",
-      "strokeWidth": 2.1
+      d: "M8 10 8 6C8 1 17 1 17 6",
+      fill: "none",
+      strokeWidth: 2.1,
     },
     {
-      "d": "M12 13C9 12 9 16 11 16L10.5 18.5 13.5 18.5 13 16C15 14 14 13 12 13Z",
-      "fill": "currentColor",
-      "strokeWidth": 0.9
-    }
+      d: "M12 13C9 12 9 16 11 16L10.5 18.5 13.5 18.5 13 16C15 14 14 13 12 13Z",
+      fill: "currentColor",
+      strokeWidth: 0.9,
+    },
   ],
-  "hand": [
+  hand: [
     {
-      "d": "M9 13Q14 10 19 13L18 19 11 21 8 17Z",
-      "fill": "#f4ce19",
-      "stroke": "none"
+      d: "M9 13Q14 10 19 13L18 19 11 21 8 17Z",
+      fill: "#f4ce19",
+      stroke: "none",
     },
     {
-      "d": "M8 13 7 6Q7 3 9 4L11 11 10 3Q11 0 13 3L14 11 14 4Q16 2 17 5L17 12 18 8Q20 6 21 9L20 17Q19 22 13 22 9 22 7 18L3 13Q2 10 4 11Z",
-      "fill": "none",
-      "strokeWidth": 2.1
+      d: "M8 13 7 6Q7 3 9 4L11 11 10 3Q11 0 13 3L14 11 14 4Q16 2 17 5L17 12 18 8Q20 6 21 9L20 17Q19 22 13 22 9 22 7 18L3 13Q2 10 4 11Z",
+      fill: "none",
+      strokeWidth: 2.1,
     },
     {
-      "d": "M11 15Q14 13 17 15M12 18 15 18",
-      "fill": "none",
-      "strokeWidth": 1.2
-    }
+      d: "M11 15Q14 13 17 15M12 18 15 18",
+      fill: "none",
+      strokeWidth: 1.2,
+    },
   ],
-  "help": [
+  help: [
     {
-      "d": "M14 3C22 4 24 16 15 20L12 18C19 16 20 7 14 3",
-      "fill": "#f4ce19",
-      "stroke": "none"
+      d: "M14 3C22 4 24 16 15 20L12 18C19 16 20 7 14 3",
+      fill: "#f4ce19",
+      stroke: "none",
     },
     {
-      "d": "M12 3C5 2 2 8 3 14S10 23 16 20 24 10 19 5Q16 2 12 3",
-      "fill": "none",
-      "strokeWidth": 2.1
+      d: "M12 3C5 2 2 8 3 14S10 23 16 20 24 10 19 5Q16 2 12 3",
+      fill: "none",
+      strokeWidth: 2.1,
     },
     {
-      "d": "M8 8C8 4 16 5 16 9Q16 11 12 12L12 14",
-      "fill": "none",
-      "strokeWidth": 2.85
+      d: "M8 8C8 4 16 5 16 9Q16 11 12 12L12 14",
+      fill: "none",
+      strokeWidth: 2.85,
     },
     {
-      "d": "M12 17h.05",
-      "fill": "none",
-      "strokeWidth": 3.45
-    }
+      d: "M12 17h.05",
+      fill: "none",
+      strokeWidth: 3.45,
+    },
   ],
-  "menu": [
+  menu: [
     {
-      "d": "M4 10 20 9 20 13 4 14Z",
-      "fill": "#f4ce19",
-      "stroke": "none"
+      d: "M4 10 20 9 20 13 4 14Z",
+      fill: "#f4ce19",
+      stroke: "none",
     },
     {
-      "d": "M4 5Q12 6 20 4M4 11Q12 10 20 11M4 18Q11 16 20 18",
-      "fill": "none",
-      "strokeWidth": 3
+      d: "M4 5Q12 6 20 4M4 11Q12 10 20 11M4 18Q11 16 20 18",
+      fill: "none",
+      strokeWidth: 3,
     },
     {
-      "d": "M5 21 14 20",
-      "fill": "none",
-      "strokeWidth": 0.98
-    }
+      d: "M5 21 14 20",
+      fill: "none",
+      strokeWidth: 0.98,
+    },
   ],
-  "library": [
+  library: [
     {
-      "d": "M13 5 19 4 20 17 13 18Z",
-      "fill": "#f4ce19",
-      "stroke": "none"
+      d: "M13 5 19 4 20 17 13 18Z",
+      fill: "#f4ce19",
+      stroke: "none",
     },
     {
-      "d": "M3 5Q8 3 12 6Q17 3 21 4L20 20Q16 18 12 21Q7 18 3 20Z",
-      "fill": "none",
-      "strokeWidth": 2.1
+      d: "M3 5Q8 3 12 6Q17 3 21 4L20 20Q16 18 12 21Q7 18 3 20Z",
+      fill: "none",
+      strokeWidth: 2.1,
     },
     {
-      "d": "M12 6 12 21M6 8 9 8M6 11 9 11M15 8 18 7M15 11 18 10",
-      "fill": "none",
-      "strokeWidth": 1.2
-    }
+      d: "M12 6 12 21M6 8 9 8M6 11 9 11M15 8 18 7M15 11 18 10",
+      fill: "none",
+      strokeWidth: 1.2,
+    },
   ],
-  "sidebar": [
+  sidebar: [
     {
-      "d": "M15 5 20 4 20 20 15 19Z",
-      "fill": "#f4ce19",
-      "stroke": "none"
+      d: "M15 5 20 4 20 20 15 19Z",
+      fill: "#f4ce19",
+      stroke: "none",
     },
     {
-      "d": "M3 4Q12 5 21 3L20 21 4 20Z",
-      "fill": "none",
-      "strokeWidth": 2.1
+      d: "M3 4Q12 5 21 3L20 21 4 20Z",
+      fill: "none",
+      strokeWidth: 2.1,
     },
     {
-      "d": "M14 5 14 20M17 8 19 7M17 11 19 10",
-      "fill": "none",
-      "strokeWidth": 1.35
-    }
+      d: "M14 5 14 20M17 8 19 7M17 11 19 10",
+      fill: "none",
+      strokeWidth: 1.35,
+    },
   ],
-  "chat": [
+  chat: [
     {
-      "d": "M4 6 8 5 7 14 4 14Z",
-      "fill": "#f4ce19",
-      "stroke": "none"
+      d: "M4 6 8 5 7 14 4 14Z",
+      fill: "#f4ce19",
+      stroke: "none",
     },
     {
-      "d": "M4 5Q11 2 18 5C24 8 20 16 14 17L7 17 3 21 4 14Q1 9 4 5Z",
-      "fill": "none",
-      "strokeWidth": 2.1
+      d: "M4 5Q11 2 18 5C24 8 20 16 14 17L7 17 3 21 4 14Q1 9 4 5Z",
+      fill: "none",
+      strokeWidth: 2.1,
     },
     {
-      "d": "M7 8 16 8M7 11 14 11",
-      "fill": "none",
-      "strokeWidth": 1.2
-    }
+      d: "M7 8 16 8M7 11 14 11",
+      fill: "none",
+      strokeWidth: 1.2,
+    },
   ],
-  "presentation": [
+  presentation: [
     {
-      "d": "M5 13 10 9 13 12 19 6 19 15 5 16Z",
-      "fill": "#f4ce19",
-      "stroke": "none"
+      d: "M5 13 10 9 13 12 19 6 19 15 5 16Z",
+      fill: "#f4ce19",
+      stroke: "none",
     },
     {
-      "d": "M3 4 21 3 20 17 4 18ZM12 18 12 22M8 22 17 22",
-      "fill": "none",
-      "strokeWidth": 2.1
+      d: "M3 4 21 3 20 17 4 18ZM12 18 12 22M8 22 17 22",
+      fill: "none",
+      strokeWidth: 2.1,
     },
     {
-      "d": "M6 12 10 8 13 11 18 6",
-      "fill": "none",
-      "strokeWidth": 1.5
-    }
+      d: "M6 12 10 8 13 11 18 6",
+      fill: "none",
+      strokeWidth: 1.5,
+    },
   ],
-  "pin": [
+  pin: [
     {
-      "d": "M9 4 15 3 14 10 18 14 6 15 10 10Z",
-      "fill": "#f4ce19",
-      "stroke": "none"
+      d: "M9 4 15 3 14 10 18 14 6 15 10 10Z",
+      fill: "#f4ce19",
+      stroke: "none",
     },
     {
-      "d": "M8 3 17 3M10 4 9 10 5 14 19 14 15 10 15 4M12 15 11 22",
-      "fill": "none",
-      "strokeWidth": 2.1
-    }
+      d: "M8 3 17 3M10 4 9 10 5 14 19 14 15 10 15 4M12 15 11 22",
+      fill: "none",
+      strokeWidth: 2.1,
+    },
   ],
-  "close": [
+  close: [
     {
-      "d": "M6 5Q12 11 19 19M18 5Q10 13 5 19",
-      "fill": "none",
-      "strokeWidth": 2.85
-    }
+      d: "M6 5Q12 11 19 19M18 5Q10 13 5 19",
+      fill: "none",
+      strokeWidth: 2.85,
+    },
   ],
-  "search": [
+  search: [
     {
-      "d": "M12 4Q21 11 12 16L10 14Q16 11 12 4",
-      "fill": "#f4ce19",
-      "stroke": "none"
+      d: "M12 4Q21 11 12 16L10 14Q16 11 12 4",
+      fill: "#f4ce19",
+      stroke: "none",
     },
     {
-      "d": "M10 3C1 2 1 17 10 17S21 4 10 3ZM16 16 22 22",
-      "fill": "none",
-      "strokeWidth": 2.1
+      d: "M10 3C1 2 1 17 10 17S21 4 10 3ZM16 16 22 22",
+      fill: "none",
+      strokeWidth: 2.1,
     },
     {
-      "d": "M5 9Q5 6 8 5",
-      "fill": "none",
-      "strokeWidth": 1.05
-    }
+      d: "M5 9Q5 6 8 5",
+      fill: "none",
+      strokeWidth: 1.05,
+    },
   ],
-  "folder": [
+  folder: [
     {
-      "d": "M4 12 21 10 18 20 3 20Z",
-      "fill": "#f4ce19",
-      "stroke": "none"
+      d: "M4 12 21 10 18 20 3 20Z",
+      fill: "#f4ce19",
+      stroke: "none",
     },
     {
-      "d": "M3 20 3 5 9 4 12 7 20 6 20 10M3 20 6 11 22 10 19 20Z",
-      "fill": "none",
-      "strokeWidth": 2.1
+      d: "M3 20 3 5 9 4 12 7 20 6 20 10M3 20 6 11 22 10 19 20Z",
+      fill: "none",
+      strokeWidth: 2.1,
     },
     {
-      "d": "M7 16 9 13",
-      "fill": "none",
-      "strokeWidth": 1.05
-    }
+      d: "M7 16 9 13",
+      fill: "none",
+      strokeWidth: 1.05,
+    },
   ],
-  "download": [
+  download: [
     {
-      "d": "M10 3 14 3 13 12 17 11 12 17 7 12 11 12Z",
-      "fill": "#f4ce19",
-      "stroke": "none"
+      d: "M10 3 14 3 13 12 17 11 12 17 7 12 11 12Z",
+      fill: "#f4ce19",
+      stroke: "none",
     },
     {
-      "d": "M12 3Q11 8 12 16M7 11 12 17 18 11M3 16 4 21 21 20 21 16",
-      "fill": "none",
-      "strokeWidth": 2.1
+      d: "M12 3Q11 8 12 16M7 11 12 17 18 11M3 16 4 21 21 20 21 16",
+      fill: "none",
+      strokeWidth: 2.1,
     },
     {
-      "d": "M7 23 17 22",
-      "fill": "none",
-      "strokeWidth": 0.98
-    }
+      d: "M7 23 17 22",
+      fill: "none",
+      strokeWidth: 0.98,
+    },
   ],
-  "exportImage": [
+  exportImage: [
     {
-      "d": "M8 7C8 3 14 4 13 8S7 11 8 7",
-      "fill": "#f4ce19",
-      "stroke": "none"
+      d: "M8 7C8 3 14 4 13 8S7 11 8 7",
+      fill: "#f4ce19",
+      stroke: "none",
     },
     {
-      "d": "M19 11 20 3 3 4 4 20 11 20M5 16 9 11 13 15M14 18 22 18M19 14 23 18 19 22",
-      "fill": "none",
-      "strokeWidth": 2.1
-    }
+      d: "M19 11 20 3 3 4 4 20 11 20M5 16 9 11 13 15M14 18 22 18M19 14 23 18 19 22",
+      fill: "none",
+      strokeWidth: 2.1,
+    },
   ],
-  "users": [
+  users: [
     {
-      "d": "M14 5C13 1 20 2 20 6S14 9 14 5",
-      "fill": "#f4ce19",
-      "stroke": "none"
+      d: "M14 5C13 1 20 2 20 6S14 9 14 5",
+      fill: "#f4ce19",
+      stroke: "none",
     },
     {
-      "d": "M7 3C2 3 3 10 7 10S12 3 7 3ZM2 21 3 15Q7 11 12 15L13 21M15 3C22 1 24 12 16 10M16 14Q21 13 22 20",
-      "fill": "none",
-      "strokeWidth": 2.1
+      d: "M7 3C2 3 3 10 7 10S12 3 7 3ZM2 21 3 15Q7 11 12 15L13 21M15 3C22 1 24 12 16 10M16 14Q21 13 22 20",
+      fill: "none",
+      strokeWidth: 2.1,
     },
     {
-      "d": "M5 17 5 20",
-      "fill": "none",
-      "strokeWidth": 1.05
-    }
+      d: "M5 17 5 20",
+      fill: "none",
+      strokeWidth: 1.05,
+    },
   ],
-  "bolt": [
+  bolt: [
     {
-      "d": "M14 2 4 14 11 13 9 22 21 9 13 10Z",
-      "fill": "#f4ce19",
-      "strokeWidth": 1.8
-    }
+      d: "M14 2 4 14 11 13 9 22 21 9 13 10Z",
+      fill: "#f4ce19",
+      strokeWidth: 1.8,
+    },
   ],
-  "trash": [
+  trash: [
     {
-      "d": "M7 8 10 8 10 20 7 19Z",
-      "fill": "#f4ce19",
-      "stroke": "none"
+      d: "M7 8 10 8 10 20 7 19Z",
+      fill: "#f4ce19",
+      stroke: "none",
     },
     {
-      "d": "M5 7 20 6M7 8 8 21 18 20 19 7M9 5 9 2 16 2 16 5",
-      "fill": "none",
-      "strokeWidth": 2.1
+      d: "M5 7 20 6M7 8 8 21 18 20 19 7M9 5 9 2 16 2 16 5",
+      fill: "none",
+      strokeWidth: 2.1,
     },
     {
-      "d": "M11 10 12 18M15 9 15 18",
-      "fill": "none",
-      "strokeWidth": 1.13
-    }
+      d: "M11 10 12 18M15 9 15 18",
+      fill: "none",
+      strokeWidth: 1.13,
+    },
   ],
-  "sun": [
+  sun: [
     {
-      "d": "M8 8C14 3 21 13 14 17S3 12 8 8",
-      "fill": "#f4ce19",
-      "stroke": "none"
+      d: "M8 8C14 3 21 13 14 17S3 12 8 8",
+      fill: "#f4ce19",
+      stroke: "none",
     },
     {
-      "d": "M12 6C4 5 5 18 12 18S21 7 12 6ZM12 1 12 3M20 4 18 6M21 12 23 12M18 19 20 21M12 21 12 23M4 19 6 17M1 12 3 12M4 4 6 6",
-      "fill": "none",
-      "strokeWidth": 2.1
-    }
+      d: "M12 6C4 5 5 18 12 18S21 7 12 6ZM12 1 12 3M20 4 18 6M21 12 23 12M18 19 20 21M12 21 12 23M4 19 6 17M1 12 3 12M4 4 6 6",
+      fill: "none",
+      strokeWidth: 2.1,
+    },
   ],
-  "moon": [
+  moon: [
     {
-      "d": "M15 3C2 0 0 18 11 21Q19 23 22 14C14 19 7 9 15 3Z",
-      "fill": "#f4ce19",
-      "strokeWidth": 2.1
+      d: "M15 3C2 0 0 18 11 21Q19 23 22 14C14 19 7 9 15 3Z",
+      fill: "#f4ce19",
+      strokeWidth: 2.1,
     },
     {
-      "d": "M18 3 18 7M16 5 20 5",
-      "fill": "none",
-      "strokeWidth": 1.35
-    }
+      d: "M18 3 18 7M16 5 20 5",
+      fill: "none",
+      strokeWidth: 1.35,
+    },
   ],
-  "widgetLiveClassifier": [
+  widgetLiveClassifier: [
     {
-      "d": "M10 8 14 8 14 17 10 17Z",
-      "fill": "#f4ce19",
-      "stroke": "none"
+      d: "M10 8 14 8 14 17 10 17Z",
+      fill: "#f4ce19",
+      stroke: "none",
     },
     {
-      "d": "M10 8C7 7 7 18 10 17M14 8C17 7 17 18 14 17",
-      "fill": "none",
-      "strokeWidth": 2.1
+      d: "M10 8C7 7 7 18 10 17M14 8C17 7 17 18 14 17",
+      fill: "none",
+      strokeWidth: 2.1,
     },
     {
-      "d": "M4 12 7 12M17 12 20 12M5 8 7 10M17 14 19 16",
-      "fill": "none",
-      "strokeWidth": 1.35
-    }
+      d: "M4 12 7 12M17 12 20 12M5 8 7 10M17 14 19 16",
+      fill: "none",
+      strokeWidth: 1.35,
+    },
   ],
-  "widgetClassifier": [
+  widgetClassifier: [
     {
-      "d": "M4 17 8 13 12 15 18 7 20 9 12 19 8 17 4 21Z",
-      "fill": "#f4ce19",
-      "stroke": "none"
+      d: "M4 17 8 13 12 15 18 7 20 9 12 19 8 17 4 21Z",
+      fill: "#f4ce19",
+      stroke: "none",
     },
     {
-      "d": "M3 20 3 4M3 20 21 20",
-      "fill": "none",
-      "strokeWidth": 2.1
+      d: "M3 20 3 4M3 20 21 20",
+      fill: "none",
+      strokeWidth: 2.1,
     },
     {
-      "d": "M5 16 8 13 12 15 18 7",
-      "fill": "none",
-      "strokeWidth": 1.5
-    }
+      d: "M5 16 8 13 12 15 18 7",
+      fill: "none",
+      strokeWidth: 1.5,
+    },
   ],
-  "widgetTranscription": [
+  widgetTranscription: [
     {
-      "d": "M6 4 17 4 20 8 19 20 5 20Z",
-      "fill": "#f4ce19",
-      "stroke": "none"
+      d: "M6 4 17 4 20 8 19 20 5 20Z",
+      fill: "#f4ce19",
+      stroke: "none",
     },
     {
-      "d": "M6 4 17 4 20 8 19 20 5 20Z",
-      "fill": "none",
-      "strokeWidth": 2.1
+      d: "M6 4 17 4 20 8 19 20 5 20Z",
+      fill: "none",
+      strokeWidth: 2.1,
     },
     {
-      "d": "M16 4 16 9 20 9M8 12 16 12M8 15 17 15M8 18 14 18",
-      "fill": "none",
-      "strokeWidth": 1.35
-    }
+      d: "M16 4 16 9 20 9M8 12 16 12M8 15 17 15M8 18 14 18",
+      fill: "none",
+      strokeWidth: 1.35,
+    },
   ],
-  "widgetCaption": [
+  widgetCaption: [
     {
-      "d": "M5 6 19 6 21 9 19 17 5 17 3 14Z",
-      "fill": "#f4ce19",
-      "stroke": "none"
+      d: "M5 6 19 6 21 9 19 17 5 17 3 14Z",
+      fill: "#f4ce19",
+      stroke: "none",
     },
     {
-      "d": "M5 6 19 6 21 9 19 17 5 17 3 14Z",
-      "fill": "none",
-      "strokeWidth": 2.1
+      d: "M5 6 19 6 21 9 19 17 5 17 3 14Z",
+      fill: "none",
+      strokeWidth: 2.1,
     },
     {
-      "d": "M7 11 17 11M7 14 15 14",
-      "fill": "none",
-      "strokeWidth": 1.5
-    }
+      d: "M7 11 17 11M7 14 15 14",
+      fill: "none",
+      strokeWidth: 1.5,
+    },
   ],
-  "widgetMarkdown": [
+  widgetMarkdown: [
     {
-      "d": "M6 4 17 4 20 8 19 20 5 20Z",
-      "fill": "#f4ce19",
-      "stroke": "none"
+      d: "M6 4 17 4 20 8 19 20 5 20Z",
+      fill: "#f4ce19",
+      stroke: "none",
     },
     {
-      "d": "M6 4 17 4 20 8 19 20 5 20Z",
-      "fill": "none",
-      "strokeWidth": 2.1
+      d: "M6 4 17 4 20 8 19 20 5 20Z",
+      fill: "none",
+      strokeWidth: 2.1,
     },
     {
-      "d": "M8.5 14 8.5 10 10 12 11.5 10 11.5 14M13 10 13 14 14.4 14Q16.2 14 16.2 12T14.4 10Z",
-      "fill": "none",
-      "strokeWidth": 0.98
-    }
+      d: "M8.5 14 8.5 10 10 12 11.5 10 11.5 14M13 10 13 14 14.4 14Q16.2 14 16.2 12T14.4 10Z",
+      fill: "none",
+      strokeWidth: 0.98,
+    },
   ],
-  "widgetPdf": [
+  widgetPdf: [
     {
-      "d": "M6 4 17 4 20 8 19 20 5 20Z",
-      "fill": "#f4ce19",
-      "stroke": "none"
+      d: "M6 4 17 4 20 8 19 20 5 20Z",
+      fill: "#f4ce19",
+      stroke: "none",
     },
     {
-      "d": "M6 4 17 4 20 8 19 20 5 20Z",
-      "fill": "none",
-      "strokeWidth": 2.1
+      d: "M6 4 17 4 20 8 19 20 5 20Z",
+      fill: "none",
+      strokeWidth: 2.1,
     },
     {
-      "d": "M6.9 14.4 6.9 11.6 8.3 11.6Q9.7 11.6 8.3 13L6.9 13M10.6 11.6 10.6 14.4 12 14.4Q13.4 14.4 13.4 13T12 11.6Z",
-      "fill": "none",
-      "strokeWidth": 0.9
+      d: "M6.9 14.4 6.9 11.6 8.3 11.6Q9.7 11.6 8.3 13L6.9 13M10.6 11.6 10.6 14.4 12 14.4Q13.4 14.4 13.4 13T12 11.6Z",
+      fill: "none",
+      strokeWidth: 0.9,
     },
     {
-      "d": "M14.8 14.4 14.8 11.6 17.6 11.6M14.8 13 16.7 13",
-      "fill": "none",
-      "strokeWidth": 0.9
-    }
+      d: "M14.8 14.4 14.8 11.6 17.6 11.6M14.8 13 16.7 13",
+      fill: "none",
+      strokeWidth: 0.9,
+    },
   ],
-  "desktop": [
+  desktop: [
     {
-      "d": "M4 15 20 14 20 18 4 18Z",
-      "fill": "#f4ce19",
-      "stroke": "none"
+      d: "M4 15 20 14 20 18 4 18Z",
+      fill: "#f4ce19",
+      stroke: "none",
     },
     {
-      "d": "M3 4 21 3 20 18 4 18ZM12 18 12 22M7 22 17 22",
-      "fill": "none",
-      "strokeWidth": 2.1
+      d: "M3 4 21 3 20 18 4 18ZM12 18 12 22M7 22 17 22",
+      fill: "none",
+      strokeWidth: 2.1,
     },
     {
-      "d": "M6 7 10 6",
-      "fill": "none",
-      "strokeWidth": 1.05
-    }
+      d: "M6 7 10 6",
+      fill: "none",
+      strokeWidth: 1.05,
+    },
   ],
-  "eye": [
+  eye: [
     {
-      "d": "M12 7C21 6 19 17 12 17Z",
-      "fill": "#f4ce19",
-      "stroke": "none"
+      d: "M12 7C21 6 19 17 12 17Z",
+      fill: "#f4ce19",
+      stroke: "none",
     },
     {
-      "d": "M2 12Q11 0 22 11Q13 24 2 12Z",
-      "fill": "none",
-      "strokeWidth": 2.1
+      d: "M2 12Q11 0 22 11Q13 24 2 12Z",
+      fill: "none",
+      strokeWidth: 2.1,
     },
     {
-      "d": "M12 7C6 6 6 17 12 17S19 7 12 7Z",
-      "fill": "none",
-      "strokeWidth": 2.1
+      d: "M12 7C6 6 6 17 12 17S19 7 12 7Z",
+      fill: "none",
+      strokeWidth: 2.1,
     },
     {
-      "d": "M12 10C9 9 9 14 12 14S15 10 12 10Z",
-      "fill": "currentColor",
-      "strokeWidth": 0.75
-    }
+      d: "M12 10C9 9 9 14 12 14S15 10 12 10Z",
+      fill: "currentColor",
+      strokeWidth: 0.75,
+    },
   ],
-  "settings": [
+  settings: [
     {
-      "d": "M3 5 21 4M3 12 21 12M3 20 21 19",
-      "fill": "none",
-      "strokeWidth": 1.5
+      d: "M3 5 21 4M3 12 21 12M3 20 21 19",
+      fill: "none",
+      strokeWidth: 1.5,
     },
     {
-      "d": "M8 2 12 2 12 8 8 8Z",
-      "fill": "#f4ce19",
-      "strokeWidth": 1.5
+      d: "M8 2 12 2 12 8 8 8Z",
+      fill: "#f4ce19",
+      strokeWidth: 1.5,
     },
     {
-      "d": "M14 9 18 9 18 15 14 15Z",
-      "fill": "var(--island-bg-color, white)",
-      "strokeWidth": 1.5
+      d: "M14 9 18 9 18 15 14 15Z",
+      fill: "var(--island-bg-color, white)",
+      strokeWidth: 1.5,
     },
     {
-      "d": "M6 16 10 16 10 22 6 22Z",
-      "fill": "#f4ce19",
-      "strokeWidth": 1.5
-    }
+      d: "M6 16 10 16 10 22 6 22Z",
+      fill: "#f4ce19",
+      strokeWidth: 1.5,
+    },
   ],
-  "brain": [
+  brain: [
     {
-      "d": "M13 3Q20 2 19 7C25 9 22 16 19 17Q19 22 13 21Z",
-      "fill": "#f4ce19",
-      "stroke": "none"
+      d: "M13 3Q20 2 19 7C25 9 22 16 19 17Q19 22 13 21Z",
+      fill: "#f4ce19",
+      stroke: "none",
     },
     {
-      "d": "M11 4C8 1 4 4 5 7C0 7 1 14 4 15C2 20 8 23 11 20ZM13 4C16 1 21 4 19 7C24 8 23 14 20 15C22 20 16 23 13 20Z",
-      "fill": "none",
-      "strokeWidth": 2.1
+      d: "M11 4C8 1 4 4 5 7C0 7 1 14 4 15C2 20 8 23 11 20ZM13 4C16 1 21 4 19 7C24 8 23 14 20 15C22 20 16 23 13 20Z",
+      fill: "none",
+      strokeWidth: 2.1,
     },
     {
-      "d": "M5 7 8 9 7 12M4 15 8 14M19 7 16 9 17 12M20 15 16 14",
-      "fill": "none",
-      "strokeWidth": 1.2
-    }
+      d: "M5 7 8 9 7 12M4 15 8 14M19 7 16 9 17 12M20 15 16 14",
+      fill: "none",
+      strokeWidth: 1.2,
+    },
   ],
-  "mermaid": [
+  mermaid: [
     {
-      "d": "M10 13 14 13 14 21 10 21Z",
-      "fill": "#f4ce19",
-      "stroke": "none"
+      d: "M10 13 14 13 14 21 10 21Z",
+      fill: "#f4ce19",
+      stroke: "none",
     },
     {
-      "d": "M3 3 8 4 12 10 16 4 21 3 20 8 15 14 14 21 10 21 9 14 4 9Z",
-      "fill": "none",
-      "strokeWidth": 2.1
+      d: "M3 3 8 4 12 10 16 4 21 3 20 8 15 14 14 21 10 21 9 14 4 9Z",
+      fill: "none",
+      strokeWidth: 2.1,
     },
     {
-      "d": "M6 6 12 13 18 6M12 13 12 19",
-      "fill": "none",
-      "strokeWidth": 1.2
-    }
+      d: "M6 6 12 13 18 6M12 13 12 19",
+      fill: "none",
+      strokeWidth: 1.2,
+    },
   ],
-  "magic": [
+  magic: [
     {
-      "d": "M8 8 11 7 13 11 10 14 6 13Z",
-      "fill": "#f4ce19",
-      "stroke": "none"
+      d: "M8 8 11 7 13 11 10 14 6 13Z",
+      fill: "#f4ce19",
+      stroke: "none",
     },
     {
-      "d": "M5 5Q11 2 18 5C23 7 22 13 18 16Q14 18 9 17L4 21 5 15C1 12 1 8 5 5Z",
-      "fill": "none",
-      "strokeWidth": 2.1
+      d: "M5 5Q11 2 18 5C23 7 22 13 18 16Q14 18 9 17L4 21 5 15C1 12 1 8 5 5Z",
+      fill: "none",
+      strokeWidth: 2.1,
     },
     {
-      "d": "M11 7 12.2 10 15 11 12.2 12 11 15 9.8 12 7 11 9.8 10Z",
-      "fill": "none",
-      "strokeWidth": 1.65
+      d: "M11 7 12.2 10 15 11 12.2 12 11 15 9.8 12 7 11 9.8 10Z",
+      fill: "none",
+      strokeWidth: 1.65,
     },
     {
-      "d": "M18 2 18.8 4.3 21 5 18.8 5.8 18 8 17.2 5.8 15 5 17.2 4.3Z",
-      "fill": "#f4ce19",
-      "stroke": "none"
-    }
+      d: "M18 2 18.8 4.3 21 5 18.8 5.8 18 8 17.2 5.8 15 5 17.2 4.3Z",
+      fill: "#f4ce19",
+      stroke: "none",
+    },
   ],
-  "ai": [
+  ai: [
     {
-      "d": "M5 6 9 5 8 14 5 13Z",
-      "fill": "#f4ce19",
-      "stroke": "none"
+      d: "M5 6 9 5 8 14 5 13Z",
+      fill: "#f4ce19",
+      stroke: "none",
     },
     {
-      "d": "M4 5Q11 2 19 5C24 8 22 14 17 16Q13 18 8 17L3 21 4 15C1 12 1 8 4 5Z",
-      "fill": "none",
-      "strokeWidth": 2.1
+      d: "M4 5Q11 2 19 5C24 8 22 14 17 16Q13 18 8 17L3 21 4 15C1 12 1 8 4 5Z",
+      fill: "none",
+      strokeWidth: 2.1,
     },
     {
-      "d": "M7 13.2 9.4 7.2 11.8 13.2M7.7 11.1 11.1 11.1",
-      "fill": "none",
-      "strokeWidth": 1.72
+      d: "M7 13.2 9.4 7.2 11.8 13.2M7.7 11.1 11.1 11.1",
+      fill: "none",
+      strokeWidth: 1.72,
     },
     {
-      "d": "M14.6 7.2 14.6 13.2M13.4 7.2 15.8 7.2M13.4 13.2 15.8 13.2",
-      "fill": "none",
-      "strokeWidth": 1.72
-    }
+      d: "M14.6 7.2 14.6 13.2M13.4 7.2 15.8 7.2M13.4 13.2 15.8 13.2",
+      fill: "none",
+      strokeWidth: 1.72,
+    },
   ],
-  "plus": [
+  plus: [
     {
-      "d": "M12 4Q11 12 12 21M4 12Q12 11 21 12",
-      "fill": "none",
-      "strokeWidth": 3
-    }
+      d: "M12 4Q11 12 12 21M4 12Q12 11 21 12",
+      fill: "none",
+      strokeWidth: 3,
+    },
   ],
-  "github": [
+  github: [
     {
-      "d": "M10 15 14 15 15 22 9 22Z",
-      "fill": "#f4ce19",
-      "stroke": "none"
+      d: "M10 15 14 15 15 22 9 22Z",
+      fill: "#f4ce19",
+      stroke: "none",
     },
     {
-      "d": "M8 22 8 18Q3 19 2 15M8 18 8 16C1 15 2 9 4 7L4 2 9 5Q12 4 15 5L20 2 20 7C24 12 19 16 15 16Q17 18 16 22",
-      "fill": "none",
-      "strokeWidth": 2.1
+      d: "M8 22 8 18Q3 19 2 15M8 18 8 16C1 15 2 9 4 7L4 2 9 5Q12 4 15 5L20 2 20 7C24 12 19 16 15 16Q17 18 16 22",
+      fill: "none",
+      strokeWidth: 2.1,
     },
     {
-      "d": "M7 10 7 12M17 10 17 12",
-      "fill": "none",
-      "strokeWidth": 2.4
-    }
+      d: "M7 10 7 12M17 10 17 12",
+      fill: "none",
+      strokeWidth: 2.4,
+    },
   ],
-  "thin": [
+  thin: [
     {
-      "d": "M4 12Q12 11.5 20 12",
-      "fill": "none",
-      "strokeWidth": 1.5
-    }
+      d: "M4 12Q12 11.5 20 12",
+      fill: "none",
+      strokeWidth: 1.5,
+    },
   ],
-  "bold": [
+  bold: [
     {
-      "d": "M4 12Q12 11.4 20 12",
-      "fill": "none",
-      "strokeWidth": 3.75
-    }
+      d: "M4 12Q12 11.4 20 12",
+      fill: "none",
+      strokeWidth: 3.75,
+    },
   ],
-  "heavy": [
+  heavy: [
     {
-      "d": "M4 12Q12 11.3 20 12",
-      "fill": "none",
-      "strokeWidth": 6
-    }
+      d: "M4 12Q12 11.3 20 12",
+      fill: "none",
+      strokeWidth: 6,
+    },
   ],
-  "solid": [
+  solid: [
     {
-      "d": "M3 12Q12 11.5 21 12",
-      "fill": "none",
-      "strokeWidth": 2.55
-    }
+      d: "M3 12Q12 11.5 21 12",
+      fill: "none",
+      strokeWidth: 2.55,
+    },
   ],
-  "dashed": [
+  dashed: [
     {
-      "d": "M3 12 7 11.8M10 11.8 14 12M17 12 21 11.8",
-      "fill": "none",
-      "strokeWidth": 2.55
-    }
+      d: "M3 12 7 11.8M10 11.8 14 12M17 12 21 11.8",
+      fill: "none",
+      strokeWidth: 2.55,
+    },
   ],
-  "dotted": [
+  dotted: [
     {
-      "d": "M3 12h.05",
-      "fill": "none",
-      "strokeWidth": 3.45
+      d: "M3 12h.05",
+      fill: "none",
+      strokeWidth: 3.45,
     },
     {
-      "d": "M7.5 11.8h.05",
-      "fill": "none",
-      "strokeWidth": 3.45
+      d: "M7.5 11.8h.05",
+      fill: "none",
+      strokeWidth: 3.45,
     },
     {
-      "d": "M12 12h.05",
-      "fill": "none",
-      "strokeWidth": 3.45
+      d: "M12 12h.05",
+      fill: "none",
+      strokeWidth: 3.45,
     },
     {
-      "d": "M16.5 11.8h.05",
-      "fill": "none",
-      "strokeWidth": 3.45
+      d: "M16.5 11.8h.05",
+      fill: "none",
+      strokeWidth: 3.45,
     },
     {
-      "d": "M21 12h.05",
-      "fill": "none",
-      "strokeWidth": 3.45
-    }
+      d: "M21 12h.05",
+      fill: "none",
+      strokeWidth: 3.45,
+    },
   ],
-  "neat": [
+  neat: [
     {
-      "d": "M3 15 11 9 13 14 21 9",
-      "fill": "none",
-      "strokeWidth": 1.8
-    }
+      d: "M3 15 11 9 13 14 21 9",
+      fill: "none",
+      strokeWidth: 1.8,
+    },
   ],
-  "sketch": [
+  sketch: [
     {
-      "d": "M3 15Q8 10 12 9L12 15 21 10M4 16 11 11 13 16 20 12",
-      "fill": "none",
-      "strokeWidth": 1.65
-    }
+      d: "M3 15Q8 10 12 9L12 15 21 10M4 16 11 11 13 16 20 12",
+      fill: "none",
+      strokeWidth: 1.65,
+    },
   ],
-  "rough": [
+  rough: [
     {
-      "d": "M2 14 12 8 10 16 21 9M3 17 11 10 14 16 20 12M5 13 12 11 15 14 20 10",
-      "fill": "none",
-      "strokeWidth": 1.8
-    }
+      d: "M2 14 12 8 10 16 21 9M3 17 11 10 14 16 20 12M5 13 12 11 15 14 20 10",
+      fill: "none",
+      strokeWidth: 1.8,
+    },
   ],
-  "sharp": [
+  sharp: [
     {
-      "d": "M3 3 12 3 12 6 6 6 6 12 3 12Z",
-      "fill": "#f4ce19",
-      "stroke": "none"
+      d: "M3 3 12 3 12 6 6 6 6 12 3 12Z",
+      fill: "#f4ce19",
+      stroke: "none",
     },
     {
-      "d": "M4 12 4 4 12 4",
-      "fill": "none",
-      "strokeWidth": 2.1
+      d: "M4 12 4 4 12 4",
+      fill: "none",
+      strokeWidth: 2.1,
     },
     {
-      "d": "M16 4h.1M20 4h.1M20 8h.1M20 12h.1M20 16h.1M20 20h.1M16 20h.1M12 20h.1M8 20h.1M4 20h.1M4 16h.1",
-      "fill": "none",
-      "strokeWidth": 1.95
-    }
+      d: "M16 4h.1M20 4h.1M20 8h.1M20 12h.1M20 16h.1M20 20h.1M16 20h.1M12 20h.1M8 20h.1M4 20h.1M4 16h.1",
+      fill: "none",
+      strokeWidth: 1.95,
+    },
   ],
-  "round": [
+  round: [
     {
-      "d": "M3 12Q2 2 12 3L12 6Q6 5 6 12Z",
-      "fill": "#f4ce19",
-      "stroke": "none"
+      d: "M3 12Q2 2 12 3L12 6Q6 5 6 12Z",
+      fill: "#f4ce19",
+      stroke: "none",
     },
     {
-      "d": "M4 12Q3 3 12 4",
-      "fill": "none",
-      "strokeWidth": 2.1
+      d: "M4 12Q3 3 12 4",
+      fill: "none",
+      strokeWidth: 2.1,
     },
     {
-      "d": "M16 4h.1M20 4h.1M20 8h.1M20 12h.1M20 16h.1M20 20h.1M16 20h.1M12 20h.1M8 20h.1M4 20h.1M4 16h.1",
-      "fill": "none",
-      "strokeWidth": 1.95
-    }
+      d: "M16 4h.1M20 4h.1M20 8h.1M20 12h.1M20 16h.1M20 20h.1M16 20h.1M12 20h.1M8 20h.1M4 20h.1M4 16h.1",
+      fill: "none",
+      strokeWidth: 1.95,
+    },
   ],
-  "forward": [
+  forward: [
     {
-      "d": "M10 8 14 8 14 20 10 20Z",
-      "fill": "#f4ce19",
-      "stroke": "none"
+      d: "M10 8 14 8 14 20 10 20Z",
+      fill: "#f4ce19",
+      stroke: "none",
     },
     {
-      "d": "M12 21 12 5M7 10 12 5 18 10",
-      "fill": "none",
-      "strokeWidth": 2.1
-    }
+      d: "M12 21 12 5M7 10 12 5 18 10",
+      fill: "none",
+      strokeWidth: 2.1,
+    },
   ],
-  "backward": [
+  backward: [
     {
-      "d": "M10 4 14 4 14 17 10 17Z",
-      "fill": "#f4ce19",
-      "stroke": "none"
+      d: "M10 4 14 4 14 17 10 17Z",
+      fill: "#f4ce19",
+      stroke: "none",
     },
     {
-      "d": "M12 3 12 19M7 14 12 19 18 14",
-      "fill": "none",
-      "strokeWidth": 2.1
-    }
+      d: "M12 3 12 19M7 14 12 19 18 14",
+      fill: "none",
+      strokeWidth: 2.1,
+    },
   ],
-  "front": [
+  front: [
     {
-      "d": "M10 11 14 11 14 21 10 21Z",
-      "fill": "#f4ce19",
-      "stroke": "none"
+      d: "M10 11 14 11 14 21 10 21Z",
+      fill: "#f4ce19",
+      stroke: "none",
     },
     {
-      "d": "M12 21 12 9M7 14 12 9 18 14M4 4Q12 3 21 4",
-      "fill": "none",
-      "strokeWidth": 2.1
-    }
+      d: "M12 21 12 9M7 14 12 9 18 14M4 4Q12 3 21 4",
+      fill: "none",
+      strokeWidth: 2.1,
+    },
   ],
-  "back": [
+  back: [
     {
-      "d": "M10 3 14 3 14 13 10 13Z",
-      "fill": "#f4ce19",
-      "stroke": "none"
+      d: "M10 3 14 3 14 13 10 13Z",
+      fill: "#f4ce19",
+      stroke: "none",
     },
     {
-      "d": "M12 3 12 15M7 10 12 15 18 10M4 21Q12 20 21 21",
-      "fill": "none",
-      "strokeWidth": 2.1
-    }
-  ]
+      d: "M12 3 12 15M7 10 12 15 18 10M4 21Q12 20 21 21",
+      fill: "none",
+      strokeWidth: 2.1,
+    },
+  ],
 };
 
 export const handdrawnUIIcon = (name: keyof typeof drawings) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false" role="img">
-    {drawings[name].map((props, index) => <path key={index} {...props} />)}
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+    focusable="false"
+    role="img"
+  >
+    {drawings[name].map((props, index) => (
+      <path key={index} {...props} />
+    ))}
   </svg>
 );

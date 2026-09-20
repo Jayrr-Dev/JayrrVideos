@@ -12,7 +12,7 @@ export const copyElementRenderOverrides = (
 ): ElementRenderOverrides => {
   const copy = new Map<string, ElementRenderOverride>();
   for (const [id, value] of overrides ?? []) {
-    const { opacity, offset, scale, textClip } = value;
+    const { opacity, offset, scale, lockScreen, textClip } = value;
     const clip = normalizeTextClip(id, textClip);
     if (
       (opacity !== undefined && !Number.isFinite(opacity)) ||
@@ -20,7 +20,12 @@ export const copyElementRenderOverrides = (
         (offset === null ||
           !Number.isFinite(offset.x) ||
           !Number.isFinite(offset.y))) ||
-      (scale !== undefined && !Number.isFinite(scale))
+      (scale !== undefined && !Number.isFinite(scale)) ||
+      (lockScreen !== undefined &&
+        (!Number.isFinite(lockScreen.x) ||
+          !Number.isFinite(lockScreen.y) ||
+          !Number.isFinite(lockScreen.zoom) ||
+          lockScreen.zoom <= 0))
     ) {
       throw new TypeError(`Render overrides for ${id} must be finite numbers`);
     }
@@ -28,6 +33,7 @@ export const copyElementRenderOverrides = (
       opacity === undefined &&
       offset === undefined &&
       scale === undefined &&
+      lockScreen === undefined &&
       !clip
     ) {
       continue;
@@ -36,6 +42,15 @@ export const copyElementRenderOverrides = (
       ...(opacity !== undefined ? { opacity: clamp(opacity, 0, 100) } : {}),
       ...(offset ? { offset: { x: offset.x, y: offset.y } } : {}),
       ...(scale !== undefined ? { scale } : {}),
+      ...(lockScreen
+        ? {
+            lockScreen: {
+              x: lockScreen.x,
+              y: lockScreen.y,
+              zoom: lockScreen.zoom,
+            },
+          }
+        : {}),
       ...(clip ? { textClip: clip } : {}),
     });
   }

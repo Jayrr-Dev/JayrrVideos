@@ -47,14 +47,90 @@
     margin-bottom: 0.65rem;
   }
 
+  .jayrr-sound-library__toolbar-row {
+    display: flex;
+    align-items: stretch;
+    gap: 0.4rem;
+    min-width: 0;
+  }
+
   .jayrr-sound-library__search {
-    width: 100%;
+    flex: 1;
+    min-width: 0;
+    width: auto;
+    box-sizing: border-box;
     padding: 0.45rem 0.65rem;
     border: 1px solid var(--dialog-border-color);
     border-radius: 0.4rem;
     background: var(--input-bg-color, var(--island-bg-color));
     color: inherit;
     font: inherit;
+  }
+
+  .jayrr-sound-library__filter {
+    position: relative;
+    flex: 0 0 auto;
+    display: flex;
+  }
+
+  .jayrr-sound-library__filter-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    height: 100%;
+    aspect-ratio: 1 / 1;
+    width: auto;
+    padding: 0;
+    border: 1px solid var(--dialog-border-color);
+    border-radius: 0.4rem;
+    background: var(--input-bg-color, var(--island-bg-color));
+    color: inherit;
+    font: inherit;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0;
+    cursor: pointer;
+  }
+
+  .jayrr-sound-library__filter-btn.is-on,
+  .jayrr-sound-library__filter-btn[aria-expanded="true"] {
+    border-color: var(--color-primary);
+  }
+
+  .jayrr-sound-library__filter-menu {
+    position: absolute;
+    top: calc(100% + 0.25rem);
+    right: 0;
+    z-index: 6;
+    margin: 0;
+    padding: 0.25rem;
+    list-style: none;
+    min-width: 9.5rem;
+    border: 1px solid var(--dialog-border-color);
+    border-radius: 0.35rem;
+    background: var(--island-bg-color);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  }
+
+  .jayrr-sound-library__filter-option {
+    display: block;
+    width: 100%;
+    padding: 0.35rem 0.5rem;
+    border: 0;
+    border-radius: 0.2rem;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .jayrr-sound-library__filter-option:hover,
+  .jayrr-sound-library__filter-option.is-on {
+    background: var(--color-surface-low, var(--button-hover-bg));
   }
 
   .jayrr-sound-library__crumbs {
@@ -120,7 +196,57 @@
     min-width: 0;
   }
 
-  .jayrr-sound-library__row:hover {
+  .jayrr-sound-library__row:hover,
+  .jayrr-sound-library__row:has(.jayrr-sound-library__pick:hover),
+  .jayrr-sound-library__row:has(.jayrr-sound-library__play-hit:hover) {
+    background: var(--color-surface-low, var(--button-hover-bg));
+  }
+
+  .jayrr-sound-library__row.is-selected {
+    background: var(--color-surface-mid, var(--button-hover-bg));
+  }
+
+  .jayrr-sound-library__play-hit {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    border-radius: 999px;
+  }
+
+  .jayrr-sound-library__pick {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .jayrr-sound-library__clear {
+    width: 100%;
+    margin-top: 0.65rem;
+    padding: 0.45rem;
+    border: 1px solid var(--dialog-border-color);
+    border-radius: 0.4rem;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .jayrr-sound-library__clear:hover {
     background: var(--color-surface-low, var(--button-hover-bg));
   }
 
@@ -197,6 +323,25 @@
     font-size: 0.75rem;
   }
 
+  .jayrr-sound-library__stats {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: baseline;
+    gap: 0.55rem;
+  }
+
+  .jayrr-sound-library__metric {
+    flex: 0 0 auto;
+    font-variant-numeric: tabular-nums;
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .jayrr-sound-library__metric.is-empty {
+    color: var(--color-gray-40);
+  }
+
   .jayrr-sound-library__clock {
     flex: 0 0 3.25rem;
     width: 3.25rem;
@@ -220,5 +365,11 @@
   .jayrr-sound-library__empty {
     margin: 0.5rem 0 0;
     color: var(--color-gray-40);
+  }
+
+  .jayrr-sound-library__error {
+    margin: 0.45rem 0 0;
+    color: var(--color-danger, #c0392b);
+    font-size: 0.8rem;
   }
 }

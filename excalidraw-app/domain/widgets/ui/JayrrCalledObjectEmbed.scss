@@ -366,6 +366,21 @@
     grid-template-columns: repeat(8, minmax(0, 1fr));
   }
 
+  .jayrr-called-embed__bands--emotion {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+  }
+
+  .jayrr-called-embed__bands .jayrr-called-embed__emo {
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    padding: 0.08rem 0.12rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: center;
+    font-size: 0.5rem;
+  }
+
   .jayrr-called-embed__iq {
     display: inline-flex;
     align-items: center;
@@ -604,6 +619,31 @@
     min-height: 0;
     padding: 0.15rem 0 0.15rem 0.75rem;
     border-left: 1px solid var(--sidebar-border-color);
+  }
+
+  .jayrr-called-embed__now--mbti {
+    flex-basis: 13.5rem;
+    width: 13.5rem;
+    min-width: 13.5rem;
+  }
+
+  .jayrr-called-embed__now-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.4rem;
+    min-width: 0;
+  }
+
+  .jayrr-called-embed__now-row .jayrr-called-embed__now-name,
+  .jayrr-called-embed__now-row .jayrr-called-embed__who-input {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .jayrr-called-embed__now-row .jayrr-called-embed__mbti {
+    flex: 0 0 auto;
+    font-size: 0.68rem;
   }
 
   .jayrr-called-embed__now-label {

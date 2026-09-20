@@ -82,8 +82,23 @@ const findLibraryRoot = () => {
   return null;
 };
 
+const TAG_RE =
+  / \[(\d{1,3}),(\d{2}),(\d{2})\] \[(\d+)Hz\] \[sc(\d+)Hz\](?: \[(-?\d+)dB\])?/;
+
+const loudnessFromFile = (file) => {
+  if (typeof file.loudnessDb === "number") {
+    return file.loudnessDb;
+  }
+  const match = String(file.path ?? "").match(TAG_RE);
+  if (match?.[6] != null) {
+    return Number(match[6]);
+  }
+  return undefined;
+};
+
 const toSound = (file) => {
   const folderPath = file.folders.join("/");
+  const loudnessDb = loudnessFromFile(file);
   return {
     path: file.path,
     name: file.name,
@@ -98,6 +113,7 @@ const toSound = (file) => {
     durationSec: file.durationSec,
     sampleRate: file.sampleRate,
     centroidHz: file.centroidHz,
+    ...(typeof loudnessDb === "number" ? { loudnessDb } : {}),
     search: [
       file.name,
       file.source ?? file.name,
