@@ -1,5 +1,13 @@
 import { useExcalidrawAPI } from "@excalidraw/excalidraw";
-import { EmbedIcon, helpIcon } from "@excalidraw/excalidraw/components/icons";
+import {
+  helpIcon,
+  messageCircleIcon,
+  widgetCaptionIcon,
+  widgetClassifierIcon,
+  widgetMarkdownIcon,
+  widgetPdfIcon,
+  widgetTranscriptionIcon,
+} from "@excalidraw/excalidraw/components/icons";
 import { useRef } from "react";
 
 import { Tooltip } from "../../../components/ui";
@@ -13,6 +21,23 @@ import { CALLED_OBJECTS } from "../model";
 import "../../../components/ui/JayrrLibraryMenu.scss";
 
 import "./JayrrCalledObjectsPanel.scss";
+
+const widgetIcon = (kind: typeof CALLED_OBJECTS[number]["kind"]) => {
+  switch (kind) {
+    case "transcribe":
+      return messageCircleIcon;
+    case "classifier":
+      return widgetClassifierIcon;
+    case "transcription":
+      return widgetTranscriptionIcon;
+    case "caption":
+      return widgetCaptionIcon;
+    case "markdown":
+      return widgetMarkdownIcon;
+    case "pdf":
+      return widgetPdfIcon;
+  }
+};
 
 export const JayrrCalledObjectsPanel = () => {
   const api = useExcalidrawAPI();
@@ -35,7 +60,10 @@ export const JayrrCalledObjectsPanel = () => {
       <div className="jayrr-library__body">
         <ul className="jayrr-scene-grid">
           {CALLED_OBJECTS.map((object) => (
-            <li key={object.kind} className="jayrr-scene-card">
+            <li
+              key={object.kind}
+              className={`jayrr-scene-card jayrr-scene-card--${object.kind}`}
+            >
               <span className="jayrr-scene-card__name">{object.name}</span>
               <button
                 type="button"
@@ -63,7 +91,9 @@ export const JayrrCalledObjectsPanel = () => {
                   insertCalledObject(api, object);
                 }}
               >
-                <span className="jayrr-called-panel__icon">{EmbedIcon}</span>
+                <span className="jayrr-called-panel__icon">
+                  {widgetIcon(object.kind)}
+                </span>
                 <span className="jayrr-called-panel__hint">{object.hint}</span>
               </button>
             </li>

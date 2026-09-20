@@ -8,7 +8,7 @@ import {
 import { useExcalidrawContainer } from "@excalidraw/excalidraw/components/App";
 import {
   EmbedIcon,
-  MagicIcon,
+  aiIcon,
   presentationIcon,
 } from "@excalidraw/excalidraw/components/icons";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -361,7 +361,7 @@ export const JayrrPresentHost = ({
                 {EmbedIcon}
               </Sidebar.TabTrigger>
               <Sidebar.TabTrigger tab={JAYRR_AI_TAB} title="AI" aria-label="AI">
-                {MagicIcon}
+                {aiIcon}
               </Sidebar.TabTrigger>
             </DefaultSidebar.TrailingTabTriggers>
             <Sidebar.Tab tab={JAYRR_CALLED_OBJECTS_TAB}>

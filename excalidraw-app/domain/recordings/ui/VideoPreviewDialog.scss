@@ -1,0 +1,37 @@
+.excalidraw {
+  .jayrr-video-preview .Dialog__title {
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.55rem;
+  }
+
+  .jayrr-video-preview__title-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .jayrr-video-preview__title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .jayrr-video-preview__info {
+    display: inline-flex;
+    flex: 0 0 auto;
+    color: var(--icon-fill-color);
+    cursor: help;
+  }
+
+  .jayrr-video-preview__info svg {
+    width: 1rem;
+    height: 1rem;
+  }
+
+  .jayrr-video-preview .Dialog__content {
+    padding-top: 0;
+  }
+}

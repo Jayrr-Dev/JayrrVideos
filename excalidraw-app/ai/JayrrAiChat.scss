@@ -37,50 +37,12 @@
   }
 
   .jayrr-ai-info {
-    position: relative;
     display: inline-flex;
-  }
+    color: var(--color-gray-70);
 
-  .jayrr-ai-info__btn {
-    width: 1.15rem;
-    height: 1.15rem;
-    border-radius: 999px;
-    border: 1px solid var(--color-primary);
-    background: none;
-    color: var(--color-primary);
-    font-size: 0.7rem;
-    font-weight: 700;
-    line-height: 1;
-    cursor: pointer;
-  }
-
-  .jayrr-ai-info__panel {
-    position: absolute;
-    top: calc(100% + 0.4rem);
-    left: 0;
-    z-index: 4;
-    width: 16rem;
-    padding: 0.75rem;
-    border: 1px solid var(--sidebar-border-color);
-    border-radius: 0.75rem;
-    background: var(--island-bg-color);
-    box-shadow: var(--shadow-island);
-    color: var(--text-primary-color);
-    font-weight: 400;
-    font-size: 0.8rem;
-    line-height: 1.35;
-
-    p {
-      margin: 0 0 0.4rem;
-    }
-
-    ul {
-      margin: 0;
-      padding-left: 1.1rem;
-    }
-
-    li + li {
-      margin-top: 0.25rem;
+    svg {
+      width: 1rem;
+      height: 1rem;
     }
   }
 

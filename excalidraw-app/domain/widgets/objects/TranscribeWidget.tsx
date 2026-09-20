@@ -46,15 +46,6 @@ import { LiveWidgetToolbar } from "../ui/LiveWidgetToolbar";
 import { useRegisterWidgetToolbar } from "../widgetToolbarRegistry";
 
 import {
-  EMBED_PREFIX,
-  MIC_SOURCE,
-  isMicSource,
-  listAudioSources,
-  micDeviceId,
-  micSourceId,
-  type AudioSourceOption,
-} from "./listAudioSources";
-import {
   EMOTION_QUESTION,
   emotionsFromAnswers,
   type EmotionPick,
@@ -75,6 +66,15 @@ import {
   mbtiFromAnswers,
   type MbtiResult,
 } from "./jevMbtiScale";
+import {
+  EMBED_PREFIX,
+  MIC_SOURCE,
+  isMicSource,
+  listAudioSources,
+  micDeviceId,
+  micSourceId,
+  type AudioSourceOption,
+} from "./listAudioSources";
 import {
   DEFAULT_TRANSCRIBE,
   readTranscribeConfig,

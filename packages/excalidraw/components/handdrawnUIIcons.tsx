@@ -317,6 +317,113 @@ const drawings = {
       "strokeWidth": 1.35
     }
   ],
+  "widgetLiveClassifier": [
+    {
+      "d": "M10 8 14 8 14 17 10 17Z",
+      "fill": "#f4ce19",
+      "stroke": "none"
+    },
+    {
+      "d": "M10 8C7 7 7 18 10 17M14 8C17 7 17 18 14 17",
+      "fill": "none",
+      "strokeWidth": 2.1
+    },
+    {
+      "d": "M4 12 7 12M17 12 20 12M5 8 7 10M17 14 19 16",
+      "fill": "none",
+      "strokeWidth": 1.35
+    }
+  ],
+  "widgetClassifier": [
+    {
+      "d": "M4 17 8 13 12 15 18 7 20 9 12 19 8 17 4 21Z",
+      "fill": "#f4ce19",
+      "stroke": "none"
+    },
+    {
+      "d": "M3 20 3 4M3 20 21 20",
+      "fill": "none",
+      "strokeWidth": 2.1
+    },
+    {
+      "d": "M5 16 8 13 12 15 18 7",
+      "fill": "none",
+      "strokeWidth": 1.5
+    }
+  ],
+  "widgetTranscription": [
+    {
+      "d": "M6 4 17 4 20 8 19 20 5 20Z",
+      "fill": "#f4ce19",
+      "stroke": "none"
+    },
+    {
+      "d": "M6 4 17 4 20 8 19 20 5 20Z",
+      "fill": "none",
+      "strokeWidth": 2.1
+    },
+    {
+      "d": "M16 4 16 9 20 9M8 12 16 12M8 15 17 15M8 18 14 18",
+      "fill": "none",
+      "strokeWidth": 1.35
+    }
+  ],
+  "widgetCaption": [
+    {
+      "d": "M5 6 19 6 21 9 19 17 5 17 3 14Z",
+      "fill": "#f4ce19",
+      "stroke": "none"
+    },
+    {
+      "d": "M5 6 19 6 21 9 19 17 5 17 3 14Z",
+      "fill": "none",
+      "strokeWidth": 2.1
+    },
+    {
+      "d": "M7 11 17 11M7 14 15 14",
+      "fill": "none",
+      "strokeWidth": 1.5
+    }
+  ],
+  "widgetMarkdown": [
+    {
+      "d": "M6 4 17 4 20 8 19 20 5 20Z",
+      "fill": "#f4ce19",
+      "stroke": "none"
+    },
+    {
+      "d": "M6 4 17 4 20 8 19 20 5 20Z",
+      "fill": "none",
+      "strokeWidth": 2.1
+    },
+    {
+      "d": "M8.5 14 8.5 10 10 12 11.5 10 11.5 14M13 10 13 14 14.4 14Q16.2 14 16.2 12T14.4 10Z",
+      "fill": "none",
+      "strokeWidth": 0.98
+    }
+  ],
+  "widgetPdf": [
+    {
+      "d": "M6 4 17 4 20 8 19 20 5 20Z",
+      "fill": "#f4ce19",
+      "stroke": "none"
+    },
+    {
+      "d": "M6 4 17 4 20 8 19 20 5 20Z",
+      "fill": "none",
+      "strokeWidth": 2.1
+    },
+    {
+      "d": "M6.9 14.4 6.9 11.6 8.3 11.6Q9.7 11.6 8.3 13L6.9 13M10.6 11.6 10.6 14.4 12 14.4Q13.4 14.4 13.4 13T12 11.6Z",
+      "fill": "none",
+      "strokeWidth": 0.9
+    },
+    {
+      "d": "M14.8 14.4 14.8 11.6 17.6 11.6M14.8 13 16.7 13",
+      "fill": "none",
+      "strokeWidth": 0.9
+    }
+  ],
   "desktop": [
     {
       "d": "M4 15 20 14 20 18 4 18Z",
@@ -432,6 +539,28 @@ const drawings = {
       "d": "M18 2 18.8 4.3 21 5 18.8 5.8 18 8 17.2 5.8 15 5 17.2 4.3Z",
       "fill": "#f4ce19",
       "stroke": "none"
+    }
+  ],
+  "ai": [
+    {
+      "d": "M5 6 9 5 8 14 5 13Z",
+      "fill": "#f4ce19",
+      "stroke": "none"
+    },
+    {
+      "d": "M4 5Q11 2 19 5C24 8 22 14 17 16Q13 18 8 17L3 21 4 15C1 12 1 8 4 5Z",
+      "fill": "none",
+      "strokeWidth": 2.1
+    },
+    {
+      "d": "M7 13.2 9.4 7.2 11.8 13.2M7.7 11.1 11.1 11.1",
+      "fill": "none",
+      "strokeWidth": 1.72
+    },
+    {
+      "d": "M14.6 7.2 14.6 13.2M13.4 7.2 15.8 7.2M13.4 13.2 15.8 13.2",
+      "fill": "none",
+      "strokeWidth": 1.72
     }
   ],
   "plus": [

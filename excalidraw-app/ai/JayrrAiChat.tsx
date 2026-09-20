@@ -22,8 +22,13 @@ import {
 
 import { Button, useExcalidrawAPI } from "@excalidraw/excalidraw";
 
-import { EraserIcon, MagicIcon } from "@excalidraw/excalidraw/components/icons";
+import {
+  EraserIcon,
+  aiIcon,
+  helpIcon,
+} from "@excalidraw/excalidraw/components/icons";
 
+import { Tooltip } from "../components/ui";
 import { convexSiteUrl } from "../convexClient";
 
 import {
@@ -139,33 +144,8 @@ function toolLabel(name: string, state: string) {
   return state === "output-available" ? meta.done : meta.busy;
 }
 
-function AiInfo() {
-  const [open, setOpen] = useState(false);
-  return (
-    <span className="jayrr-ai-info">
-      <button
-        type="button"
-        className="jayrr-ai-info__btn"
-        aria-label="About canvas AI"
-        aria-expanded={open}
-        onClick={() => setOpen((current) => !current)}
-      >
-        i
-      </button>
-      {open ? (
-        <div className="jayrr-ai-info__panel" role="dialog">
-          <p>Jayrr can see this board and draw on it.</p>
-          <ul>
-            <li>Ask for storyboards, slides, flows, or edits</li>
-            <li>Shapes land on the canvas as Jayrr works</li>
-            <li>Enter sends, Shift+Enter adds a line</li>
-            <li>Eraser clears chat, not the board</li>
-          </ul>
-        </div>
-      ) : null}
-    </span>
-  );
-}
+const AI_INFO =
+  "Jayrr can see this board and draw on it. Enter sends; Shift+Enter adds a line. Eraser clears chat, not the board.";
 
 function ToolChip({
   name,
@@ -408,11 +388,13 @@ const JayrrAiChatSession = () => {
       <div className="jayrr-ai__header">
         <h2 className="jayrr-ai__title">
           Canvas AI
-          <AiInfo />
+          <Tooltip label={AI_INFO} long>
+            <span className="jayrr-ai-info" aria-label="About canvas AI">
+              {helpIcon}
+            </span>
+          </Tooltip>
         </h2>
-        <p className="visually-hidden">
-          Chat can see the current board and draw on it.
-        </p>
+        <p className="visually-hidden">{AI_INFO}</p>
         <Button
           type="button"
           onSelect={clearChat}
@@ -433,7 +415,7 @@ const JayrrAiChatSession = () => {
       >
         {messages.length === 0 ? (
           <div className="jayrr-ai__empty">
-            <span className="jayrr-ai__empty-icon">{MagicIcon}</span>
+            <span className="jayrr-ai__empty-icon">{aiIcon}</span>
             <p>Ask Jayrr to draw on this board</p>
             <p className="jayrr-ai__hint">
               Storyboards, slides, and flows land on the canvas.

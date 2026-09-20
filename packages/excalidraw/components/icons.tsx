@@ -1797,6 +1797,13 @@ export const handIcon = handdrawnUIIcon("hand");
 
 export const downloadIcon = handdrawnUIIcon("download");
 
+export const widgetLiveClassifierIcon = handdrawnUIIcon("widgetLiveClassifier");
+export const widgetClassifierIcon = handdrawnUIIcon("widgetClassifier");
+export const widgetTranscriptionIcon = handdrawnUIIcon("widgetTranscription");
+export const widgetCaptionIcon = handdrawnUIIcon("widgetCaption");
+export const widgetMarkdownIcon = handdrawnUIIcon("widgetMarkdown");
+export const widgetPdfIcon = handdrawnUIIcon("widgetPdf");
+
 export const copyIcon = createIcon(
   <>
     <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
@@ -1984,6 +1991,8 @@ export const laserPointerToolIcon = createIcon(
 export const MagicIcon = handdrawnUIIcon("magic");
 
 export const MagicIconThin = handdrawnUIIcon("magic");
+
+export const aiIcon = handdrawnUIIcon("ai");
 
 export const OpenAIIcon = createIcon(
   <g stroke="currentColor" fill="none">

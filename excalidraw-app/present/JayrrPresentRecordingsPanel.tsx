@@ -12,6 +12,13 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useAtom } from "../app-jotai";
 import { JayrrConfirmDialog } from "../components/ui";
 import { api as convexApi, isConvexLinked } from "../convexClient";
+import {
+  formatRecordingClock,
+  formatRecordingQuality,
+  formatRecordingSize,
+  formatRecordingWhen,
+  VideoPreviewDialog,
+} from "../domain/recordings";
 
 import "../components/ui/JayrrLibraryMenu.scss";
 
@@ -38,62 +45,6 @@ export const recordingsTabIcon = (
     <circle cx="10" cy="10" r="3.55" fill="#e10600" />
   </svg>
 );
-
-const formatRecordingClock = (durationMs: number) => {
-  const total = Math.max(0, Math.round(durationMs / 1000));
-  const minutes = Math.floor(total / 60);
-  const seconds = total % 60;
-  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
-};
-
-const formatRecordingWhen = (createdAt: number) => {
-  return new Date(createdAt).toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-};
-
-const formatRecordingSize = (sizeBytes: number) => {
-  if (sizeBytes < 1024) {
-    return `${sizeBytes} B`;
-  }
-  if (sizeBytes < 1024 * 1024) {
-    return `${Math.round(sizeBytes / 1024)} KB`;
-  }
-  const mb = sizeBytes / (1024 * 1024);
-  if (mb < 10) {
-    return `${mb.toFixed(1)} MB`;
-  }
-  if (mb < 1024) {
-    return `${Math.round(mb)} MB`;
-  }
-  return `${(mb / 1024).toFixed(1)} GB`;
-};
-
-const formatRecordingQuality = (width: number, height: number) => {
-  const short = Math.min(width, height);
-  if (short >= 2160) {
-    return "4K";
-  }
-  if (short >= 1440) {
-    return "1440p";
-  }
-  if (short >= 1080) {
-    return "1080p";
-  }
-  if (short >= 720) {
-    return "720p";
-  }
-  if (short >= 480) {
-    return "480p";
-  }
-  if (short > 0) {
-    return "SD";
-  }
-  return null;
-};
 
 type RecordingRow = {
   _id: Id<"presentRecordings">;
@@ -148,6 +99,7 @@ const RecordingCard = ({
   onCommitRename,
   onCancelRename,
   onMove,
+  onPreview,
 }: {
   row: RecordingRow;
   folders: FolderRow[];
@@ -161,6 +113,7 @@ const RecordingCard = ({
   onCommitRename: () => void;
   onCancelRename: () => void;
   onMove: (folderId: Id<"presentRecordingFolders"> | null) => void;
+  onPreview: () => void;
 }) => {
   const clock = formatRecordingClock(row.durationMs);
   const size = formatRecordingSize(row.sizeBytes);
@@ -183,9 +136,6 @@ const RecordingCard = ({
         height: video.videoHeight,
       });
     }
-  };
-  const openRecording = () => {
-    window.open(row.url, "_blank", "noopener,noreferrer");
   };
   const moveTargets = folders.filter((folder) => folder._id !== row.folderId);
 
@@ -254,7 +204,7 @@ const RecordingCard = ({
           if (draggedRef.current) {
             return;
           }
-          openRecording();
+          onPreview();
         }}
       >
         {row.posterUrl ? (
@@ -305,7 +255,7 @@ const RecordingCard = ({
             onClickOutside={onMenuToggle}
             onSelect={onMenuToggle}
           >
-            <DropdownMenu.Item onSelect={openRecording}>Open</DropdownMenu.Item>
+            <DropdownMenu.Item onSelect={onPreview}>Open</DropdownMenu.Item>
             <DropdownMenu.Item onSelect={onStartRename}>
               Rename
             </DropdownMenu.Item>
@@ -530,6 +480,9 @@ const JayrrPresentRecordingsAuthed = ({
   const moveRecording = useMutation(convexApi.presentRecordings.move);
 
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [previewRecording, setPreviewRecording] = useState<RecordingRow | null>(
+    null,
+  );
   const [pendingDeleteRecording, setPendingDeleteRecording] =
     useState<RecordingRow | null>(null);
   const [pendingDeleteFolder, setPendingDeleteFolder] =
@@ -645,6 +598,10 @@ const JayrrPresentRecordingsAuthed = ({
           onCancelRename={() => {
             setRenamingRecordingId(null);
           }}
+          onPreview={() => {
+            setOpenMenuId(null);
+            setPreviewRecording(row);
+          }}
           onMove={(folderId) => {
             void (async () => {
               try {
@@ -662,6 +619,18 @@ const JayrrPresentRecordingsAuthed = ({
       ))}
     </ul>
   );
+
+  const previewDialog = previewRecording ? (
+    <VideoPreviewDialog
+      source={{
+        url: previewRecording.url,
+        posterUrl: previewRecording.posterUrl,
+        title: recordingLabel(previewRecording),
+        durationMs: previewRecording.durationMs,
+      }}
+      onClose={() => setPreviewRecording(null)}
+    />
+  ) : null;
 
   if (openFolderId && openFolder) {
     let body: ReactNode;
@@ -716,6 +685,7 @@ const JayrrPresentRecordingsAuthed = ({
         }
       >
         {body}
+        {previewDialog}
         {pendingDeleteRecording ? (
           <DeleteRecordingDialog
             busy={deleting}
@@ -840,6 +810,7 @@ const JayrrPresentRecordingsAuthed = ({
       }
     >
       {body}
+      {previewDialog}
       {pendingDeleteRecording ? (
         <DeleteRecordingDialog
           busy={deleting}
