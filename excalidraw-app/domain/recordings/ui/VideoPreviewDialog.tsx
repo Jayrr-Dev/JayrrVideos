@@ -42,6 +42,7 @@ export const VideoPreviewDialog = ({
         src={source.url}
         poster={source.posterUrl}
         label={source.title}
+        durationHintMs={source.durationMs}
         autoPlay
       />
     </Dialog>

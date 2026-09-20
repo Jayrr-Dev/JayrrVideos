@@ -1,7 +1,7 @@
 import { playerPlayIcon } from "@excalidraw/excalidraw/components/icons";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
-import { formatMediaClock } from "../formatRecording";
+import { finiteMediaSeconds, formatMediaClock } from "../formatRecording";
 
 import "./VideoPlayer.scss";
 
@@ -10,6 +10,8 @@ type VideoPlayerProps = {
   poster?: string | null;
   autoPlay?: boolean;
   label?: string;
+  /** Known duration when the media element reports Infinity/NaN (e.g. webm). */
+  durationHintMs?: number;
 };
 
 const PauseGlyph = (
@@ -117,19 +119,29 @@ export const VideoPlayer = ({
   poster,
   autoPlay = true,
   label = "Video",
+  durationHintMs,
 }: VideoPlayerProps) => {
   const rootRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const hideTimerRef = useRef<number | null>(null);
 
+  const hintSeconds = finiteMediaSeconds(
+    durationHintMs != null ? durationHintMs / 1000 : null,
+  );
+
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
+  const [duration, setDuration] = useState(hintSeconds);
   const [muted, setMuted] = useState(false);
   const [volume, setVolume] = useState(1);
   const [controlsVisible, setControlsVisible] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [scrubbing, setScrubbing] = useState(false);
+
+  const resolveDuration = (value: number) => {
+    const next = finiteMediaSeconds(value);
+    return next > 0 ? next : hintSeconds;
+  };
 
   const clearHideTimer = () => {
     if (hideTimerRef.current != null) {
@@ -161,6 +173,12 @@ export const VideoPlayer = ({
     video.volume = volume;
     video.muted = muted;
   }, [muted, volume]);
+
+  useEffect(() => {
+    setDuration(hintSeconds);
+    setCurrentTime(0);
+    setPlaying(false);
+  }, [src, hintSeconds]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -221,10 +239,11 @@ export const VideoPlayer = ({
 
   const seekToRatio = (ratio: number) => {
     const video = videoRef.current;
-    if (!video || !Number.isFinite(video.duration) || video.duration <= 0) {
+    const max = duration > 0 ? duration : resolveDuration(video?.duration ?? 0);
+    if (!video || max <= 0) {
       return;
     }
-    const next = Math.min(1, Math.max(0, ratio)) * video.duration;
+    const next = Math.min(1, Math.max(0, ratio)) * max;
     video.currentTime = next;
     setCurrentTime(next);
   };
@@ -291,10 +310,8 @@ export const VideoPlayer = ({
           event.preventDefault();
           const video = videoRef.current;
           if (video) {
-            video.currentTime = Math.min(
-              video.duration || 0,
-              video.currentTime + 5,
-            );
+            const max = duration > 0 ? duration : video.currentTime + 5;
+            video.currentTime = Math.min(max, video.currentTime + 5);
           }
         } else if (key === "arrowup") {
           event.preventDefault();
@@ -319,15 +336,15 @@ export const VideoPlayer = ({
         onPause={() => setPlaying(false)}
         onTimeUpdate={(event) => {
           if (!scrubbing) {
-            setCurrentTime(event.currentTarget.currentTime);
+            setCurrentTime(finiteMediaSeconds(event.currentTarget.currentTime));
           }
         }}
         onLoadedMetadata={(event) => {
-          setDuration(event.currentTarget.duration || 0);
-          setCurrentTime(event.currentTarget.currentTime || 0);
+          setDuration(resolveDuration(event.currentTarget.duration));
+          setCurrentTime(finiteMediaSeconds(event.currentTarget.currentTime));
         }}
         onDurationChange={(event) => {
-          setDuration(event.currentTarget.duration || 0);
+          setDuration(resolveDuration(event.currentTarget.duration));
         }}
         onEnded={() => {
           setPlaying(false);

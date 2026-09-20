@@ -4,7 +4,10 @@ export const formatRecordingClock = (durationMs: number) => {
 };
 
 export const formatMediaClock = (totalSeconds: number) => {
-  const total = Math.max(0, Math.floor(totalSeconds));
+  if (!Number.isFinite(totalSeconds) || totalSeconds < 0) {
+    return "0:00";
+  }
+  const total = Math.floor(totalSeconds);
   const hours = Math.floor(total / 3600);
   const minutes = Math.floor((total % 3600) / 60);
   const seconds = total % 60;
@@ -14,6 +17,13 @@ export const formatMediaClock = (totalSeconds: number) => {
       .padStart(2, "0")}`;
   }
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+};
+
+export const finiteMediaSeconds = (value: number | undefined | null) => {
+  if (value == null || !Number.isFinite(value) || value < 0) {
+    return 0;
+  }
+  return value;
 };
 
 export const formatRecordingWhen = (createdAt: number) => {

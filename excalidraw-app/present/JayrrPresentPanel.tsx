@@ -64,21 +64,25 @@ import {
   JAYRR_PRESENT_ZOOM_PERCENT_MIN,
   reorderPresentIds,
   stepCaption,
+  writePresentCamera,
   writePresentEffect,
   writePresentExit,
   writePresentLabel,
   writePresentMotion,
   writePresentOrder,
   writePresentPresence,
+  writePresentSound,
   writePresentTextEffect,
   writePresentTranslation,
   writePresentZoomPercent,
+  type PresentCamera,
   type PresentDeck,
   type PresentEffect,
   type PresentExit,
   type PresentFrame,
   type PresentMotion,
   type PresentPresence,
+  type PresentSound,
   type PresentTextEffect,
   type PresentTextEffectKind,
   type PresentTranslation,
@@ -105,6 +109,7 @@ import {
   setPresentDefaultMotion,
 } from "./presentMotion";
 import { PresentMoveIcon } from "./presentMoveIcon";
+import { PresentSoundCue } from "./PresentSoundCue";
 import {
   PRESENT_EASING_LABEL,
   PRESENT_EASINGS,
@@ -182,6 +187,7 @@ const focusZoomIcon = (
 
 type PresentMenuPane =
   | "transitions"
+  | "camera"
   | "motion"
   | "translation"
   | "exit"
@@ -190,6 +196,7 @@ type PresentMenuPane =
 const PresentEffectMenu = ({
   className,
   effect,
+  camera,
   motion,
   exit,
   translation,
@@ -201,6 +208,7 @@ const PresentEffectMenu = ({
   disabled,
   placeIds,
   onEffect,
+  onCamera,
   onMotion,
   onExit,
   onTranslation,
@@ -211,6 +219,7 @@ const PresentEffectMenu = ({
 }: {
   className?: string;
   effect: PresentEffect | null;
+  camera?: PresentCamera | null;
   motion?: PresentMotion | null;
   exit?: PresentExit | null;
   translation?: PresentTranslation | null;
@@ -222,6 +231,7 @@ const PresentEffectMenu = ({
   disabled: boolean;
   placeIds?: readonly string[];
   onEffect: (effect: PresentEffect | null) => void;
+  onCamera?: (camera: PresentCamera | null) => void;
   onMotion?: (motion: PresentMotion | null) => void;
   onExit?: (exit: PresentExit | null) => void;
   onTranslation?: (translation: PresentTranslation | null) => void;
@@ -666,6 +676,11 @@ const PresentEffectMenu = ({
           Hide
         </span>
       ) : null}
+      {camera === "fixed" && !parked ? (
+        <span className="jayrr-present__motion-tag" title="Fixed Overlay">
+          Overlay
+        </span>
+      ) : null}
       {textEffect && !parked ? (
         <span
           className="jayrr-present__motion-tag"
@@ -682,6 +697,9 @@ const PresentEffectMenu = ({
   const panes: { id: PresentMenuPane; label: string }[] = [
     { id: "transitions", label: "Transitions" },
   ];
+  if (onCamera && !parked) {
+    panes.push({ id: "camera", label: "Camera" });
+  }
   if (onTranslation && !parked) {
     panes.push({ id: "translation", label: "Translation" });
   }
@@ -815,6 +833,14 @@ const PresentEffectMenu = ({
                   {onPresence
                     ? option("Hide", Boolean(hide), () => onPresence("hide"))
                     : null}
+                </>
+              ) : null}
+              {activePane === "camera" && onCamera ? (
+                <>
+                  {option("None", camera !== "fixed", () => onCamera(null))}
+                  {option("Fixed Overlay", camera === "fixed", () =>
+                    onCamera("fixed"),
+                  )}
                 </>
               ) : null}
               {activePane === "motion" && onMotion ? (
@@ -971,7 +997,7 @@ const PresentSettingsPopover = () => {
             <div className="jayrr-present__settings-head">
               <h3 className="jayrr-present__settings-title">Settings</h3>
               <Tooltip
-                label="Motion is the default enter for every object. Right-click a row for transition, motion-in, motion-out, or text-effect on text. Hide frames removes borders and names in Present. Big cursor shows an oversized pointer with a click burst. Interact keeps shapes draggable while presenting; a quick tap still advances. Mic is the voice recorded with Present."
+                label="Motion is the default enter for every object. Right-click a row for transition, camera, motion-in, motion-out, or text-effect on text. Hide frames removes borders and names in Present. Big cursor shows an oversized pointer with a click burst. Interact keeps shapes draggable while presenting; a quick tap still advances. Mic is the voice recorded with Present."
                 long
                 position="top"
               >
@@ -1210,6 +1236,8 @@ const SortableFrameBlock = ({
   onCancel,
   onEffect,
   onZoomPercent,
+  sound,
+  onSound,
   children,
 }: {
   id: string;
@@ -1222,6 +1250,7 @@ const SortableFrameBlock = ({
   draftName: string;
   effect: PresentEffect | null;
   zoomPercent: number | null;
+  sound: PresentSound | null;
   onSelect: () => void;
   onToggleCollapse: () => void;
   onStartRename: () => void;
@@ -1230,6 +1259,7 @@ const SortableFrameBlock = ({
   onCancel: () => void;
   onEffect: (effect: PresentEffect | null) => void;
   onZoomPercent: (zoomPercent: number) => void;
+  onSound: (sound: PresentSound | null) => void;
   children: ReactNode;
 }) => {
   const {
@@ -1252,27 +1282,34 @@ const SortableFrameBlock = ({
         transition,
       }}
     >
-      <PresentEffectMenu
-        className="jayrr-present__frame-head"
-        effect={effect}
-        zoomPercent={zoomPercent}
-        disabled={renaming}
-        onEffect={onEffect}
-        onZoomPercent={onZoomPercent}
-      >
-        <EditablePresentName
-          index={index}
-          name={name}
-          selected={selected}
-          renaming={renaming}
-          draftName={draftName}
-          attributes={attributes}
-          listeners={listeners}
-          onSelect={onSelect}
-          onStartRename={onStartRename}
-          onDraftChange={onDraftChange}
-          onCommit={onCommit}
-          onCancel={onCancel}
+      <div className="jayrr-present__frame-head">
+        <PresentEffectMenu
+          effect={effect}
+          zoomPercent={zoomPercent}
+          disabled={renaming}
+          onEffect={onEffect}
+          onZoomPercent={onZoomPercent}
+        >
+          <EditablePresentName
+            index={index}
+            name={name}
+            selected={selected}
+            renaming={renaming}
+            draftName={draftName}
+            attributes={attributes}
+            listeners={listeners}
+            onSelect={onSelect}
+            onStartRename={onStartRename}
+            onDraftChange={onDraftChange}
+            onCommit={onCommit}
+            onCancel={onCancel}
+          />
+        </PresentEffectMenu>
+        <PresentSoundCue
+          sound={sound}
+          label="Frame sound"
+          disabled={renaming}
+          onSound={onSound}
         />
         <button
           type="button"
@@ -1290,7 +1327,7 @@ const SortableFrameBlock = ({
         >
           <span className="jayrr-present__collapse">{chevronDownIcon}</span>
         </button>
-      </PresentEffectMenu>
+      </div>
       {collapsed ? null : children}
     </li>
   );
@@ -1305,6 +1342,7 @@ const SortableObjectBlock = ({
   renaming,
   draftName,
   effect,
+  camera,
   motion,
   exit,
   translation,
@@ -1320,12 +1358,15 @@ const SortableObjectBlock = ({
   onCommit,
   onCancel,
   onEffect,
+  onCamera,
   onMotion,
   onExit,
   onTranslation,
   onZoomPercent,
   onPresence,
   onTextEffect,
+  sound,
+  onSound,
 }: {
   id: string;
   index: number | null;
@@ -1335,6 +1376,7 @@ const SortableObjectBlock = ({
   renaming: boolean;
   draftName: string;
   effect: PresentEffect | null;
+  camera: PresentCamera | null;
   motion: PresentMotion | null;
   exit: PresentExit | null;
   translation: PresentTranslation | null;
@@ -1356,6 +1398,8 @@ const SortableObjectBlock = ({
   onZoomPercent: (zoomPercent: number) => void;
   onPresence: (presence: PresentPresence) => void;
   onTextEffect: (textEffect: PresentTextEffect | null) => void;
+  sound: PresentSound | null;
+  onSound: (sound: PresentSound | null) => void;
 }) => {
   const {
     attributes,
@@ -1412,6 +1456,13 @@ const SortableObjectBlock = ({
           onCancel={onCancel}
         />
       </PresentEffectMenu>
+      <PresentSoundCue
+        sound={sound}
+        label="Object sound"
+        disabled={renaming}
+        onSound={onSound}
+      />
+      <span className="jayrr-present__sound-gutter" aria-hidden="true" />
     </li>
   );
 };
@@ -1695,6 +1746,29 @@ export const JayrrPresentPanel = ({
     [api],
   );
 
+  const persistPresentSound = useCallback(
+    (ids: readonly string[], sound: PresentSound | null) => {
+      if (!api || ids.length === 0) {
+        return;
+      }
+      const targets = new Set(ids);
+      const all = api.getSceneElementsIncludingDeleted();
+      const next = all.map((element) => {
+        if (!targets.has(element.id)) {
+          return element;
+        }
+        return newElementWith(element, {
+          customData: writePresentSound(element, sound),
+        });
+      });
+      api.updateScene({
+        elements: next,
+        captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+      });
+    },
+    [api],
+  );
+
   const startRename = (id: string, currentName: string) => {
     if (presenting) {
       return;
@@ -1943,6 +2017,8 @@ export const JayrrPresentPanel = ({
                     onZoomPercent={(zoomPercent) =>
                       persistPresentZoomPercent([frame.id], zoomPercent)
                     }
+                    sound={frame.sound}
+                    onSound={(sound) => persistPresentSound([frame.id], sound)}
                   >
                     {childIds.length === 0 ? (
                       <p className="jayrr-present__empty">
@@ -1995,6 +2071,7 @@ export const JayrrPresentPanel = ({
                                     )
                                   }
                                   textEffect={object.textEffect}
+                                  sound={object.sound}
                                   placeIds={object.memberIds}
                                   onSelect={() => selectId(object.id)}
                                   onStartRename={() =>
@@ -2041,6 +2118,9 @@ export const JayrrPresentPanel = ({
                                       object.memberIds,
                                       textEffect,
                                     )
+                                  }
+                                  onSound={(sound) =>
+                                    persistPresentSound(object.memberIds, sound)
                                   }
                                 />
                               );

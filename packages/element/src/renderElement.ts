@@ -131,6 +131,17 @@ export const getElementRenderOffset = (
   return overrides?.get((container ?? element).id)?.offset;
 };
 
+export const getElementRenderScale = (
+  element: ExcalidrawElement,
+  elementsMap: ElementsMap,
+  overrides: ElementRenderOverrides | undefined,
+): number | undefined => {
+  const container = isTextElement(element)
+    ? getContainerElement(element, elementsMap)
+    : null;
+  return overrides?.get((container ?? element).id)?.scale;
+};
+
 export const getRenderElementWithPositionOverride = <
   TElement extends ExcalidrawElement,
 >(
@@ -152,6 +163,8 @@ export type ElementRenderState = Readonly<{
   /** Alpha including frame opacity and pending erasure; selection dimming is separate. */
   opacity: number;
   offset: RenderPositionOffset;
+  /** Uniform scale around the element's center. Omitted scale is 1. */
+  scale: number;
 }>;
 
 /** Resolve visual state at the drawing boundary, preserving document cache keys. */
@@ -197,8 +210,17 @@ export const resolveElementRenderState = (
     allElementsMap,
     elementRenderOverrides,
   );
+  const scale = getElementRenderScale(
+    element,
+    allElementsMap,
+    elementRenderOverrides,
+  );
 
-  return { opacity, offset: offset ?? ZERO_RENDER_OFFSET };
+  return {
+    opacity,
+    offset: offset ?? ZERO_RENDER_OFFSET,
+    scale: scale ?? 1,
+  };
 };
 
 export interface ExcalidrawElementWithCanvas {
@@ -1013,13 +1035,23 @@ export const renderElement = (
   context.globalAlpha =
     renderState.opacity *
     (reduceAlphaForSelection ? DEFAULT_REDUCED_GLOBAL_ALPHA : 1);
-  // Cached bitmaps apply the offset before pixel snapping. Moving it into
-  // the canvas transform first loses precision at half-device-pixel ties.
-  if (
-    (renderConfig.isExporting || isFrameLikeElement(element)) &&
-    (renderState.offset.x || renderState.offset.y)
-  ) {
+  const usesContextOffset =
+    renderConfig.isExporting || isFrameLikeElement(element);
+  if (usesContextOffset && (renderState.offset.x || renderState.offset.y)) {
     context.translate(renderState.offset.x, renderState.offset.y);
+  }
+  if (renderState.scale !== 1) {
+    const cx =
+      element.x +
+      element.width / 2 +
+      (usesContextOffset ? 0 : renderState.offset.x);
+    const cy =
+      element.y +
+      element.height / 2 +
+      (usesContextOffset ? 0 : renderState.offset.y);
+    context.translate(cx, cy);
+    context.scale(renderState.scale, renderState.scale);
+    context.translate(-cx, -cy);
   }
   try {
     drawElement(

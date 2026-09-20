@@ -12,23 +12,30 @@ export const copyElementRenderOverrides = (
 ): ElementRenderOverrides => {
   const copy = new Map<string, ElementRenderOverride>();
   for (const [id, value] of overrides ?? []) {
-    const { opacity, offset, textClip } = value;
+    const { opacity, offset, scale, textClip } = value;
     const clip = normalizeTextClip(id, textClip);
     if (
       (opacity !== undefined && !Number.isFinite(opacity)) ||
       (offset !== undefined &&
         (offset === null ||
           !Number.isFinite(offset.x) ||
-          !Number.isFinite(offset.y)))
+          !Number.isFinite(offset.y))) ||
+      (scale !== undefined && !Number.isFinite(scale))
     ) {
       throw new TypeError(`Render overrides for ${id} must be finite numbers`);
     }
-    if (opacity === undefined && offset === undefined && !clip) {
+    if (
+      opacity === undefined &&
+      offset === undefined &&
+      scale === undefined &&
+      !clip
+    ) {
       continue;
     }
     copy.set(id, {
       ...(opacity !== undefined ? { opacity: clamp(opacity, 0, 100) } : {}),
       ...(offset ? { offset: { x: offset.x, y: offset.y } } : {}),
+      ...(scale !== undefined ? { scale } : {}),
       ...(clip ? { textClip: clip } : {}),
     });
   }

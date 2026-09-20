@@ -39,8 +39,9 @@ import {
   playPresentMedia,
   resetPresentMediaVisibility,
 } from "./playPresentMedia";
-import { publishPresentRenderOverrides } from "./presentRenderOverrides";
+import { stopPresentSounds, syncPresentSounds } from "./playPresentSound";
 import { getPresentDefaultMotion } from "./presentMotion";
+import { publishPresentRenderOverrides } from "./presentRenderOverrides";
 import {
   easePresent,
   samplePresentTranslationOffset,
@@ -49,6 +50,7 @@ import {
 type OverrideValues = {
   opacity: number;
   offset: { x: number; y: number };
+  scale?: number;
   textClip?: {
     kind: PresentTextEffect["kind"];
     progress: number;
@@ -129,23 +131,37 @@ const toOverrides = (
           }
         : undefined;
     const posed =
-      value.opacity < 100 || value.offset.x !== 0 || value.offset.y !== 0;
-    if (!posed && !textClip) {
+      value.opacity < 100 ||
+      value.offset.x !== 0 ||
+      value.offset.y !== 0 ||
+      (value.scale !== undefined && value.scale !== 1);
+    if (!posed && !textClip && value.scale === undefined) {
       continue;
     }
+    const scale =
+      value.scale !== undefined && Number.isFinite(value.scale)
+        ? value.scale
+        : undefined;
     if (posed && textClip) {
       next.set(id, {
         opacity: value.opacity,
         offset: { x: value.offset.x, y: value.offset.y },
+        ...(scale !== undefined ? { scale } : {}),
         textClip,
       });
     } else if (posed) {
       next.set(id, {
         opacity: value.opacity,
         offset: { x: value.offset.x, y: value.offset.y },
+        ...(scale !== undefined ? { scale } : {}),
       });
-    } else {
-      next.set(id, { textClip });
+    } else if (textClip) {
+      next.set(id, {
+        textClip,
+        ...(scale !== undefined ? { scale } : {}),
+      });
+    } else if (scale !== undefined) {
+      next.set(id, { scale });
     }
   }
   return next;
@@ -219,6 +235,36 @@ const targetForDeck = (
         object.exit && exited.has(object.id)
           ? hiddenPoseAt(object.exit, object.translation)
           : shownPose(object, moved.has(object.id));
+      for (const id of idsForPresentObject(object, elements)) {
+        values.set(id, pose);
+      }
+    }
+  }
+  const overlayRevealed = new Set<string>();
+  const overlayExited = new Set<string>();
+  for (let i = 0; i <= stepIndex; i++) {
+    const item = deck.steps[i];
+    if (!item || item.type !== "reveal") {
+      continue;
+    }
+    overlayRevealed.add(item.elementId);
+    if (i < stepIndex) {
+      overlayExited.add(item.elementId);
+    }
+  }
+  for (const frame of deck.frames) {
+    for (const object of frame.objects) {
+      if (object.camera !== "fixed" || object.hide) {
+        continue;
+      }
+      const pinned = object.skip || overlayRevealed.has(object.id);
+      if (!pinned) {
+        continue;
+      }
+      const pose =
+        object.exit && overlayExited.has(object.id) && !object.skip
+          ? hiddenPoseAt(object.exit, object.translation)
+          : shownPose(object, true);
       for (const id of idsForPresentObject(object, elements)) {
         values.set(id, pose);
       }
@@ -314,6 +360,30 @@ type SavedView = {
   scrollX: number;
   scrollY: number;
   zoom: Zoom;
+};
+
+type OverlayAnchor = {
+  zoom: number;
+  screenX: number;
+  screenY: number;
+};
+
+const overlayMemberIds = (
+  deck: PresentDeck,
+  elements: readonly NonDeletedExcalidrawElement[],
+) => {
+  const ids = new Set<string>();
+  for (const frame of deck.frames) {
+    for (const object of frame.objects) {
+      if (object.camera !== "fixed") {
+        continue;
+      }
+      for (const id of idsForPresentObject(object, elements)) {
+        ids.add(id);
+      }
+    }
+  }
+  return ids;
 };
 
 const savedZoom = (zoom: number): Zoom => ({
@@ -707,12 +777,16 @@ export class PresentPlayer {
   private pending: GoToOpts | null = null;
   /** Viewport as it was before the first Focus/Zoom on this slide. */
   private viewBeforeFocus: SavedView | null = null;
+  private overlayAnchors = new Map<string, OverlayAnchor>();
+  private overlayIds = new Set<string>();
 
   stop(api: ExcalidrawImperativeAPI | null) {
     this.gen += 1;
     this.camGen += 1;
     this.pending = null;
     this.viewBeforeFocus = null;
+    this.overlayAnchors = new Map();
+    this.overlayIds = new Set();
     if (this.raf) {
       cancelAnimationFrame(this.raf);
       this.raf = 0;
@@ -727,6 +801,7 @@ export class PresentPlayer {
       this.playing = new Set();
     }
     this.lastStep = null;
+    stopPresentSounds();
     resetPresentMediaVisibility();
     publishPresentRenderOverrides(null);
     api?.setElementRenderOverrides(null);
@@ -755,10 +830,77 @@ export class PresentPlayer {
     this.runGoTo(opts);
   }
 
+  private pinOverlays(
+    api: ExcalidrawImperativeAPI,
+    values: Map<string, OverrideValues>,
+    capture: boolean,
+  ) {
+    if (this.overlayIds.size === 0) {
+      return values;
+    }
+    const view = snapshotView(api);
+    const zoom = view.zoom.value;
+    if (zoom <= 0) {
+      return values;
+    }
+    const byId = new Map(
+      api.getSceneElements().map((element) => [element.id, element]),
+    );
+    const next = new Map(values);
+    for (const id of this.overlayIds) {
+      const pose = next.get(id) ?? SHOWN;
+      if (pose.opacity <= 1) {
+        this.overlayAnchors.delete(id);
+        continue;
+      }
+      const element = byId.get(id);
+      if (!element) {
+        continue;
+      }
+      const cx = element.x + element.width / 2;
+      const cy = element.y + element.height / 2;
+      let anchor = this.overlayAnchors.get(id);
+      if (!anchor) {
+        if (!capture || pose.opacity < 99) {
+          continue;
+        }
+        const ax = cx + pose.offset.x;
+        const ay = cy + pose.offset.y;
+        anchor = {
+          zoom,
+          screenX: (ax + view.scrollX) * zoom,
+          screenY: (ay + view.scrollY) * zoom,
+        };
+        this.overlayAnchors.set(id, anchor);
+      }
+      next.set(id, {
+        ...pose,
+        offset: {
+          x: anchor.screenX / zoom - view.scrollX - cx,
+          y: anchor.screenY / zoom - view.scrollY - cy,
+        },
+        scale: anchor.zoom / zoom,
+      });
+    }
+    return next;
+  }
+
+  private paint(
+    api: ExcalidrawImperativeAPI,
+    values: Map<string, OverrideValues>,
+    capture: boolean,
+  ) {
+    const pinned = this.pinOverlays(api, values, capture);
+    const overrides = toOverrides(pinned);
+    publishPresentRenderOverrides(overrides);
+    api.setElementRenderOverrides(overrides);
+  }
+
   private runGoTo(opts: GoToOpts) {
     const { api, deck, stepIndex, animate } = opts;
     const fromIndex = this.lastStep;
     const liveElements = api.getSceneElements();
+    this.overlayIds = overlayMemberIds(deck, liveElements);
     const target = targetForDeck(deck, stepIndex, liveElements);
     const playMedia = () => {
       try {
@@ -901,9 +1043,7 @@ export class PresentPlayer {
         return;
       }
       this.current = target;
-      const targetOverrides = toOverrides(target);
-      publishPresentRenderOverrides(targetOverrides);
-      api.setElementRenderOverrides(targetOverrides);
+      this.paint(api, target, true);
     };
 
     if (!animate || this.current.size === 0) {
@@ -1039,6 +1179,7 @@ export class PresentPlayer {
     };
     if (duration <= 0) {
       writeView(api, dest);
+      this.paint(api, this.current, false);
       finish();
       return;
     }
@@ -1051,11 +1192,13 @@ export class PresentPlayer {
       const t = easeOutCubic(Math.min(1, (now - start) / duration));
       if (t < 1) {
         writeView(api, mixView(from, dest, t));
+        this.paint(api, this.current, false);
         this.camRaf = requestAnimationFrame(tick);
         return;
       }
       this.camRaf = 0;
       writeView(api, dest);
+      this.paint(api, this.current, false);
       finish();
     };
     this.camRaf = requestAnimationFrame(tick);
@@ -1092,9 +1235,7 @@ export class PresentPlayer {
     };
     const finish = () => {
       this.current = to;
-      const toSnapshot = toOverrides(to);
-      publishPresentRenderOverrides(toSnapshot);
-      api.setElementRenderOverrides(toSnapshot);
+      this.paint(api, to, true);
       writeFollow(to, 1);
       onDone();
       this.flushPending(gen);
@@ -1158,9 +1299,7 @@ export class PresentPlayer {
         }
       }
       this.current = mixed;
-      const mixedOverrides = toOverrides(mixed);
-      publishPresentRenderOverrides(mixedOverrides);
-      api.setElementRenderOverrides(mixedOverrides);
+      this.paint(api, mixed, false);
       writeFollow(mixed, motionT);
       if (elapsed < total) {
         this.raf = requestAnimationFrame(tick);
@@ -1194,5 +1333,6 @@ export class PresentPlayer {
     this.playing = nextPlaying;
     this.lastStep = stepIndex;
     playPresentMedia(nextPlaying);
+    syncPresentSounds(deck, stepIndex);
   }
 }

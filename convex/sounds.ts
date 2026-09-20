@@ -41,6 +41,19 @@ const toSoundRow = async (ctx: QueryCtx, row: Doc<"sounds">) => {
   };
 };
 
+export const get = query({
+  args: { soundId: v.id("sounds") },
+  returns: v.union(soundRow, v.null()),
+  handler: async (ctx, args) => {
+    await getCurrentUser(ctx);
+    const row = await ctx.db.get(args.soundId);
+    if (!row) {
+      return null;
+    }
+    return toSoundRow(ctx, row);
+  },
+});
+
 export const list = query({
   args: {
     folder: v.string(),

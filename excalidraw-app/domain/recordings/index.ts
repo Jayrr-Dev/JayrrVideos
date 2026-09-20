@@ -1,4 +1,5 @@
 export {
+  finiteMediaSeconds,
   formatMediaClock,
   formatRecordingClock,
   formatRecordingQuality,

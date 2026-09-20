@@ -35,6 +35,9 @@ export const JAYRR_PRESENT_TYPE_TIME_MAX = 8000;
 
 export type PresentEffect = "focus" | "zoom" | "scale";
 
+/** Pin the object to the viewport so it stays put while the camera moves. */
+export type PresentCamera = "fixed";
+
 export type PresentMotion =
   | "none"
   | "fade"
@@ -113,16 +116,23 @@ export type PresentStep =
   | PresentMoveStep
   | PresentFlushExitsStep;
 
+export type PresentSound = {
+  id: string;
+  name: string;
+};
+
 export type PresentObject = {
   id: string;
   label: string;
   order: number | null;
   effect: PresentEffect | null;
+  camera: PresentCamera | null;
   motion: PresentMotion | null;
   exit: PresentExit | null;
   translation: PresentTranslation | null;
   zoomPercent: number | null;
   textEffect: PresentTextEffect | null;
+  sound: PresentSound | null;
   skip: boolean;
   hide: boolean;
   groupId: string | null;
@@ -135,6 +145,7 @@ export type PresentFrame = {
   order: number | null;
   effect: PresentEffect | null;
   zoomPercent: number | null;
+  sound: PresentSound | null;
   objects: PresentObject[];
 };
 
@@ -147,17 +158,26 @@ type PresentBag = {
   order?: number;
   label?: string;
   effect?: PresentEffect;
+  camera?: PresentCamera;
   motion?: PresentMotion;
   exit?: PresentExit;
   translation?: PresentTranslation;
   zoomPercent?: number;
   textEffect?: PresentTextEffect;
+  sound?: PresentSound;
   skip?: boolean;
   hide?: boolean;
 };
 
 const readPresentEffect = (value: unknown): PresentEffect | null => {
   if (value === "focus" || value === "zoom" || value === "scale") {
+    return value;
+  }
+  return null;
+};
+
+const readPresentCamera = (value: unknown): PresentCamera | null => {
+  if (value === "fixed") {
     return value;
   }
   return null;
@@ -333,6 +353,21 @@ const readPresentZoomPercent = (value: unknown): number | null => {
   return next;
 };
 
+const readPresentSound = (value: unknown): PresentSound | null => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  const id = Reflect.get(value, "id");
+  const name = Reflect.get(value, "name");
+  if (typeof id !== "string" || !id.trim()) {
+    return null;
+  }
+  if (typeof name !== "string" || !name.trim()) {
+    return null;
+  }
+  return { id: id.trim(), name: name.trim() };
+};
+
 const readPresentBag = (element: ExcalidrawElement): PresentBag => {
   const data = element.customData;
   if (!data) {
@@ -354,6 +389,10 @@ const readPresentBag = (element: ExcalidrawElement): PresentBag => {
   const effect = readPresentEffect(Reflect.get(present, "effect"));
   if (effect) {
     bag.effect = effect;
+  }
+  const camera = readPresentCamera(Reflect.get(present, "camera"));
+  if (camera) {
+    bag.camera = camera;
   }
   const motion = readPresentMotionValue(Reflect.get(present, "motion"));
   if (motion) {
@@ -385,6 +424,10 @@ const readPresentBag = (element: ExcalidrawElement): PresentBag => {
   if (Reflect.get(present, "hide") === true) {
     bag.hide = true;
   }
+  const sound = readPresentSound(Reflect.get(present, "sound"));
+  if (sound) {
+    bag.sound = sound;
+  }
   return bag;
 };
 
@@ -395,6 +438,18 @@ const presentEffectOf = (
     const effect = readPresentBag(element).effect;
     if (effect) {
       return effect;
+    }
+  }
+  return null;
+};
+
+const presentCameraOf = (
+  elements: readonly ExcalidrawElement[],
+): PresentCamera | null => {
+  for (const element of elements) {
+    const camera = readPresentBag(element).camera;
+    if (camera) {
+      return camera;
     }
   }
   return null;
@@ -468,6 +523,18 @@ const presentHideOf = (elements: readonly ExcalidrawElement[]): boolean => {
   return elements.some((element) => readPresentBag(element).hide === true);
 };
 
+const presentSoundOf = (
+  elements: readonly ExcalidrawElement[],
+): PresentSound | null => {
+  for (const element of elements) {
+    const sound = readPresentBag(element).sound;
+    if (sound) {
+      return sound;
+    }
+  }
+  return null;
+};
+
 export const countedPresentObjects = (
   objects: readonly PresentObject[],
 ): PresentObject[] => {
@@ -484,11 +551,13 @@ const writePresentBag = (
     order?: number | null;
     label?: string | null;
     effect?: PresentEffect | null;
+    camera?: PresentCamera | null;
     motion?: PresentMotion | null;
     exit?: PresentExit | null;
     translation?: PresentTranslation | null;
     zoomPercent?: number | null;
     textEffect?: PresentTextEffect | null;
+    sound?: PresentSound | null;
     skip?: boolean;
     hide?: boolean;
   },
@@ -511,6 +580,11 @@ const writePresentBag = (
     next.effect = patch.effect;
     delete next.skip;
     delete next.hide;
+  }
+  if (patch.camera === null) {
+    delete next.camera;
+  } else if (patch.camera !== undefined) {
+    next.camera = patch.camera;
   }
   if (patch.motion === null) {
     delete next.motion;
@@ -566,6 +640,16 @@ const writePresentBag = (
     delete next.skip;
     delete next.effect;
   }
+  if (patch.sound === null) {
+    delete next.sound;
+  } else if (patch.sound !== undefined) {
+    const sound = readPresentSound(patch.sound);
+    if (sound) {
+      next.sound = sound;
+    } else {
+      delete next.sound;
+    }
+  }
   const customData: Record<string, unknown> = {
     ...(element.customData ?? {}),
   };
@@ -573,11 +657,13 @@ const writePresentBag = (
     next.order === undefined &&
     next.label === undefined &&
     next.effect === undefined &&
+    next.camera === undefined &&
     next.motion === undefined &&
     next.exit === undefined &&
     next.translation === undefined &&
     next.zoomPercent === undefined &&
     next.textEffect === undefined &&
+    next.sound === undefined &&
     next.skip === undefined &&
     next.hide === undefined
   ) {
@@ -609,6 +695,13 @@ export const writePresentEffect = (
   effect: PresentEffect | null,
 ): ExcalidrawElement["customData"] => {
   return writePresentBag(element, { effect });
+};
+
+export const writePresentCamera = (
+  element: ExcalidrawElement,
+  camera: PresentCamera | null,
+): ExcalidrawElement["customData"] => {
+  return writePresentBag(element, { camera });
 };
 
 export const writePresentMotion = (
@@ -661,6 +754,13 @@ export const writePresentHide = (
 };
 
 export type PresentPresence = "skip" | "hide" | null;
+
+export const writePresentSound = (
+  element: ExcalidrawElement,
+  sound: PresentSound | null,
+): ExcalidrawElement["customData"] => {
+  return writePresentBag(element, { sound });
+};
 
 export const writePresentPresence = (
   element: ExcalidrawElement,
@@ -875,11 +975,13 @@ export const buildPresentDeck = (
       label: string;
       order: number | null;
       effect: PresentEffect | null;
+      camera: PresentCamera | null;
       motion: PresentMotion | null;
       exit: PresentExit | null;
       translation: PresentTranslation | null;
       zoomPercent: number | null;
       textEffect: PresentTextEffect | null;
+      sound: PresentSound | null;
       skip: boolean;
       hide: boolean;
       index: number;
@@ -899,6 +1001,7 @@ export const buildPresentDeck = (
           label: getPresentLabel(object.element),
           order: object.order,
           effect: presentEffectOf([object.element]),
+          camera: presentCameraOf([object.element]),
           motion: presentMotionOf([object.element]),
           exit: presentExitOf([object.element]),
           translation: presentTranslationOf([object.element]),
@@ -906,6 +1009,7 @@ export const buildPresentDeck = (
           textEffect: isTextElement(object.element)
             ? presentTextEffectOf([object.element])
             : null,
+          sound: presentSoundOf([object.element]),
           skip: presentSkipOf([object.element]),
           hide: presentHideOf([object.element]),
           index: object.index,
@@ -930,6 +1034,7 @@ export const buildPresentDeck = (
           label: getPresentLabel(representative.element),
           order: representative.order,
           effect: presentEffectOf([representative.element]),
+          camera: presentCameraOf([representative.element]),
           motion: presentMotionOf([representative.element]),
           exit: presentExitOf([representative.element]),
           translation: presentTranslationOf([representative.element]),
@@ -937,6 +1042,7 @@ export const buildPresentDeck = (
           textEffect: isTextElement(representative.element)
             ? presentTextEffectOf([representative.element])
             : null,
+          sound: presentSoundOf([representative.element]),
           skip: presentSkipOf([representative.element]),
           hide: presentHideOf([representative.element]),
           index: representative.index,
@@ -950,6 +1056,7 @@ export const buildPresentDeck = (
         label: groupPresentLabel(members.map((item) => item.element)),
         order: minPresentOrder(members.map((item) => item.order)),
         effect: presentEffectOf(members.map((item) => item.element)),
+        camera: presentCameraOf(members.map((item) => item.element)),
         motion: presentMotionOf(members.map((item) => item.element)),
         exit: presentExitOf(members.map((item) => item.element)),
         translation: presentTranslationOf(members.map((item) => item.element)),
@@ -957,6 +1064,7 @@ export const buildPresentDeck = (
         textEffect: members.every((item) => isTextElement(item.element))
           ? presentTextEffectOf(members.map((item) => item.element))
           : null,
+        sound: presentSoundOf(members.map((item) => item.element)),
         skip: presentSkipOf(members.map((item) => item.element)),
         hide: presentHideOf(members.map((item) => item.element)),
         index: representative.index,
@@ -973,16 +1081,19 @@ export const buildPresentDeck = (
       order: frame.order,
       effect: presentEffectOf([frame.element]),
       zoomPercent: presentZoomPercentOf([frame.element]),
+      sound: presentSoundOf([frame.element]),
       objects: clustered.map((object) => ({
         id: object.id,
         label: object.label,
         order: object.order,
         effect: object.effect,
+        camera: object.camera,
         motion: object.motion,
         exit: object.exit,
         translation: object.translation,
         zoomPercent: object.zoomPercent,
         textEffect: object.textEffect,
+        sound: object.sound,
         skip: object.skip,
         hide: object.hide,
         groupId: object.groupId,

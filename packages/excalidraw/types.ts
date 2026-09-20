@@ -810,6 +810,11 @@ export type ElementRenderOverride = Readonly<{
   /** Translation in scene units. Bound labels inherit their container's offset and ignore this field. */
   offset?: Readonly<{ x: number; y: number }>;
   /**
+   * Uniform scale around the element's center, after offset. Bound labels
+   * inherit their container's scale. Omitted: 1.
+   */
+  scale?: number;
+  /**
    * Masks a text element without editing its string. Ignored for other types.
    * Omitted, or progress at 1: draw the document text.
    * typewriter uncovers glyphs in reading order. words fades each word in

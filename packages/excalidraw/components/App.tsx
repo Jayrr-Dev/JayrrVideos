@@ -2059,8 +2059,10 @@ class App extends React.Component<AppProps, AppState> {
                       y +
                       renderState.offset.y * this.state.zoom.value -
                       this.state.offsetTop
-                    }px) scale(${scale})`
+                    }px) scale(${scale * renderState.scale})`
                   : "none",
+                transformOrigin:
+                  renderState.scale === 1 ? undefined : "center center",
                 display: isVisible ? "block" : "none",
                 opacity:
                   renderState.opacity *

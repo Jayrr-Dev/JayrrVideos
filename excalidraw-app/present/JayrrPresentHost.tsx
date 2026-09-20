@@ -19,6 +19,11 @@ import type { NonDeletedExcalidrawElement } from "@excalidraw/element/types";
 import { JAYRR_AI_TAB, JayrrAiChat } from "../ai/JayrrAiChat";
 import { TopErrorBoundary } from "../components/TopErrorBoundary";
 import {
+  JAYRR_EDITOR_TAB,
+  JayrrEditorPanel,
+  editorTabIcon,
+} from "../domain/editor";
+import {
   JAYRR_CALLED_OBJECTS_TAB,
   JAYRR_CALLED_OBJECT_DRAG,
   JayrrCalledObjectsPanel,
@@ -345,6 +350,13 @@ export const JayrrPresentHost = ({
                 {presentationIcon}
               </Sidebar.TabTrigger>
               <Sidebar.TabTrigger
+                tab={JAYRR_EDITOR_TAB}
+                title="Video editor"
+                aria-label="Video editor"
+              >
+                {editorTabIcon}
+              </Sidebar.TabTrigger>
+              <Sidebar.TabTrigger
                 tab={JAYRR_RECORDINGS_TAB}
                 title="Recordings"
                 aria-label="Recordings"
@@ -364,6 +376,11 @@ export const JayrrPresentHost = ({
                 {aiIcon}
               </Sidebar.TabTrigger>
             </DefaultSidebar.TrailingTabTriggers>
+            <Sidebar.Tab tab={JAYRR_EDITOR_TAB}>
+              <TopErrorBoundary compact>
+                <JayrrEditorPanel />
+              </TopErrorBoundary>
+            </Sidebar.Tab>
             <Sidebar.Tab tab={JAYRR_CALLED_OBJECTS_TAB}>
               <TopErrorBoundary compact>
                 <JayrrCalledObjectsPanel />
