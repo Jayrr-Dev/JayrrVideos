@@ -1,0 +1,46 @@
+.excalidraw {
+  .jayrr-pdf-embed {
+    align-items: stretch;
+    justify-content: flex-start;
+    gap: 0;
+    padding: 0;
+    background: var(--island-bg-color);
+    border: 1px solid var(--sidebar-border-color);
+    border-radius: 0.75rem;
+    overflow: hidden;
+    color: var(--text-primary-color);
+  }
+
+  .jayrr-pdf-embed__file {
+    display: none;
+  }
+
+  .jayrr-pdf-embed__frame {
+    flex: 1 1 auto;
+    width: 100%;
+    min-height: 0;
+    border: 0;
+    background: #fff;
+  }
+
+  .jayrr-pdf-embed__empty,
+  .jayrr-pdf-embed__error {
+    flex: 1 1 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 0;
+    padding: 1rem;
+    border: 0;
+    background: transparent;
+    color: var(--color-gray-60);
+    font: inherit;
+    font-size: 0.85rem;
+    text-align: center;
+    cursor: pointer;
+  }
+
+  .jayrr-pdf-embed__error {
+    cursor: default;
+  }
+}

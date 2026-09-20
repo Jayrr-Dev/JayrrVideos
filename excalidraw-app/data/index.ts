@@ -1,3 +1,5 @@
+import { bytesToHexString } from "@excalidraw/common";
+import { isInvisiblySmallElement } from "@excalidraw/element";
 import {
   compressData,
   decompressData,
@@ -8,26 +10,23 @@ import {
   IV_LENGTH_BYTES,
 } from "@excalidraw/excalidraw/data/encryption";
 import { serializeAsJSON } from "@excalidraw/excalidraw/data/json";
-import { isInvisiblySmallElement } from "@excalidraw/element";
-import { isInitializedImageElement } from "@excalidraw/element";
 import { t } from "@excalidraw/excalidraw/i18n";
-import { bytesToHexString } from "@excalidraw/common";
 
 import type { UserIdleState } from "@excalidraw/common";
-import type { ImportedDataState } from "@excalidraw/excalidraw/data/types";
+import type { MakeBrand } from "@excalidraw/common/utility-types";
 import type { SceneBounds } from "@excalidraw/element";
 import type {
   ExcalidrawElement,
   FileId,
   OrderedExcalidrawElement,
 } from "@excalidraw/element/types";
+import type { ImportedDataState } from "@excalidraw/excalidraw/data/types";
 import type {
   AppState,
   BinaryFileData,
   BinaryFiles,
   SocketId,
 } from "@excalidraw/excalidraw/types";
-import type { MakeBrand } from "@excalidraw/common/utility-types";
 
 import {
   DELETED_ELEMENT_TIMEOUT,
@@ -35,6 +34,7 @@ import {
   ROOM_ID_BYTES,
 } from "../app_constants";
 
+import { collectSceneFileIds } from "../domain/widgets/collectSceneFileIds";
 import { encodeFilesForUpload } from "./FileManager";
 import { saveFilesToFirebase } from "./firebase";
 
@@ -261,9 +261,10 @@ export const exportToBackend = async (
 
   try {
     const filesMap = new Map<FileId, BinaryFileData>();
-    for (const element of elements) {
-      if (isInitializedImageElement(element) && files[element.fileId]) {
-        filesMap.set(element.fileId, files[element.fileId]);
+    for (const fileId of collectSceneFileIds(elements)) {
+      const file = files[fileId];
+      if (file) {
+        filesMap.set(fileId, file);
       }
     }
 

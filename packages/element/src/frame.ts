@@ -1009,3 +1009,18 @@ export const frameAndChildrenSelectedTogether = (
     )
   );
 };
+
+const JAYRR_FRAME_KEY = "jayrrFrame";
+
+/** True when a frame has a stored, non-free aspect ratio lock. */
+export const isFrameAspectLocked = (element: ExcalidrawElement) => {
+  if (!isFrameLikeElement(element)) {
+    return false;
+  }
+  const data = element.customData?.[JAYRR_FRAME_KEY];
+  if (!data || typeof data !== "object") {
+    return false;
+  }
+  const aspect = (data as { aspect?: unknown }).aspect;
+  return typeof aspect === "string" && aspect !== "free" && aspect.length > 0;
+};

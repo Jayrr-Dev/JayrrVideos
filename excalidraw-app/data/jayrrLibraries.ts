@@ -5,8 +5,6 @@ import { appJotaiStore, atom } from "../app-jotai";
 import { STORAGE_KEYS } from "../app_constants";
 import { api, convexClient } from "../convexClient";
 
-import { getOwnerKey } from "./ownerKey";
-
 import type { Id } from "../../convex/_generated/dataModel";
 
 export const openLibraryIdAtom = atom<Id<"libraries"> | null>(
@@ -51,15 +49,13 @@ export const addSelectionToOpenLibrary = async (
     throw new Error("Select something on the canvas first.");
   }
 
-  const ownerKey = getOwnerKey();
   let libraryId = appJotaiStore.get(openLibraryIdAtom);
   if (!libraryId) {
-    const listed = await convexClient.query(api.libraries.list, { ownerKey });
+    const listed = await convexClient.query(api.libraries.list, {});
     if (listed[0]) {
       libraryId = listed[0]._id;
     } else {
       libraryId = await convexClient.mutation(api.libraries.create, {
-        ownerKey,
         name: "Library 1",
       });
     }
@@ -67,7 +63,6 @@ export const addSelectionToOpenLibrary = async (
   }
 
   await convexClient.mutation(api.libraries.addAsset, {
-    ownerKey,
     libraryId,
     elementsJson: JSON.stringify(elements),
     filesJson: serializeFilesForElements(elements, files),

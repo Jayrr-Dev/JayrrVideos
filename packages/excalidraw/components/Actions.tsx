@@ -170,6 +170,8 @@ export const SelectedShapeActions = ({
       {predicates.backgroundColor && (
         <div>{renderAction("changeBackgroundColor")}</div>
       )}
+      {renderAction("jayrrCamera")}
+      {renderAction("jayrrFrame")}
       {predicates.fill && renderAction("changeFillStyle")}
 
       {predicates.strokeWidth && renderAction("changeStrokeWidth")}
@@ -213,6 +215,7 @@ export const SelectedShapeActions = ({
           <div className="buttonList">
             {renderAction("duplicateSelection")}
             {renderAction("deleteSelectedElements")}
+            {renderAction("toggleElementLock")}
             {renderAction("group")}
             {renderAction("ungroup")}
             {predicates.link && renderAction("hyperlink")}
@@ -580,6 +583,7 @@ const CombinedExtraActions = ({
                   {predicates.cropEditor && renderAction("cropEditor")}
                   {showDuplicate && renderAction("duplicateSelection")}
                   {showDelete && renderAction("deleteSelectedElements")}
+                  {renderAction("toggleElementLock")}
                 </div>
               </fieldset>
             </div>
@@ -653,6 +657,8 @@ export const CompactShapeActions = ({
           )}
         </div>
       )}
+      {renderAction("jayrrCamera")}
+      {renderAction("jayrrFrame")}
 
       {/* Freedraw pressure: standalone button cycling the variability mode */}
       {predicates.freedrawMode && (
@@ -811,6 +817,8 @@ export const MobileShapeActions = ({
             )}
           </div>
         )}
+        {renderAction("jayrrCamera")}
+        {renderAction("jayrrFrame")}
         <CombinedShapeProperties
           appState={appState}
           renderAction={renderAction}

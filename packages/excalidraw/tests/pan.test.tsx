@@ -1,4 +1,3 @@
-import React from "react";
 import { fireEvent } from "@testing-library/react";
 import { vi } from "vitest";
 
@@ -42,41 +41,91 @@ describe("secondary-button pan", () => {
     await render(<Excalidraw />);
   });
 
-  it.each([false, true])(
-    "pans past five pixels with no context menu (viewModeEnabled=%s)",
-    (viewModeEnabled) => {
-      API.setAppState({ viewModeEnabled });
-      fireEvent.pointerDown(canvas(), at(100, 100));
-      const start = getViewport();
+  it("erases past five pixels with no context menu or pan", () => {
+    const rectangle = API.createElement({
+      type: "rectangle",
+      x: 10,
+      y: 10,
+      width: 80,
+      height: 80,
+      backgroundColor: "#ffc9c9",
+      fillStyle: "solid",
+    });
+    API.setElements([rectangle]);
 
-      // at the five-pixel threshold it is still a click
-      fireEvent.pointerMove(canvas(), at(103, 104));
-      expect(getViewport()).toEqual(start);
-      expect(canvas().style.cursor).not.toBe(CURSOR_TYPE.GRABBING);
+    fireEvent.pointerDown(canvas(), at(30, 30));
+    const start = getViewport();
+    expect(h.state.activeTool.type).toBe("selection");
 
-      // past it the pan engages, and moves from here on
-      fireEvent.pointerMove(canvas(), at(106, 100));
-      expect(getViewport()).toEqual(start);
-      expect(canvas().style.cursor).toBe(CURSOR_TYPE.GRABBING);
-      fireEvent.pointerMove(canvas(), at(108, 103));
-      expect(getViewport()).toEqual({
-        ...start,
-        scrollX: start.scrollX + 2 / start.zoom,
-        scrollY: start.scrollY + 3 / start.zoom,
-      });
+    // at the five-pixel threshold it is still a click
+    fireEvent.pointerMove(canvas(), at(33, 34));
+    expect(getViewport()).toEqual(start);
+    expect(h.state.activeTool.type).toBe("selection");
+    expect(h.elements[0].isDeleted).toBe(false);
 
-      fireEvent.pointerUp(window, { ...at(108, 103), buttons: 0 });
-      expect(h.state.contextMenu).toBe(null);
+    // past it the eraser engages from the press point
+    fireEvent.pointerMove(canvas(), at(50, 30));
+    expect(getViewport()).toEqual(start);
+    expect(h.state.activeTool.type).toBe("eraser");
 
-      // the platform's own contextmenu for this press (Windows fires it on
-      // mouseup) is not a new click...
-      fireEvent.contextMenu(canvas(), at(108, 103));
-      expect(h.state.contextMenu).toBe(null);
-      // ...but only that one
-      fireEvent.contextMenu(canvas(), at(108, 103));
-      expect(h.state.contextMenu).not.toBe(null);
-    },
-  );
+    fireEvent.pointerUp(window, { ...at(50, 30), buttons: 0 });
+    expect(h.state.activeTool.type).toBe("selection");
+    expect(h.elements[0].isDeleted).toBe(true);
+    expect(h.state.contextMenu).toBe(null);
+
+    fireEvent.contextMenu(canvas(), at(50, 30));
+    expect(h.state.contextMenu).toBe(null);
+    fireEvent.contextMenu(canvas(), at(50, 30));
+    expect(h.state.contextMenu).not.toBe(null);
+  });
+
+  it("erases a shape when the right-click drag starts outside it", () => {
+    const rectangle = API.createElement({
+      type: "rectangle",
+      x: 40,
+      y: 10,
+      width: 80,
+      height: 80,
+      backgroundColor: "#ffc9c9",
+      fillStyle: "solid",
+    });
+    API.setElements([rectangle]);
+
+    fireEvent.pointerDown(canvas(), at(10, 50));
+    fireEvent.pointerMove(canvas(), at(90, 50));
+    fireEvent.pointerUp(window, { ...at(90, 50), buttons: 0 });
+
+    expect(h.elements[0].isDeleted).toBe(true);
+    expect(h.state.activeTool.type).toBe("selection");
+  });
+
+  it("pans past five pixels in view mode with no context menu", () => {
+    API.setAppState({ viewModeEnabled: true });
+    fireEvent.pointerDown(canvas(), at(100, 100));
+    const start = getViewport();
+
+    fireEvent.pointerMove(canvas(), at(103, 104));
+    expect(getViewport()).toEqual(start);
+    expect(canvas().style.cursor).not.toBe(CURSOR_TYPE.GRABBING);
+
+    fireEvent.pointerMove(canvas(), at(106, 100));
+    expect(getViewport()).toEqual(start);
+    expect(canvas().style.cursor).toBe(CURSOR_TYPE.GRABBING);
+    fireEvent.pointerMove(canvas(), at(108, 103));
+    expect(getViewport()).toEqual({
+      ...start,
+      scrollX: start.scrollX + 2 / start.zoom,
+      scrollY: start.scrollY + 3 / start.zoom,
+    });
+
+    fireEvent.pointerUp(window, { ...at(108, 103), buttons: 0 });
+    expect(h.state.contextMenu).toBe(null);
+
+    fireEvent.contextMenu(canvas(), at(108, 103));
+    expect(h.state.contextMenu).toBe(null);
+    fireEvent.contextMenu(canvas(), at(108, 103));
+    expect(h.state.contextMenu).not.toBe(null);
+  });
 
   it("lets the platform's contextmenu after mouseup open the menu, as always", () => {
     fireEvent.pointerDown(canvas(), at(100, 100));
@@ -95,7 +144,7 @@ describe("secondary-button pan", () => {
   });
 
   it.each([false, true])(
-    "pauses pointer broadcasts until pan release (viewModeEnabled=%s)",
+    "pauses pointer broadcasts until secondary-button release (viewModeEnabled=%s)",
     (viewModeEnabled) => {
       const onPointerUpdate = vi.fn();
       GlobalTestState.renderResult.rerender(
@@ -177,6 +226,7 @@ describe("secondary-button pan", () => {
     fireEvent.pointerMove(canvas(), at(150, 140));
     fireEvent.pointerUp(window, { ...at(150, 140), buttons: 0 });
     expect(h.state.contextMenu).toBe(null);
+    expect(h.state.activeTool.type).toBe("selection");
 
     // the menu is available again to a later, unrelated request
     fireEvent.contextMenu(canvas(), at(150, 140));

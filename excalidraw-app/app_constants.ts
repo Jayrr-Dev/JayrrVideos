@@ -59,10 +59,16 @@ export const STORAGE_KEYS = {
   LOCAL_STORAGE_GOOGLE_DRIVE_FOLDER_ID: "jayrr-google-drive-folder-id",
   LOCAL_STORAGE_OWNER_KEY: "jayrr-owner-key",
   LOCAL_STORAGE_OPEN_LIBRARY_ID: "jayrr-open-library-id",
+  LOCAL_STORAGE_OPEN_RECORDING_FOLDER_ID: "jayrr-open-recording-folder-id",
+  LOCAL_STORAGE_OPEN_SCENE_FOLDER_ID: "jayrr-open-scene-folder-id",
   LOCAL_STORAGE_ACTIVE_SCENE_ID: "jayrr-active-scene-id",
   LOCAL_STORAGE_PRESENT_HIDE_FRAMES: "jayrr-present-hide-frames",
   LOCAL_STORAGE_PRESENT_MOTION: "jayrr-present-motion",
   LOCAL_STORAGE_PRESENT_CUSTOM_CURSOR: "jayrr-present-custom-cursor",
+  LOCAL_STORAGE_PRESENT_INTERACT: "jayrr-present-interact",
+  LOCAL_STORAGE_PRESENT_MIC: "jayrr-present-mic",
+  LOCAL_STORAGE_TRANSCRIBE_API_KEY: "jayrr-transcribe-api-key",
+  LOCAL_STORAGE_TRANSCRIBE_ENABLED: "jayrr-transcribe-enabled",
 
   // do not use apart from migrations
   __LEGACY_LOCAL_STORAGE_LIBRARY: "excalidraw-library",

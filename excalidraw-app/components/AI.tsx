@@ -1,15 +1,15 @@
+import { safelyParseJSON } from "@excalidraw/common";
+import { getTextFromElements } from "@excalidraw/element";
 import {
   DiagramToCodePlugin,
   exportToBlob,
   getNonDeletedElements,
-  getTextFromElements,
   MIME_TYPES,
   parseSSEStream,
   TTDDialog,
   TTDStreamFetch,
 } from "@excalidraw/excalidraw";
 import { getDataURL } from "@excalidraw/excalidraw/data/blob";
-import { safelyParseJSON } from "@excalidraw/common";
 
 import type { StreamChunk } from "@excalidraw/excalidraw";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";

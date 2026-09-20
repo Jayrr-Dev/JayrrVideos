@@ -30,7 +30,9 @@ export const actionAddToLibrary = register({
     }
 
     if (app.props.onAddToLibrary) {
-      return Promise.resolve(app.props.onAddToLibrary(selectedElements, app.files))
+      return Promise.resolve(
+        app.props.onAddToLibrary(selectedElements, app.files),
+      )
         .then(() => {
           return {
             captureUpdate: CaptureUpdateAction.EVENTUALLY,

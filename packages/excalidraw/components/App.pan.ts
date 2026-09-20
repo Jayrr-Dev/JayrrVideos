@@ -16,20 +16,25 @@ const SECONDARY_BUTTON_PAN_THRESHOLD = 5; // px
  * window listeners and teardown; wheel input is gated on it (see
  * `AppWheel`).
  *
- * A secondary-button session is a pan only once the pointer travels past
- * the drag threshold; released before that, it is a right-click. The
- * platform's `contextmenu` event opens the menu for a right-click where it
- * follows the release (Windows), as it always has; where it comes with the
- * press (macOS, Linux) it is swallowed — a drag cannot be told from a
- * click yet — and the session opens the menu on release instead.
+ * A secondary-button session is a click until the pointer travels past
+ * the drag threshold. Past that, an interactive editor erases; view mode
+ * and other non-interactive cases still pan. Released before the
+ * threshold, it is a right-click. The platform's `contextmenu` event
+ * opens the menu for a right-click where it follows the release
+ * (Windows), as it always has; where it comes with the press (macOS,
+ * Linux) it is swallowed — a drag cannot be told from a click yet — and
+ * the session opens the menu on release instead.
  */
 export class AppPan {
   /** space held down turns a main-button drag into a pan */
   private spaceHeld = false;
   private active = false;
   /** the secondary-button session, while one is active */
-  private secondary: { engaged: boolean; nativeMenuSeen: boolean } | null =
-    null;
+  private secondary: {
+    engaged: boolean;
+    nativeMenuSeen: boolean;
+    erasing: boolean;
+  } | null = null;
   /** the platform fires `contextmenu` on mouseup (Windows) or on mousedown
    * (macOS, Linux); the one belonging to a secondary-button session is not a
    * new click, whichever side of the session it lands on */
@@ -108,7 +113,7 @@ export class AppPan {
     }
     this.active = true;
     this.secondary = isSecondary
-      ? { engaged: false, nativeMenuSeen: false }
+      ? { engaged: false, nativeMenuSeen: false, erasing: false }
       : null;
 
     // due to event.preventDefault below, container wouldn't get focus
@@ -142,10 +147,21 @@ export class AppPan {
           return;
         }
         this.secondary.engaged = true;
+        if (app.shouldSecondaryButtonErase()) {
+          this.secondary.erasing = true;
+          app.beginTemporaryEraser(startX, startY);
+          app.updateTemporaryEraser(event);
+          return;
+        }
         app.cursor.set(CURSOR_TYPE.GRABBING);
         // pans from here on; the threshold distance is not caught up
         lastX = event.clientX;
         lastY = event.clientY;
+        return;
+      }
+
+      if (this.secondary?.erasing) {
+        app.updateTemporaryEraser(event);
         return;
       }
 
@@ -217,7 +233,10 @@ export class AppPan {
           // a drag: the platform's `contextmenu` still to come is no click
           this.suppressNextContextMenu = true;
         }
-        if (!this.spaceHeld) {
+        onPointerMove.flush();
+        if (secondary?.erasing) {
+          app.finishTemporaryEraser();
+        } else if (!this.spaceHeld) {
           app.cursor.reset();
         }
         app.setState(
@@ -242,7 +261,6 @@ export class AppPan {
         app.ownerWindow.removeEventListener(EVENT.POINTER_MOVE, onPointerMove);
         app.ownerWindow.removeEventListener(EVENT.POINTER_UP, teardown);
         app.ownerWindow.removeEventListener(EVENT.BLUR, teardown);
-        onPointerMove.flush();
 
         // released without a drag: a right-click. Where the platform's
         // `contextmenu` came with the press it was swallowed, so the menu

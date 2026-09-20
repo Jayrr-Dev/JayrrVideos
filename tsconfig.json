@@ -19,6 +19,9 @@
     "jsx": "react-jsx",
     "baseUrl": ".",
     "paths": {
+      "@ai-sdk/react": ["./node_modules/@ai-sdk/react/dist/index.d.ts"],
+      "@openrouter/ai-sdk-provider": ["./node_modules/@openrouter/ai-sdk-provider/dist/index.d.ts"],
+      "ai": ["./node_modules/ai/dist/index.d.ts"],
       "@excalidraw/common": ["./packages/common/src/index.ts"],
       "@excalidraw/common/*": ["./packages/common/src/*"],
       "@excalidraw/excalidraw": ["./packages/excalidraw/index.tsx"],

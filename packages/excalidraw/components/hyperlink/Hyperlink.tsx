@@ -248,6 +248,28 @@ export const Hyperlink = ({
     return null;
   }
 
+  const customPopup = appProps.renderHyperlinkPopup?.({
+    element,
+    appState,
+  });
+  if (customPopup !== false && customPopup != null) {
+    return (
+      <div
+        className="excalidraw-hyperlinkContainer excalidraw-hyperlinkContainer--custom"
+        style={{
+          top: `${y}px`,
+          left: `${x}px`,
+          minWidth: POPUP_WIDTH,
+          width: "max-content",
+          maxWidth: 560,
+          padding: POPUP_PADDING,
+        }}
+      >
+        {customPopup}
+      </div>
+    );
+  }
+
   return (
     <div
       className="excalidraw-hyperlinkContainer"

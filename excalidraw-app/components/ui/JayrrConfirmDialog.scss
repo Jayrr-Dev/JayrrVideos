@@ -1,0 +1,32 @@
+.excalidraw {
+  .jayrr-confirm__title {
+    margin-bottom: 1rem;
+    padding-bottom: 0;
+    border-bottom: none;
+  }
+
+  .jayrr-confirm__title-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    min-width: 0;
+  }
+
+  .jayrr-confirm__info {
+    display: inline-flex;
+    flex: 0 0 auto;
+    color: var(--icon-fill-color);
+    cursor: help;
+  }
+
+  .jayrr-confirm__info svg {
+    width: 1rem;
+    height: 1rem;
+  }
+
+  .jayrr-confirm__buttons {
+    display: flex;
+    column-gap: 0.5rem;
+    justify-content: flex-end;
+  }
+}

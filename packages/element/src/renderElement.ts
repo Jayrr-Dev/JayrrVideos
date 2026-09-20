@@ -1032,8 +1032,168 @@ export const renderElement = (
       appState,
       renderState,
     );
+    renderConfig.paintLiveMedia?.(element, context, appState, renderState);
   } finally {
     context.restore();
+  }
+};
+
+const measuredTextWidth = (
+  context: CanvasRenderingContext2D,
+  value: string,
+) => {
+  if (!value) {
+    return 0;
+  }
+  // Canvas drops trailing spaces from measureText.
+  if (value.endsWith(" ")) {
+    return (
+      context.measureText(`${value}.`).width - context.measureText(".").width
+    );
+  }
+  return context.measureText(value).width;
+};
+
+/** Presentation text reveal. Glyphs stay in their final places. */
+const drawTextClip = (
+  element: ExcalidrawTextElement,
+  elementsMap: RenderableElementsMap,
+  context: CanvasRenderingContext2D,
+  renderConfig: StaticCanvasRenderConfig,
+  appState: StaticCanvasAppState | InteractiveCanvasAppState,
+  renderState: ElementRenderState,
+) => {
+  const clip = renderConfig.elementRenderOverrides?.get(element.id)?.textClip;
+  if (!clip || clip.progress >= 1 || clip.progress <= 0) {
+    return;
+  }
+  const progress = clip.progress;
+  const [x1, y1, x2, y2] = getElementAbsoluteCoords(element, elementsMap);
+  const cx = (x1 + x2) / 2 + appState.scrollX + renderState.offset.x;
+  const cy = (y1 + y2) / 2 + appState.scrollY + renderState.offset.y;
+  const shiftX = (x2 - x1) / 2 - (element.x - x1);
+  const shiftY = (y2 - y1) / 2 - (element.y - y1);
+  const rtl = isRTL(element.text);
+  const shouldTemporarilyAttach = rtl && !context.canvas.isConnected;
+  if (shouldTemporarilyAttach) {
+    document.body.appendChild(context.canvas);
+  }
+  context.canvas.setAttribute("dir", rtl ? "rtl" : "ltr");
+  context.save();
+  context.translate(cx, cy);
+  context.rotate(element.angle);
+  context.translate(-shiftX, -shiftY);
+  context.font = getFontString(element);
+  context.fillStyle = applyDarkModeFilter(
+    element.strokeColor,
+    renderConfig.theme === THEME.DARK,
+  );
+  context.textAlign = element.textAlign as CanvasTextAlign;
+  const lines = element.text.replace(/\r\n?/g, "\n").split("\n");
+  const horizontalOffset =
+    element.textAlign === "center"
+      ? element.width / 2
+      : element.textAlign === "right"
+      ? element.width
+      : 0;
+  const lineHeightPx = getLineHeightInPx(element.fontSize, element.lineHeight);
+  const verticalOffset = getVerticalOffset(
+    element.fontFamily,
+    element.fontSize,
+    lineHeightPx,
+  );
+  const lineBoxLeft = (line: string) => {
+    const fullWidth = measuredTextWidth(context, line);
+    if (element.textAlign === "center") {
+      return horizontalOffset - fullWidth / 2;
+    }
+    if (element.textAlign === "right") {
+      return horizontalOffset - fullWidth;
+    }
+    return horizontalOffset;
+  };
+  const paintLine = (line: string, index: number, visibleWidth: number) => {
+    if (!line || visibleWidth <= 0) {
+      return;
+    }
+    const fullWidth = measuredTextWidth(context, line);
+    if (fullWidth <= 0) {
+      return;
+    }
+    const boxLeft = lineBoxLeft(line);
+    const fromEnd = isRTL(line);
+    const clipX = fromEnd ? boxLeft + fullWidth - visibleWidth : boxLeft;
+    context.save();
+    context.beginPath();
+    context.rect(
+      clipX,
+      index * lineHeightPx - element.fontSize * 0.25,
+      visibleWidth,
+      lineHeightPx + element.fontSize * 0.5,
+    );
+    context.clip();
+    context.fillText(
+      line,
+      horizontalOffset,
+      index * lineHeightPx + verticalOffset,
+    );
+    context.restore();
+  };
+
+  if (clip.kind === "typewriter") {
+    const glyphLines = lines.map((line) => Array.from(line));
+    const total = glyphLines.reduce((sum, line) => sum + line.length, 0);
+    let remaining =
+      total === 0 ? 0 : Math.min(total, Math.ceil(progress * total - 1e-6));
+    for (let index = 0; index < lines.length; index++) {
+      const line = lines[index] ?? "";
+      const glyphs = glyphLines[index] ?? [];
+      if (remaining <= 0 || glyphs.length === 0) {
+        continue;
+      }
+      const count = Math.min(remaining, glyphs.length);
+      remaining -= count;
+      const prefix =
+        count >= glyphs.length ? line : glyphs.slice(0, count).join("");
+      paintLine(line, index, measuredTextWidth(context, prefix));
+    }
+  } else {
+    // words: fade each word in reading order while keeping final layout.
+    const lineTokens = lines.map((line) => line.match(/\S+\s*/g) ?? []);
+    const total = lineTokens.reduce((sum, tokens) => sum + tokens.length, 0);
+    const wordProgress = total === 0 ? 0 : progress * total;
+    let wordIndex = 0;
+    const baseAlpha = context.globalAlpha;
+    context.textAlign = "left";
+    for (let index = 0; index < lines.length; index++) {
+      const line = lines[index] ?? "";
+      const tokens = lineTokens[index] ?? [];
+      if (!line || tokens.length === 0) {
+        continue;
+      }
+      const boxLeft = lineBoxLeft(line);
+      let prefix = "";
+      const y = index * lineHeightPx + verticalOffset;
+      for (const token of tokens) {
+        const opacity = clamp(wordProgress - wordIndex, 0, 1);
+        wordIndex += 1;
+        if (opacity > 0) {
+          context.globalAlpha = baseAlpha * opacity;
+          context.fillText(
+            token,
+            boxLeft + measuredTextWidth(context, prefix),
+            y,
+          );
+        }
+        prefix += token;
+      }
+    }
+    context.globalAlpha = baseAlpha;
+  }
+
+  context.restore();
+  if (shouldTemporarilyAttach) {
+    context.canvas.remove();
   }
 };
 
@@ -1137,6 +1297,21 @@ const drawElement = (
     case "text":
     case "iframe":
     case "embeddable": {
+      if (
+        !renderConfig.isExporting &&
+        isTextElement(element) &&
+        renderConfig.elementRenderOverrides?.get(element.id)?.textClip
+      ) {
+        drawTextClip(
+          element,
+          elementsMap,
+          context,
+          renderConfig,
+          appState,
+          renderState,
+        );
+        break;
+      }
       if (renderConfig.isExporting) {
         const [x1, y1, x2, y2] = getElementAbsoluteCoords(element, elementsMap);
         const centerX = (x1 + x2) / 2;

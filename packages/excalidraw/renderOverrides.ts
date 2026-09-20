@@ -12,7 +12,8 @@ export const copyElementRenderOverrides = (
 ): ElementRenderOverrides => {
   const copy = new Map<string, ElementRenderOverride>();
   for (const [id, value] of overrides ?? []) {
-    const { opacity, offset } = value;
+    const { opacity, offset, textClip } = value;
+    const clip = normalizeTextClip(id, textClip);
     if (
       (opacity !== undefined && !Number.isFinite(opacity)) ||
       (offset !== undefined &&
@@ -22,15 +23,42 @@ export const copyElementRenderOverrides = (
     ) {
       throw new TypeError(`Render overrides for ${id} must be finite numbers`);
     }
-    if (opacity === undefined && offset === undefined) {
+    if (opacity === undefined && offset === undefined && !clip) {
       continue;
     }
     copy.set(id, {
       ...(opacity !== undefined ? { opacity: clamp(opacity, 0, 100) } : {}),
       ...(offset ? { offset: { x: offset.x, y: offset.y } } : {}),
+      ...(clip ? { textClip: clip } : {}),
     });
   }
   return copy;
+};
+
+const normalizeTextClip = (
+  id: string,
+  value:
+    | ElementRenderOverride["textClip"]
+    | Readonly<{ kind: "reveal"; progress: number }>
+    | undefined,
+): ElementRenderOverride["textClip"] | undefined => {
+  if (value == null) {
+    return undefined;
+  }
+  const kind =
+    value.kind === "reveal"
+      ? "words"
+      : value.kind === "typewriter" || value.kind === "words"
+      ? value.kind
+      : null;
+  if (!kind || !Number.isFinite(value.progress)) {
+    throw new TypeError(`Render overrides for ${id} must be finite numbers`);
+  }
+  const progress = clamp(value.progress, 0, 1);
+  if (progress >= 1) {
+    return undefined;
+  }
+  return { kind, progress };
 };
 
 /**

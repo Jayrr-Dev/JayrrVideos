@@ -9,6 +9,7 @@ import type {
 
 import { isRenderThrottlingEnabled } from "../../reactUtils";
 import { renderStaticScene } from "../../renderer/staticScene";
+import { setLiveCanvasRepaint } from "../../liveMedia";
 
 import type {
   RenderableElementsMap,
@@ -56,19 +57,26 @@ const StaticCanvas = (props: StaticCanvasProps) => {
       canvas.classList.add("excalidraw__canvas", "static");
     }
 
-    renderStaticScene(
-      {
-        canvas,
-        rc: props.rc,
-        scale: props.scale,
-        elementsMap: props.elementsMap,
-        allElementsMap: props.allElementsMap,
-        visibleElements: props.visibleElements,
-        appState: props.appState,
-        renderConfig: props.renderConfig,
-      },
-      isRenderThrottlingEnabled(),
-    );
+    const paint = () => {
+      renderStaticScene(
+        {
+          canvas,
+          rc: props.rc,
+          scale: props.scale,
+          elementsMap: props.elementsMap,
+          allElementsMap: props.allElementsMap,
+          visibleElements: props.visibleElements,
+          appState: props.appState,
+          renderConfig: props.renderConfig,
+        },
+        isRenderThrottlingEnabled(),
+      );
+    };
+    setLiveCanvasRepaint(paint);
+    paint();
+    return () => {
+      setLiveCanvasRepaint(null);
+    };
   });
 
   return <div className="excalidraw__canvas-wrapper" ref={wrapperRef} />;

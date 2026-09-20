@@ -1,0 +1,52 @@
+.jayrr-ui-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  margin: 0;
+  border: 1px solid transparent;
+  border-radius: 0.5rem;
+  font: inherit;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.jayrr-ui-button:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.jayrr-ui-button--medium {
+  padding: 0.55rem 0.8rem;
+}
+
+.jayrr-ui-button--large {
+  padding: 0.7rem 1rem;
+}
+
+.jayrr-ui-button--full {
+  width: 100%;
+}
+
+.jayrr-ui-button--primary {
+  background: var(--color-primary, #6965db);
+  color: var(--color-on-primary-container, #fff);
+}
+
+.jayrr-ui-button--secondary {
+  background: var(--color-surface-low, #ececf4);
+  border-color: var(--default-border-color, #d3d3d8);
+  color: var(--color-on-surface, #1b1b1f);
+}
+
+.jayrr-ui-button--ghost {
+  background: transparent;
+  color: var(--color-on-surface-variant, #a5a5b5);
+  font-weight: 500;
+}
+
+.jayrr-ui-button--danger {
+  background: var(--color-danger, #e03131);
+  color: #fff;
+}

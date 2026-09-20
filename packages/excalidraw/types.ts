@@ -506,6 +506,8 @@ export interface AppState {
   gridSize: number;
   gridStep: number;
   gridModeEnabled: boolean;
+  /** When true and the grid is on, drag/create/resize snap to grid lines. */
+  gridSnapEnabled: boolean;
   viewModeEnabled: boolean;
 
   /** top-most selected groups (i.e. does not include nested groups) */
@@ -533,7 +535,6 @@ export interface AppState {
     y: number;
   } | null;
   objectsSnapModeEnabled: boolean;
-  timelineEnabled: boolean;
 
   /** image cropping */
   isCropping: boolean;
@@ -802,12 +803,23 @@ export type UIConfig = {
   };
 };
 
-/** Supported visual changes. Geometry, content, bindings and styles are not overridable. */
+/** Supported visual changes. Geometry, bindings and styles are not overridable. */
 export type ElementRenderOverride = Readonly<{
   /** Absolute render opacity (0–100, clamped). Omitted: use element.opacity. */
   opacity?: number;
   /** Translation in scene units. Bound labels inherit their container's offset and ignore this field. */
   offset?: Readonly<{ x: number; y: number }>;
+  /**
+   * Masks a text element without editing its string. Ignored for other types.
+   * Omitted, or progress at 1: draw the document text.
+   * typewriter uncovers glyphs in reading order. words fades each word in
+   * reading order over the same progress.
+   */
+  textClip?: Readonly<{
+    kind: "typewriter" | "words";
+    /** 0–1. A value of 1 is dropped. */
+    progress: number;
+  }>;
 }>;
 
 /** see {@link ExcalidrawImperativeAPI.setElementRenderOverrides} for details */
@@ -1017,6 +1029,14 @@ export interface ExcalidrawProps {
     element: NonDeleted<ExcalidrawEmbeddableElement>,
     appState: AppState,
   ) => JSX.Element | null;
+  /**
+   * Replace the selection hyperlink popover for an element.
+   * Return `false` to keep the default link editor UI.
+   */
+  renderHyperlinkPopup?: (args: {
+    element: NonDeletedExcalidrawElement;
+    appState: AppState;
+  }) => React.ReactNode | false;
   aiEnabled?: boolean;
   showDeprecatedFonts?: boolean;
   renderScrollbars?: boolean;
@@ -1352,12 +1372,14 @@ export interface ExcalidrawImperativeAPI {
    * Frame opacity still multiplies child opacity. Decorations follow their owner.
    * Exports and interactive geometry (hit tests, selection, editing) use document
    * values, including while authoring an animation preview in edit mode.
+   * textClip masks text glyphs only. It does not change the document string.
    */
   setElementRenderOverrides: InstanceType<
     typeof App
   >["setElementRenderOverrides"];
   registerAction: (action: Action) => void;
   refresh: InstanceType<typeof App>["refresh"];
+  requestLiveRender: InstanceType<typeof App>["requestLiveRender"];
   setToast: InstanceType<typeof App>["setToast"];
   addFiles: (data: BinaryFileData[]) => void;
   insertElementsFromLibrary: (opts: {

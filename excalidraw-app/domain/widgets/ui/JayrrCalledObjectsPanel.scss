@@ -1,0 +1,33 @@
+.excalidraw {
+  .jayrr-called-panel__info {
+    display: inline-flex;
+    color: var(--color-gray-70);
+
+    svg {
+      width: 1rem;
+      height: 1rem;
+    }
+  }
+
+  .jayrr-called-panel__preview {
+    flex-direction: column;
+    gap: 0.4rem;
+    color: var(--text-primary-color);
+    cursor: grab;
+
+    &:active {
+      cursor: grabbing;
+    }
+  }
+
+  .jayrr-called-panel__icon svg {
+    width: 2rem;
+    height: 2rem;
+    color: var(--color-primary);
+  }
+
+  .jayrr-called-panel__hint {
+    font-size: 0.75rem;
+    color: var(--color-gray-70);
+  }
+}

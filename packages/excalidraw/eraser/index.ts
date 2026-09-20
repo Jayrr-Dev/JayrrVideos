@@ -24,14 +24,17 @@ import {
 
 import { getElementsInGroup } from "@excalidraw/element";
 
-import { shouldTestInside } from "@excalidraw/element";
-import { hasBoundTextElement, isBoundToContainer } from "@excalidraw/element";
-import { getBoundTextElementId } from "@excalidraw/element";
+import {
+  getBoundTextElementId,
+  hasBoundTextElement,
+  isBoundToContainer,
+  shouldTestInside,
+} from "@excalidraw/element";
 
 import type { Bounds } from "@excalidraw/common";
 
-import type { GlobalPoint, LineSegment } from "@excalidraw/math/types";
 import type { ElementsMap, ExcalidrawElement } from "@excalidraw/element/types";
+import type { GlobalPoint, LineSegment } from "@excalidraw/math/types";
 
 import { AnimatedTrail } from "../animatedTrail";
 
@@ -98,9 +101,9 @@ export class EraserTrail extends AnimatedTrail {
       eraserPath[eraserPath.length - 2],
     );
 
-    const candidateElements = this.app.visibleElements.filter(
-      (el) => !el.locked,
-    );
+    const candidateElements = this.app.scene
+      .getNonDeletedElements()
+      .filter((el) => !el.locked);
 
     const candidateElementsMap = arrayToMap(candidateElements);
 

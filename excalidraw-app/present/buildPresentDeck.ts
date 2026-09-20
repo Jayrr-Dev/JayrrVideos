@@ -29,22 +29,58 @@ export const JAYRR_PRESENT_ZOOM_PERCENT_DEFAULT = 100;
 export const JAYRR_PRESENT_TRANSLATION_TIME_DEFAULT = 500;
 export const JAYRR_PRESENT_TRANSLATION_TIME_MIN = 50;
 export const JAYRR_PRESENT_TRANSLATION_TIME_MAX = 8000;
+export const JAYRR_PRESENT_TYPE_TIME_DEFAULT = 1000;
+export const JAYRR_PRESENT_TYPE_TIME_MIN = 50;
+export const JAYRR_PRESENT_TYPE_TIME_MAX = 8000;
 
 export type PresentEffect = "focus" | "zoom" | "scale";
 
 export type PresentMotion =
-  "fade" | "fadeUp" | "fadeDown" | "fadeLeft" | "fadeRight";
+  | "none"
+  | "fade"
+  | "fadeUp"
+  | "fadeDown"
+  | "fadeLeft"
+  | "fadeRight";
 
-export type PresentExit = PresentMotion;
+export type PresentExit =
+  | "fade"
+  | "fadeUp"
+  | "fadeDown"
+  | "fadeLeft"
+  | "fadeRight";
 
 export type PresentEasing = "linear" | "easeIn" | "easeOut" | "easeInOut";
 
-export type PresentTranslation = {
-  kind: "move";
-  time: number;
-  easing: PresentEasing;
+export type PresentPathKind = "line" | "spline" | "draw";
+
+export type PresentPathPoint = {
   x: number;
   y: number;
+};
+
+export type PresentMoveKind = "move" | "showMove";
+
+export type PresentTranslation = {
+  kind: PresentMoveKind;
+  time: number;
+  easing: PresentEasing;
+  pathKind: PresentPathKind;
+  x: number;
+  y: number;
+  path?: PresentPathPoint[];
+};
+
+export const isPresentMove = (
+  translation: PresentTranslation | null | undefined,
+): translation is PresentTranslation =>
+  translation?.kind === "move" || translation?.kind === "showMove";
+
+export type PresentTextEffectKind = "typewriter" | "words";
+
+export type PresentTextEffect = {
+  kind: PresentTextEffectKind;
+  time: number;
 };
 
 export type PresentRevealStep = {
@@ -58,7 +94,24 @@ export type PresentFrameStep = {
   frameId: string;
 };
 
-export type PresentStep = PresentFrameStep | PresentRevealStep;
+/** Second click of Show n Move: the shape is already visible, then it travels. */
+export type PresentMoveStep = {
+  type: "move";
+  frameId: string;
+  elementId: string;
+};
+
+/** Extra click after the last object so motion-out can run in this frame. */
+export type PresentFlushExitsStep = {
+  type: "flushExits";
+  frameId: string;
+};
+
+export type PresentStep =
+  | PresentFrameStep
+  | PresentRevealStep
+  | PresentMoveStep
+  | PresentFlushExitsStep;
 
 export type PresentObject = {
   id: string;
@@ -69,6 +122,7 @@ export type PresentObject = {
   exit: PresentExit | null;
   translation: PresentTranslation | null;
   zoomPercent: number | null;
+  textEffect: PresentTextEffect | null;
   skip: boolean;
   hide: boolean;
   groupId: string | null;
@@ -97,6 +151,7 @@ type PresentBag = {
   exit?: PresentExit;
   translation?: PresentTranslation;
   zoomPercent?: number;
+  textEffect?: PresentTextEffect;
   skip?: boolean;
   hide?: boolean;
 };
@@ -110,6 +165,7 @@ const readPresentEffect = (value: unknown): PresentEffect | null => {
 
 const readPresentMotionValue = (value: unknown): PresentMotion | null => {
   if (
+    value === "none" ||
     value === "fade" ||
     value === "fadeUp" ||
     value === "fadeDown" ||
@@ -122,7 +178,16 @@ const readPresentMotionValue = (value: unknown): PresentMotion | null => {
 };
 
 const readPresentExit = (value: unknown): PresentExit | null => {
-  return readPresentMotionValue(value);
+  if (
+    value === "fade" ||
+    value === "fadeUp" ||
+    value === "fadeDown" ||
+    value === "fadeLeft" ||
+    value === "fadeRight"
+  ) {
+    return value;
+  }
+  return null;
 };
 
 const readPresentEasing = (value: unknown): PresentEasing | null => {
@@ -154,28 +219,104 @@ const readPresentDelta = (value: unknown): number => {
   return value;
 };
 
+const readPresentPathKind = (value: unknown): PresentPathKind => {
+  if (value === "spline" || value === "draw" || value === "line") {
+    return value;
+  }
+  return "line";
+};
+
+const readPresentPath = (value: unknown): PresentPathPoint[] | undefined => {
+  if (!Array.isArray(value) || value.length < 2) {
+    return undefined;
+  }
+  const path: PresentPathPoint[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object") {
+      continue;
+    }
+    path.push({
+      x: readPresentDelta(Reflect.get(item, "x")),
+      y: readPresentDelta(Reflect.get(item, "y")),
+    });
+  }
+  if (path.length < 2) {
+    return undefined;
+  }
+  return path;
+};
+
 const readPresentTranslation = (value: unknown): PresentTranslation | null => {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return null;
   }
-  if (Reflect.get(value, "kind") !== "move") {
+  const kind = Reflect.get(value, "kind");
+  if (kind !== "move" && kind !== "showMove") {
     return null;
   }
+  const pathKind = readPresentPathKind(Reflect.get(value, "pathKind"));
+  const path =
+    pathKind === "line"
+      ? undefined
+      : readPresentPath(Reflect.get(value, "path"));
   return {
-    kind: "move",
+    kind,
     time: readPresentTime(Reflect.get(value, "time")),
     easing: readPresentEasing(Reflect.get(value, "easing")) ?? "easeOut",
+    pathKind,
     x: readPresentDelta(Reflect.get(value, "x")),
     y: readPresentDelta(Reflect.get(value, "y")),
+    ...(path ? { path } : {}),
   };
 };
 
-export const defaultPresentTranslation = (): PresentTranslation => ({
-  kind: "move",
+export const defaultPresentTranslation = (
+  kind: PresentMoveKind = "move",
+): PresentTranslation => ({
+  kind,
   time: JAYRR_PRESENT_TRANSLATION_TIME_DEFAULT,
   easing: "easeOut",
+  pathKind: "line",
   x: 0,
   y: 0,
+});
+
+const readPresentTypeTime = (value: unknown): number => {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return JAYRR_PRESENT_TYPE_TIME_DEFAULT;
+  }
+  return Math.min(
+    JAYRR_PRESENT_TYPE_TIME_MAX,
+    Math.max(JAYRR_PRESENT_TYPE_TIME_MIN, Math.round(value)),
+  );
+};
+
+const readPresentTextEffect = (value: unknown): PresentTextEffect | null => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  const rawKind = Reflect.get(value, "kind");
+  // Older decks stored "reveal" (line wipe); treat it as word fade-in.
+  const kind: PresentTextEffectKind | null =
+    rawKind === "typewriter"
+      ? "typewriter"
+      : rawKind === "words" || rawKind === "reveal"
+      ? "words"
+      : null;
+  if (!kind) {
+    return null;
+  }
+  return {
+    kind,
+    time: readPresentTypeTime(Reflect.get(value, "time")),
+  };
+};
+
+export const defaultPresentTextEffect = (
+  kind: PresentTextEffectKind,
+): PresentTextEffect => ({
+  kind,
+  time: JAYRR_PRESENT_TYPE_TIME_DEFAULT,
 });
 
 const readPresentZoomPercent = (value: unknown): number | null => {
@@ -233,6 +374,10 @@ const readPresentBag = (element: ExcalidrawElement): PresentBag => {
   );
   if (zoomPercent !== null) {
     bag.zoomPercent = zoomPercent;
+  }
+  const textEffect = readPresentTextEffect(Reflect.get(present, "textEffect"));
+  if (textEffect) {
+    bag.textEffect = textEffect;
   }
   if (Reflect.get(present, "skip") === true) {
     bag.skip = true;
@@ -303,6 +448,18 @@ const presentZoomPercentOf = (
   return null;
 };
 
+const presentTextEffectOf = (
+  elements: readonly ExcalidrawElement[],
+): PresentTextEffect | null => {
+  for (const element of elements) {
+    const textEffect = readPresentBag(element).textEffect;
+    if (textEffect) {
+      return textEffect;
+    }
+  }
+  return null;
+};
+
 const presentSkipOf = (elements: readonly ExcalidrawElement[]): boolean => {
   return elements.some((element) => readPresentBag(element).skip === true);
 };
@@ -331,6 +488,7 @@ const writePresentBag = (
     exit?: PresentExit | null;
     translation?: PresentTranslation | null;
     zoomPercent?: number | null;
+    textEffect?: PresentTextEffect | null;
     skip?: boolean;
     hide?: boolean;
   },
@@ -384,6 +542,16 @@ const writePresentBag = (
       next.zoomPercent = zoomPercent;
     }
   }
+  if (patch.textEffect === null) {
+    delete next.textEffect;
+  } else if (patch.textEffect !== undefined) {
+    const textEffect = readPresentTextEffect(patch.textEffect);
+    if (textEffect) {
+      next.textEffect = textEffect;
+    } else {
+      delete next.textEffect;
+    }
+  }
   if (patch.skip === false) {
     delete next.skip;
   } else if (patch.skip === true) {
@@ -409,6 +577,7 @@ const writePresentBag = (
     next.exit === undefined &&
     next.translation === undefined &&
     next.zoomPercent === undefined &&
+    next.textEffect === undefined &&
     next.skip === undefined &&
     next.hide === undefined
   ) {
@@ -468,6 +637,13 @@ export const writePresentZoomPercent = (
   zoomPercent: number | null,
 ): ExcalidrawElement["customData"] => {
   return writePresentBag(element, { zoomPercent });
+};
+
+export const writePresentTextEffect = (
+  element: ExcalidrawElement,
+  textEffect: PresentTextEffect | null,
+): ExcalidrawElement["customData"] => {
+  return writePresentBag(element, { textEffect });
 };
 
 export const writePresentSkip = (
@@ -703,6 +879,7 @@ export const buildPresentDeck = (
       exit: PresentExit | null;
       translation: PresentTranslation | null;
       zoomPercent: number | null;
+      textEffect: PresentTextEffect | null;
       skip: boolean;
       hide: boolean;
       index: number;
@@ -726,6 +903,9 @@ export const buildPresentDeck = (
           exit: presentExitOf([object.element]),
           translation: presentTranslationOf([object.element]),
           zoomPercent: presentZoomPercentOf([object.element]),
+          textEffect: isTextElement(object.element)
+            ? presentTextEffectOf([object.element])
+            : null,
           skip: presentSkipOf([object.element]),
           hide: presentHideOf([object.element]),
           index: object.index,
@@ -754,6 +934,9 @@ export const buildPresentDeck = (
           exit: presentExitOf([representative.element]),
           translation: presentTranslationOf([representative.element]),
           zoomPercent: presentZoomPercentOf([representative.element]),
+          textEffect: isTextElement(representative.element)
+            ? presentTextEffectOf([representative.element])
+            : null,
           skip: presentSkipOf([representative.element]),
           hide: presentHideOf([representative.element]),
           index: representative.index,
@@ -771,6 +954,9 @@ export const buildPresentDeck = (
         exit: presentExitOf(members.map((item) => item.element)),
         translation: presentTranslationOf(members.map((item) => item.element)),
         zoomPercent: presentZoomPercentOf(members.map((item) => item.element)),
+        textEffect: members.every((item) => isTextElement(item.element))
+          ? presentTextEffectOf(members.map((item) => item.element))
+          : null,
         skip: presentSkipOf(members.map((item) => item.element)),
         hide: presentHideOf(members.map((item) => item.element)),
         index: representative.index,
@@ -796,6 +982,7 @@ export const buildPresentDeck = (
         exit: object.exit,
         translation: object.translation,
         zoomPercent: object.zoomPercent,
+        textEffect: object.textEffect,
         skip: object.skip,
         hide: object.hide,
         groupId: object.groupId,
@@ -807,15 +994,27 @@ export const buildPresentDeck = (
   const steps: PresentStep[] = [];
   for (const frame of frames) {
     steps.push({ type: "showFrame", frameId: frame.id });
+    let lastCounted: PresentObject | null = null;
     for (const object of frame.objects) {
       if (object.skip || object.hide) {
         continue;
       }
+      lastCounted = object;
       steps.push({
         type: "reveal",
         frameId: frame.id,
         elementId: object.id,
       });
+      if (object.translation?.kind === "showMove") {
+        steps.push({
+          type: "move",
+          frameId: frame.id,
+          elementId: object.id,
+        });
+      }
+    }
+    if (lastCounted?.exit) {
+      steps.push({ type: "flushExits", frameId: frame.id });
     }
   }
 
@@ -823,15 +1022,21 @@ export const buildPresentDeck = (
 };
 
 /**
- * Every deck step is a stop: the blank `showFrame` (all objects hidden) and
- * each reveal. Next and Back use the same list so the empty slide is a
- * frame you can land on in both directions.
+ * Every deck step is a stop: the blank `showFrame` (all objects hidden),
+ * each reveal, a Show n Move travel, and a last-object motion-out.
+ * Next and Back use the same list so the empty slide is a frame you can
+ * land on in both directions.
  */
 export const isPresentLandableStep = (
   _deck: PresentDeck,
   step: PresentStep,
 ): boolean => {
-  return step.type === "showFrame" || step.type === "reveal";
+  return (
+    step.type === "showFrame" ||
+    step.type === "reveal" ||
+    step.type === "move" ||
+    step.type === "flushExits"
+  );
 };
 
 /**
@@ -890,6 +1095,9 @@ export const stepCaption = (deck: PresentDeck, stepIndex: number): string => {
     deck.frames.findIndex((item) => item.id === step.frameId) + 1;
   if (step.type === "showFrame") {
     return `${frameLabel} (${frameNumber}/${deck.frames.length})`;
+  }
+  if (step.type === "flushExits") {
+    return `${frameLabel} · out`;
   }
   const counted = countedPresentObjects(frame?.objects ?? []);
   const objectNumber = counted.findIndex((item) => item.id === step.elementId);

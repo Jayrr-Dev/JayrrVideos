@@ -1,9 +1,9 @@
 import clsx from "clsx";
 
 import { IconButton } from "./IconButton";
-import { timelineIcon } from "./icons";
+import { searchIcon } from "./icons";
 
-type TimelineButtonProps = {
+type SearchButtonProps = {
   title?: string;
   checked: boolean;
   onChange?(): void;
@@ -11,17 +11,17 @@ type TimelineButtonProps = {
   disabled?: boolean;
 };
 
-export const TimelineButton = (props: TimelineButtonProps) => {
+export const SearchButton = (props: SearchButtonProps) => {
   return (
     <IconButton
-      className={clsx("ToolIcon__timeline", { "is-mobile": props.isMobile })}
+      className={clsx("ToolIcon__search", { "is-mobile": props.isMobile })}
       type="toggle"
-      icon={timelineIcon}
+      icon={searchIcon}
       checked={props.checked}
       disabled={props.disabled}
       title={props.title}
       aria-label={`${props.title}`}
-      data-testid="toolbar-timeline"
+      data-testid="toolbar-search"
       onSelect={() => props.onChange?.()}
     />
   );

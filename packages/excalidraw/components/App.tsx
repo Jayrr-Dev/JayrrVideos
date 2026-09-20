@@ -204,6 +204,7 @@ import {
   isElementLink,
   isEligibleFrameChildType,
   isEmbeddableElement,
+  isFrameAspectLocked,
   isFrameLikeElement,
   isIframeElement,
   isIframeLikeElement,
@@ -327,6 +328,7 @@ import {
   actionToggleCropEditor,
   actionToggleElementLock,
   actionToggleGridMode,
+  actionToggleGridSnap,
   actionToggleLinearEditor,
   actionToggleMidpointSnapping,
   actionToggleObjectsSnapMode,
@@ -370,6 +372,7 @@ import { restoreAppState, restoreElements } from "../data/restore";
 import { getCenter, getDistance } from "../gesture";
 import { History } from "../history";
 import { defaultLang, getLanguage, languages, setLanguage, t } from "../i18n";
+import { paintLiveMedia, repaintLiveCanvas } from "../liveMedia";
 import {
   copyElementRenderOverrides,
   getElementRenderOffsets,
@@ -803,9 +806,16 @@ class App extends React.Component<AppProps, AppState> {
   /** offsets of `elementRenderOverrides`; keeps its identity while they don't change */
   private elementRenderOffsets: ElementRenderOffsets = new Map();
   private renderOverridesUpdatePending = false;
+  public requestLiveRender = () => {
+    if (this.unmounted) {
+      return;
+    }
+    repaintLiveCanvas();
+  };
 
   private getRenderOverrideConfig = () => ({
     elementRenderOverrides: this.elementRenderOverrides,
+    paintLiveMedia,
   });
 
   /** Build sharp element bitmaps at `zoom` before a zoom-in viewport move. */
@@ -872,6 +882,7 @@ class App extends React.Component<AppProps, AppState> {
         this.actionManager.registerAction(action);
       },
       refresh: this.refresh,
+      requestLiveRender: this.requestLiveRender,
       setToast: this.setToast,
       id: this.id,
       setActiveTool: this.setActiveTool,
@@ -1541,12 +1552,14 @@ class App extends React.Component<AppProps, AppState> {
   }
 
   /**
-   * Returns gridSize taking into account `gridModeEnabled`.
-   * If disabled, returns null.
+   * Returns gridSize when the grid is on and snap-to-grid is enabled.
+   * If either is disabled, returns null (no grid snapping).
    */
   public getEffectiveGridSize = () => {
     return (
-      isGridModeEnabled(this) ? this.state.gridSize : null
+      isGridModeEnabled(this) && this.state.gridSnapEnabled
+        ? this.state.gridSize
+        : null
     ) as NullableGridSize;
   };
 
@@ -2017,15 +2030,17 @@ class App extends React.Component<AppProps, AppState> {
             this.state.activeEmbeddable?.element === el &&
             this.state.activeEmbeddable?.state === "hover";
 
-          // scale video embeds based on zoom (capped) so that smaller embeds
-          // on canvas when zoomed are still of legible quality
-          // (note: for some embed types like gdrive, the quality is poor when
-          // scaling mid playback and works only when you initially start the
-          // playback at the higher zoom level)
-          const shouldScaleEmbeddableViewport = src?.type === "video";
+          // Custom HTML embeds (Jayrr widgets) and videos sit under the
+          // canvas zoom transform. Native <button>/<select> double-paint
+          // when that net scale is not 1, so keep their inner scale at 1:1.
+          const customEmbed = isEmbeddableElement(el)
+            ? this.props.renderEmbeddable?.(el, this.state)
+            : null;
+          const shouldScaleEmbeddableViewport =
+            src?.type === "video" || customEmbed != null;
           const embeddableViewportScale = clamp(
             shouldScaleEmbeddableViewport ? scale : 1,
-            0.75,
+            customEmbed != null ? 0.25 : 0.75,
             MAX_EMBEDDABLE_VIEWPORT_SCALE,
           );
 
@@ -2105,9 +2120,7 @@ class App extends React.Component<AppProps, AppState> {
                       transform: `scale(${1 / embeddableViewportScale})`,
                     }}
                   >
-                    {(isEmbeddableElement(el)
-                      ? this.props.renderEmbeddable?.(el, this.state)
-                      : null) ?? (
+                    {customEmbed ?? (
                       <iframe
                         ref={(ref) => this.cacheEmbeddableRef(el, ref)}
                         className="excalidraw__embeddable"
@@ -8448,6 +8461,79 @@ class App extends React.Component<AppProps, AppState> {
     this.triggerRender();
   };
 
+  /** right-click drag erases in the interactive editor; otherwise it pans */
+  public shouldSecondaryButtonErase = () => {
+    return (
+      this.isInteractionEnabled() &&
+      !this.state.viewModeEnabled &&
+      !this.state.editingTextElement &&
+      !this.props.activeTool
+    );
+  };
+
+  /** held for the secondary-button drag so the previous tool is restored */
+  private temporaryEraserFromSecondary = false;
+  private temporaryEraserSeedIds = new Set<string>();
+
+  public beginTemporaryEraser = (clientX: number, clientY: number) => {
+    const scenePointer = viewportCoordsToSceneCoords(
+      { clientX, clientY },
+      this.state,
+    );
+    this.eraserTrail.startPath(scenePointer.x, scenePointer.y);
+    this.temporaryEraserSeedIds = new Set(
+      this.getElementsAtPosition(scenePointer.x, scenePointer.y).map(
+        (element) => element.id,
+      ),
+    );
+    this.elementsPendingErasure = new Set(this.temporaryEraserSeedIds);
+    if (this.state.activeTool.type === TOOL_TYPE.eraser) {
+      this.temporaryEraserFromSecondary = false;
+      this.cursor.applyForTool();
+      return;
+    }
+    this.temporaryEraserFromSecondary = true;
+    this.setState({
+      selectedElementIds: {},
+      selectedGroupIds: {},
+      selectedLinearElement: null,
+      activeTool: updateActiveTool(this.state, {
+        type: TOOL_TYPE.eraser,
+        lastActiveTool: this.state.activeTool,
+      }),
+    });
+  };
+
+  public updateTemporaryEraser = (event: PointerEvent) => {
+    this.handleEraser(event, viewportCoordsToSceneCoords(event, this.state));
+  };
+
+  public finishTemporaryEraser = () => {
+    for (const id of this.temporaryEraserSeedIds) {
+      this.elementsPendingErasure.add(id);
+    }
+    this.temporaryEraserSeedIds = new Set();
+    this.eraserTrail.endPath();
+    this.eraseElements();
+    if (!this.temporaryEraserFromSecondary) {
+      this.cursor.applyForTool();
+      return;
+    }
+    this.temporaryEraserFromSecondary = false;
+    if (!isEraserActive(this.state)) {
+      this.cursor.applyForTool();
+      return;
+    }
+    this.setState({
+      activeTool: updateActiveTool(this.state, {
+        ...(this.state.activeTool.lastActiveTool || {
+          type: TOOL_TYPE.selection,
+        }),
+        lastActiveTool: null,
+      }),
+    });
+  };
+
   // set touch moving for mobile context menu
   private handleTouchMove = (event: React.TouchEvent<HTMLCanvasElement>) => {
     if (!this.isInteractionEnabled()) {
@@ -13436,7 +13522,7 @@ class App extends React.Component<AppProps, AppState> {
   ) => {
     // Always suppress the native menu over the canvas.
     event.preventDefault();
-    // a secondary-button press is a pan session: this event is not a click
+    // a secondary-button press is a pan/erase session: this event is not a click
     // when it comes with the press (macOS and Linux fire it on mousedown,
     // and the session opens the menu on release if no drag follows), nor
     // when it follows a release that was a drag
@@ -13851,6 +13937,7 @@ class App extends React.Component<AppProps, AppState> {
     // images are proportional by default, and so is a sticky note's corner
     // (its label's font ceiling scales with it); Shift frees them. A note's
     // edges stay free by default — Shift constrains them like any shape.
+    const frameAspectLocked = selectedElements.some(isFrameAspectLocked);
     const proportionalByDefault =
       selectedElements.some((element) => isImageElement(element)) ||
       (selectedElements.length === 1 &&
@@ -13866,7 +13953,9 @@ class App extends React.Component<AppProps, AppState> {
         this.scene,
         shouldRotateWithDiscreteAngle(event),
         shouldResizeFromCenter(event),
-        proportionalByDefault
+        frameAspectLocked
+          ? true
+          : proportionalByDefault
           ? !shouldMaintainAspectRatio(event)
           : shouldMaintainAspectRatio(event),
         resizeX,
@@ -13935,6 +14024,7 @@ class App extends React.Component<AppProps, AppState> {
         actionUnlockAllElements,
         CONTEXT_MENU_SEPARATOR,
         actionToggleGridMode,
+        actionToggleGridSnap,
         actionToggleObjectsSnapMode,
         actionToggleArrowBinding,
         actionToggleMidpointSnapping,

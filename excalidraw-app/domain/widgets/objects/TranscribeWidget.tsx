@@ -10,18 +10,29 @@ import {
 } from "react";
 
 import {
-  jayrrCameraLabel,
-  jayrrDisplaySurfaceLabel,
-  readJayrrCamera,
-} from "../../../camera/jayrrCamera";
-
-import {
+  acquireJayrrTabAudio,
   listJayrrDisplayStreams,
+  listJayrrMics,
+  releaseJayrrTabAudio,
   subscribeJayrrStreams,
+  unlockJayrrMics,
 } from "../../../camera/jayrrCameraStreams";
-
+import {
+  mixMicIntoStream,
+  openJayrrMic,
+} from "../../../camera/mixMicIntoStream";
 import { api, convexClient } from "../../../convexClient";
-import { listenStreamTranscript } from "../../transcription/listenStreamTranscript";
+import {
+  PRESENT_MIC_DEFAULT,
+  PRESENT_MIC_NONE,
+  getPresentMic,
+  presentMicDeviceId,
+  setPresentMic,
+} from "../../../present/presentMic";
+import {
+  listenStreamTranscript,
+  type TranscriptSession,
+} from "../../transcription/listenStreamTranscript";
 import {
   clearTranscript,
   publishTranscript,
@@ -29,11 +40,23 @@ import {
 import {
   ensureSpeakerNames,
   speakerLabel,
+  type TranscriptTurn,
 } from "../../transcription/transcriptTurns";
 
-import type { TranscriptSession } from "../../transcription/listenStreamTranscript";
-import type { TranscriptTurn } from "../../transcription/transcriptTurns";
-
+import {
+  EMBED_PREFIX,
+  MIC_SOURCE,
+  isMicSource,
+  listAudioSources,
+  micDeviceId,
+  micSourceId,
+  type AudioSourceOption,
+} from "./listAudioSources";
+import {
+  EMOTION_QUESTION,
+  emotionsFromAnswers,
+  type EmotionPick,
+} from "./jevEmotionScale";
 import {
   IQ_BANDS,
   IQ_QUESTIONS,
@@ -41,29 +64,28 @@ import {
   compositeFromAnswers,
   iqFromComposite,
   shadeFromComposite,
-  speakerKey,
-  weightedComposite,
   type IqResult,
   type IqShade,
 } from "./jevIqScale";
+import {
+  MBTI_BANDS,
+  MBTI_QUESTIONS,
+  mbtiFromAnswers,
+  type MbtiResult,
+} from "./jevMbtiScale";
 import {
   DEFAULT_TRANSCRIBE,
   readTranscribeConfig,
   writeTranscribeConfig,
   type TranscribeConfig,
 } from "./transcribeConfig";
+import { LiveWidgetToolbar } from "../ui/LiveWidgetToolbar";
+import { useRegisterWidgetToolbar } from "../widgetToolbarRegistry";
 
-const MIC_SOURCE = "mic";
 const LIVE_TURN_ID = "__live__";
 const LIVE_DEBOUNCE_MS = 500;
 const MIN_PHRASE_CHARS = 8;
 const MAX_SCORED_TURNS = 200;
-
-type SourceOption = {
-  id: string;
-  label: string;
-  hasAudio: boolean;
-};
 
 type ChatTurn = TranscriptTurn & {
   id: string;
@@ -74,47 +96,44 @@ type TurnIq = {
   turnId: string;
   speaker: number | null;
   text: string;
-  result: IqResult;
+  result: IqResult | null;
+  emotion: EmotionPick[];
+  mbti: MbtiResult | null;
+};
+
+const jevScoringOn = (config: TranscribeConfig) =>
+  config.jevIq || config.jevMbti;
+
+const questionsForConfig = (config: TranscribeConfig) => {
+  const questions: Array<
+    | typeof IQ_QUESTIONS[number]
+    | typeof EMOTION_QUESTION
+    | typeof MBTI_QUESTIONS[number]
+  > = [];
+  if (config.jevIq) {
+    questions.push(...IQ_QUESTIONS, EMOTION_QUESTION);
+  }
+  if (config.jevMbti) {
+    questions.push(...MBTI_QUESTIONS);
+  }
+  return questions;
 };
 
 type Job = {
   turnId: string;
   speaker: number | null;
   text: string;
-  /** What this bubble replies to, so short answers are read in context. */
+  /** Recent talk before this bubble, so fragments keep conversational tone. */
   previousTurn: string | null;
-};
-
-const listSources = (
-  api: ReturnType<typeof useExcalidrawAPI>,
-): SourceOption[] => {
-  const options: SourceOption[] = [
-    { id: MIC_SOURCE, label: "Microphone", hasAudio: true },
-  ];
-  const elements = api?.getSceneElements() ?? [];
-  for (const { id, stream } of listJayrrDisplayStreams()) {
-    const element = elements.find((item) => item.id === id);
-    const camera = element ? readJayrrCamera(element) : null;
-    const named = jayrrCameraLabel(camera);
-    const fallback =
-      camera && camera.kind === "display"
-        ? jayrrDisplaySurfaceLabel(camera.surface)
-        : "Shared source";
-    const hasAudio = stream.getAudioTracks().some((track) => track.enabled);
-    options.push({
-      id,
-      label: named || fallback,
-      hasAudio,
-    });
-  }
-  return options;
 };
 
 const nextTurnId = () =>
   `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
-// Stop merging once a bubble gets this long so a monologue still paginates.
-const MAX_BUBBLE_CHARS = 700;
+// Keep a spoken thought together. Split only after enough text, or the cap.
+const MIN_BUBBLE_CHARS = 140;
+const MAX_BUBBLE_CHARS = 320;
+const COMPLETE_SENTENCE = /[.!?…]["')\]]*$/;
 
 const joinSentences = (left: string, right: string) => {
   const head = left.trim();
@@ -128,43 +147,100 @@ const joinSentences = (left: string, right: string) => {
   return `${head} ${tail}`;
 };
 
-// Fold back-to-back turns from one speaker into a single bubble. Unattributed
-// (speaker null) turns continue the previous speaker, since diarization often
-// drops the label on a few words mid-sentence.
+const isCompleteSentence = (text: string) =>
+  COMPLETE_SENTENCE.test(text.trim());
+
+const splitSentences = (text: string) => {
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return [];
+  }
+  const parts = trimmed
+    .split(/(?<=[.!?…])["')\]]*\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  return parts.length > 0 ? parts : [trimmed];
+};
+
+const packSentences = (text: string) => {
+  const packed: string[] = [];
+  for (const part of splitSentences(text)) {
+    const last = packed[packed.length - 1];
+    if (
+      last &&
+      last.length < MIN_BUBBLE_CHARS &&
+      last.length + part.length + 1 <= MAX_BUBBLE_CHARS
+    ) {
+      packed[packed.length - 1] = joinSentences(last, part);
+      continue;
+    }
+    packed.push(part);
+  }
+  return packed;
+};
+
+const asBubbles = (turn: ChatTurn, text: string, keepId: boolean) => {
+  const parts = packSentences(text);
+  return parts.map((part, index) => ({
+    ...turn,
+    id: keepId && index === 0 ? turn.id : nextTurnId(),
+    text: part,
+  }));
+};
+
+const sameVoice = (left: ChatTurn, right: ChatTurn) =>
+  left.speaker === right.speaker || right.speaker === null;
+
+const shouldJoin = (left: ChatTurn, right: ChatTurn) => {
+  if (left.isFinal !== right.isFinal || !sameVoice(left, right)) {
+    return false;
+  }
+  const joined = left.text.length + right.text.length + 1;
+  if (joined > MAX_BUBBLE_CHARS) {
+    return false;
+  }
+  if (right.speaker === null && left.speaker !== null) {
+    return !isCompleteSentence(left.text);
+  }
+  return !isCompleteSentence(left.text) || left.text.length < MIN_BUBBLE_CHARS;
+};
+
 const mergeChatTurns = (turns: ChatTurn[]) => {
   const merged: ChatTurn[] = [];
   for (const turn of turns) {
     const last = merged[merged.length - 1];
-    const sameSpeaker =
-      last !== undefined &&
-      (last.speaker === turn.speaker || turn.speaker === null);
-    if (
-      last &&
-      sameSpeaker &&
-      last.isFinal === turn.isFinal &&
-      last.text.length < MAX_BUBBLE_CHARS
-    ) {
-      merged[merged.length - 1] = {
-        ...last,
-        text: joinSentences(last.text, turn.text),
-      };
+    if (last && shouldJoin(last, turn)) {
+      const pieces = asBubbles(last, joinSentences(last.text, turn.text), true);
+      const [head, ...rest] = pieces;
+      if (head) {
+        merged[merged.length - 1] = head;
+      }
+      merged.push(...rest);
       continue;
     }
-    merged.push(turn);
+    merged.push(...asBubbles(turn, turn.text, true));
   }
   return merged;
 };
 
-const hueForSpeaker = (speaker: number | null) => {
+// First-seen order, not speaker id: nearby ids used to land on similar hues.
+const SPEAKER_HUES = [205, 12, 145, 292, 42, 330, 175, 85, 250, 22];
+
+const hueForSpeaker = (speaker: number | null, order: readonly number[]) => {
   if (speaker === null) {
     return 220;
   }
-  return Math.abs(speaker * 67) % 360;
+  const index = order.indexOf(speaker);
+  const slot = index === -1 ? speaker : index;
+  return SPEAKER_HUES[Math.abs(slot) % SPEAKER_HUES.length] ?? 205;
 };
 
-const speakerHueStyle = (speaker: number | null): CSSProperties =>
+const speakerHueStyle = (
+  speaker: number | null,
+  order: readonly number[],
+): CSSProperties =>
   ({
-    "--jayrr-speaker-h": String(hueForSpeaker(speaker)),
+    "--jayrr-speaker-h": String(hueForSpeaker(speaker, order)),
   } as CSSProperties);
 
 const uniqueSpeakers = (turns: ChatTurn[]) => {
@@ -180,27 +256,21 @@ const uniqueSpeakers = (turns: ChatTurn[]) => {
   return list;
 };
 
-// First new speaker sits left, the next distinct one sits right, then they
-// alternate. Same speaker always keeps their side. Unlabeled turns follow
-// whoever just spoke so mid-sentence "Unknown" does not jump.
+// Consecutive different people sit opposite each other. Same speaker stays
+// put. Unlabeled turns follow whoever just spoke so mid-sentence "Unknown"
+// does not jump.
 const sidesForTurns = (turns: ChatTurn[]): Array<"left" | "right"> => {
-  const assigned = new Map<number, "left" | "right">();
-  let nextIsLeft = true;
   let last: "left" | "right" = "left";
+  let lastSpeaker: number | null = null;
   return turns.map((turn) => {
     if (turn.speaker === null) {
       return last;
     }
-    const existing = assigned.get(turn.speaker);
-    if (existing) {
-      last = existing;
-      return existing;
+    if (lastSpeaker !== null && turn.speaker !== lastSpeaker) {
+      last = last === "left" ? "right" : "left";
     }
-    const side = nextIsLeft ? "left" : "right";
-    nextIsLeft = !nextIsLeft;
-    assigned.set(turn.speaker, side);
-    last = side;
-    return side;
+    lastSpeaker = turn.speaker;
+    return last;
   });
 };
 
@@ -224,13 +294,23 @@ const scoreErrorMessage = (error: unknown) => {
   return stripped || "Could not score with Jev.";
 };
 
-// The bubble just before this one, when it belongs to someone else.
-const replyContext = (turns: ChatTurn[], index: number) => {
-  const previous = turns[index - 1];
-  if (!previous || previous.speaker === turns[index]?.speaker) {
+const CONTEXT_TURNS = 5;
+
+// Last few bubbles before this line, same speaker included, so a fragment
+// like "Phone numbers of the property owners." still sits in the prior plan.
+const previousText = (turns: ChatTurn[], index: number) => {
+  const start = Math.max(0, index - CONTEXT_TURNS);
+  const parts: string[] = [];
+  for (let cursor = start; cursor < index; cursor += 1) {
+    const text = turns[cursor]?.text.trim() ?? "";
+    if (text) {
+      parts.push(text);
+    }
+  }
+  if (parts.length === 0) {
     return null;
   }
-  return previous.text;
+  return parts.join(" ");
 };
 
 const IqBadge = ({ composite }: { composite: number }) => {
@@ -245,16 +325,37 @@ const IqBadge = ({ composite }: { composite: number }) => {
   );
 };
 
+const EmotionBadge = ({ emotion }: { emotion: EmotionPick }) => (
+  <span
+    className={`jayrr-called-embed__emo jayrr-called-embed__emo--${emotion.tone}`}
+    title={`${emotion.label} · ${emotion.cluster}`}
+  >
+    {emotion.label}
+  </span>
+);
+
+const MbtiBadge = ({ mbti }: { mbti: MbtiResult }) => (
+  <span
+    className="jayrr-called-embed__iq jayrr-called-embed__mbti"
+    title={`MBTI ${mbti.type}`}
+  >
+    {mbti.type}
+  </span>
+);
+
 export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
   const editor = useExcalidrawAPI();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const logRef = useRef<HTMLDivElement | null>(null);
   const sessionRef = useRef<TranscriptSession | null>(null);
   const micRef = useRef<MediaStream | null>(null);
-  const [sources, setSources] = useState<SourceOption[]>(() =>
-    listSources(null),
+  const tabRef = useRef<{ id: string; stream: MediaStream } | null>(null);
+  const mixStopRef = useRef<(() => void) | null>(null);
+  const [sources, setSources] = useState<AudioSourceOption[]>(() =>
+    listAudioSources(null),
   );
-  const [sourceId, setSourceId] = useState(MIC_SOURCE);
+  const [mics, setMics] = useState<MediaDeviceInfo[]>([]);
+  const [sourceId, setSourceId] = useState(DEFAULT_TRANSCRIBE.sourceId);
   const [listening, setListening] = useState(false);
   const [paused, setPaused] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -324,21 +425,67 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
       return;
     }
     setConfig(readTranscribeConfig(element));
+    setSourceId(readTranscribeConfig(element).sourceId);
   }, [editor, elementId]);
 
   useEffect(() => {
-    const refresh = () => setSources(listSources(editor));
-    refresh();
-    return subscribeJayrrStreams(refresh);
-  }, [editor]);
+    const ownerWindow = rootRef.current?.ownerDocument.defaultView ?? window;
+    let cancelled = false;
+    const load = async () => {
+      let devices: MediaDeviceInfo[] = [];
+      try {
+        devices = await unlockJayrrMics(ownerWindow);
+      } catch {
+        devices = await listJayrrMics();
+      }
+      if (!cancelled) {
+        setMics(devices);
+      }
+    };
+    void load();
+    const media = ownerWindow.navigator.mediaDevices;
+    media?.addEventListener("devicechange", load);
+    return () => {
+      cancelled = true;
+      media?.removeEventListener("devicechange", load);
+    };
+  }, []);
 
   useEffect(() => {
-    const selected = sources.some((source) => source.id === sourceId);
-    if (selected) {
+    const refresh = () => setSources(listAudioSources(editor, mics));
+    refresh();
+    const offStreams = subscribeJayrrStreams(refresh);
+    const offChange = editor?.onChange(() => refresh());
+    return () => {
+      offStreams();
+      offChange?.();
+    };
+  }, [editor, mics]);
+
+  useEffect(() => {
+    if (isMicSource(sourceId) || sourceId.startsWith(EMBED_PREFIX)) {
+      return;
+    }
+    if (sources.some((source) => source.id === sourceId)) {
       return;
     }
     setSourceId(MIC_SOURCE);
   }, [sourceId, sources]);
+
+  useEffect(() => {
+    const stored = getPresentMic();
+    if (!stored || stored === PRESENT_MIC_NONE) {
+      return;
+    }
+    const id = micSourceId(stored);
+    if (sourceId !== MIC_SOURCE) {
+      return;
+    }
+    if (!sources.some((source) => source.id === id)) {
+      return;
+    }
+    setSourceId(id);
+  }, [mics, sourceId, sources]);
 
   useEffect(
     () => () => {
@@ -351,6 +498,13 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
           track.stop();
         }
       }
+      const tab = tabRef.current;
+      tabRef.current = null;
+      if (tab) {
+        releaseJayrrTabAudio(tab.id, tab.stream);
+      }
+      mixStopRef.current?.();
+      mixStopRef.current = null;
       clearTranscript(elementId);
     },
     [elementId],
@@ -393,10 +547,26 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
     });
   }, [elementId, listening, names, turns]);
 
+  const stopTab = () => {
+    const tab = tabRef.current;
+    tabRef.current = null;
+    if (!tab) {
+      return;
+    }
+    releaseJayrrTabAudio(tab.id, tab.stream);
+  };
+
+  const stopMix = () => {
+    mixStopRef.current?.();
+    mixStopRef.current = null;
+  };
+
   const stopSession = () => {
     sessionRef.current?.stop();
     sessionRef.current = null;
     stopMic();
+    stopTab();
+    stopMix();
     setListening(false);
     setPaused(false);
   };
@@ -415,22 +585,41 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
         id: nextTurnId(),
         isFinal,
       }));
-      const merged = mergeChatTurns([...kept, ...incoming]).slice(-80);
-      return merged;
+      const packed = mergeChatTurns(incoming);
+      const last = kept[kept.length - 1];
+      const first = packed[0];
+      if (last && first && shouldJoin(last, first)) {
+        const joined = asBubbles(
+          last,
+          joinSentences(last.text, first.text),
+          true,
+        );
+        return [...kept.slice(0, -1), ...joined, ...packed.slice(1)].slice(-80);
+      }
+      return [...kept, ...packed].slice(-80);
     });
     setStatus("");
   };
 
-  // One Jev call carries the Noul gate plus every dimension; weights apply in code.
-  const scoreJob = useCallback(async (job: Job): Promise<IqResult> => {
+  // One Jev call carries every enabled scale; weights and type letters apply in code.
+  const scoreJob = useCallback(async (job: Job) => {
     if (!convexClient) {
       throw new Error("Convex is not connected.");
     }
+    const scoring = configRef.current;
+    const questions = questionsForConfig(scoring);
+    if (questions.length === 0) {
+      return { result: null, emotion: [], mbti: null };
+    }
     const result = await convexClient.action(api.canvasAi.jev.ask, {
       state: buildIqState(job.text, job.previousTurn),
-      questions: IQ_QUESTIONS,
+      questions,
     });
-    return compositeFromAnswers(result.answers);
+    return {
+      result: scoring.jevIq ? compositeFromAnswers(result.answers) : null,
+      emotion: scoring.jevIq ? emotionsFromAnswers(result.answers) : [],
+      mbti: scoring.jevMbti ? mbtiFromAnswers(result.answers) : null,
+    };
   }, []);
 
   const pump = useCallback(async () => {
@@ -449,7 +638,7 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
           liveJobRef.current = null;
         }
         try {
-          const result = await scoreJob(job);
+          const scored = await scoreJob(job);
           if (generation !== generationRef.current) {
             continue;
           }
@@ -457,7 +646,9 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
             turnId: job.turnId,
             speaker: job.speaker,
             text: job.text,
-            result,
+            result: scored.result,
+            emotion: scored.emotion,
+            mbti: scored.mbti,
           };
           if (job.turnId === LIVE_TURN_ID) {
             setLive(row);
@@ -508,26 +699,30 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
   );
 
   useEffect(() => {
-    if (!config.jevIq) {
+    if (!jevScoringOn(config)) {
       return;
     }
     let added = false;
     turns.forEach((turn, index) => {
-      if (turn.isFinal && enqueueFinal(turn, replyContext(turns, index))) {
+      if (turn.isFinal && enqueueFinal(turn, previousText(turns, index))) {
         added = true;
       }
     });
     if (added) {
       void pump();
     }
-  }, [config.jevIq, enqueueFinal, pump, turns]);
+  }, [config, enqueueFinal, pump, turns]);
 
   const liveIndex = turns.findIndex((turn) => !turn.isFinal);
   const liveTurn = liveIndex === -1 ? null : turns[liveIndex] ?? null;
   const livePhrase = liveTurn?.text.trim() ?? "";
 
   useEffect(() => {
-    if (!config.jevIq || !liveTurn || livePhrase.length < MIN_PHRASE_CHARS) {
+    if (
+      !jevScoringOn(config) ||
+      !liveTurn ||
+      livePhrase.length < MIN_PHRASE_CHARS
+    ) {
       setLive(null);
       return;
     }
@@ -536,41 +731,43 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
         turnId: LIVE_TURN_ID,
         speaker: liveTurn.speaker,
         text: livePhrase,
-        previousTurn: replyContext(turns, liveIndex),
+        previousTurn: previousText(turns, liveIndex),
       };
       void pump();
     }, LIVE_DEBOUNCE_MS);
     return () => window.clearTimeout(handle);
-  }, [config.jevIq, liveIndex, livePhrase, liveTurn, pump, turns]);
+  }, [config, liveIndex, livePhrase, liveTurn, pump, turns]);
 
-  // Backchannels ("Right.", "Yeah, exactly.") fail the Noul gate and do not
-  // move a speaker's number. Remaining turns are weighted by confidence.
-  const speakerAverages = useMemo(() => {
-    const groups = new Map<string, IqResult[]>();
+  // One number per utterance. Filler that fails the Noul gate has no badge.
+  const iqByTurn = useMemo(() => {
+    const map = new Map<string, number>();
     for (const row of scores) {
-      if (!row.result.substantive) {
-        continue;
-      }
-      const key = speakerKey(row.speaker);
-      const list = groups.get(key) ?? [];
-      list.push(row.result);
-      groups.set(key, list);
-    }
-    const averages = new Map<string, number>();
-    for (const [key, rows] of groups) {
-      const mean = weightedComposite(rows);
-      if (mean !== null) {
-        averages.set(key, mean);
+      if (row.result?.substantive) {
+        map.set(row.turnId, row.result.composite);
       }
     }
-    if (live?.result.substantive) {
-      const key = speakerKey(live.speaker);
-      if (!averages.has(key)) {
-        averages.set(key, live.result.composite);
+    return map;
+  }, [scores]);
+
+  const emotionByTurn = useMemo(() => {
+    const map = new Map<string, EmotionPick[]>();
+    for (const row of scores) {
+      if (row.emotion.length > 0) {
+        map.set(row.turnId, row.emotion);
       }
     }
-    return averages;
-  }, [live, scores]);
+    return map;
+  }, [scores]);
+
+  const mbtiByTurn = useMemo(() => {
+    const map = new Map<string, MbtiResult>();
+    for (const row of scores) {
+      if (row.mbti) {
+        map.set(row.turnId, row.mbti);
+      }
+    }
+    return map;
+  }, [scores]);
 
   const start = async () => {
     if (busy) {
@@ -591,19 +788,46 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
     const ownerWindow = rootRef.current?.ownerDocument.defaultView ?? window;
     try {
       let stream: MediaStream | null = null;
-      if (sourceId === MIC_SOURCE) {
-        stream = await ownerWindow.navigator.mediaDevices.getUserMedia({
-          audio: true,
-          video: false,
-        });
+      if (isMicSource(sourceId)) {
+        const picked = micDeviceId(sourceId);
+        const stored = presentMicDeviceId();
+        if (!picked && stored === null) {
+          setStatus("No microphone selected.");
+          return;
+        }
+        stream = await openJayrrMic(ownerWindow, picked || stored || undefined);
         micRef.current = stream;
+      } else if (sourceId.startsWith(EMBED_PREFIX)) {
+        setStatus("Share this tab with audio…");
+        const embedId = sourceId.slice(EMBED_PREFIX.length);
+        stream = await acquireJayrrTabAudio(embedId);
+        tabRef.current = { id: embedId, stream };
       } else {
-        stream =
+        const display =
           listJayrrDisplayStreams().find((item) => item.id === sourceId)
             ?.stream ?? null;
+        if (
+          display &&
+          !display.getAudioTracks().some((track) => track.enabled)
+        ) {
+          const mixed = await mixMicIntoStream(
+            display,
+            ownerWindow,
+            true,
+            presentMicDeviceId(),
+          );
+          mixStopRef.current = mixed.stop;
+          stream = mixed.stream;
+        } else {
+          stream = display;
+        }
       }
       if (!stream) {
-        setStatus("That source is no longer live. Start a Stream first.");
+        setStatus(
+          sourceId.startsWith(EMBED_PREFIX)
+            ? "Could not tap that video. Share this tab with audio."
+            : "That source is no longer live. Start a Stream first.",
+        );
         return;
       }
       const session = listenStreamTranscript(
@@ -613,6 +837,8 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
           sessionRef.current?.stop();
           sessionRef.current = null;
           stopMic();
+          stopTab();
+          stopMix();
           setListening(false);
           setPaused(false);
           setStatus(message);
@@ -627,6 +853,8 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
       setStatus("");
     } catch (error: unknown) {
       stopMic();
+      stopTab();
+      stopMix();
       setStatus(
         error instanceof Error
           ? error.message
@@ -655,10 +883,57 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
   const startLabel = listening && !paused ? "Pause" : "Start";
   const hint =
     selected && !selected.hasAudio
-      ? "Share tab audio, then Change source on Stream."
+      ? "Allow the microphone. Window share has no system audio on its own."
       : status;
   const speakers = uniqueSpeakers(turns);
   const liveSpeaker = turns[turns.length - 1]?.speaker ?? null;
+
+  useRegisterWidgetToolbar(
+    elementId,
+    () => (
+      <LiveWidgetToolbar
+        listening={listening}
+        paused={paused}
+        busy={busy}
+        startLabel={startLabel}
+        sourceId={sourceId}
+        sources={sources}
+        clearDisabled={turns.length === 0}
+        configOpen={configOpen}
+        onClear={clearChat}
+        onToggleConfig={() => setConfigOpen((open) => !open)}
+        onStart={() => {
+          if (listening && !paused) {
+            pause();
+            return;
+          }
+          void start();
+        }}
+        onSourceChange={(nextId) => {
+          setSourceId(nextId);
+          applyConfig({ ...config, sourceId: nextId }, true);
+          if (isMicSource(nextId)) {
+            setPresentMic(micDeviceId(nextId) || PRESENT_MIC_DEFAULT);
+          }
+          if (listening) {
+            stopSession();
+            setStatus("Pick a source, then Start.");
+          }
+        }}
+      />
+    ),
+    [
+      listening,
+      paused,
+      busy,
+      startLabel,
+      sourceId,
+      sources,
+      turns.length,
+      configOpen,
+      config,
+    ],
+  );
 
   const renameSpeaker = (speaker: number, next: string) => {
     if (next) {
@@ -675,110 +950,71 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
       ref={rootRef}
       className="jayrr-called-embed jayrr-called-embed--transcribe"
     >
-      <div className="jayrr-called-embed__head">
-        <div className="jayrr-called-embed__title">
-          {listening && paused ? (
-            <span className="jayrr-called-embed__pause" aria-label="Paused">
-              <span />
-              <span />
-            </span>
-          ) : listening ? (
-            <span
-              className="jayrr-called-embed__listen is-live"
-              aria-hidden="true"
-            >
-              <span />
-              <span />
-              <span />
-            </span>
-          ) : null}
-          <div className="jayrr-called-embed__label">Transcribe</div>
-        </div>
-        <div className="jayrr-called-embed__actions">
-          <button
-            type="button"
-            className={
-              configOpen
-                ? "jayrr-called-embed__btn jayrr-called-embed__btn--compact is-on"
-                : "jayrr-called-embed__btn jayrr-called-embed__btn--compact"
-            }
-            onClick={() => setConfigOpen((open) => !open)}
-          >
-            Config
-          </button>
-          <button
-            type="button"
-            className="jayrr-called-embed__btn jayrr-called-embed__btn--compact"
-            onClick={clearChat}
-            disabled={turns.length === 0}
-          >
-            Clear
-          </button>
-          <button
-            type="button"
-            className="jayrr-called-embed__btn jayrr-called-embed__btn--compact"
-            onClick={() => {
-              if (listening && !paused) {
-                pause();
-                return;
-              }
-              void start();
-            }}
-            disabled={busy}
-          >
-            {startLabel}
-          </button>
-          <select
-            className="jayrr-called-embed__select jayrr-called-embed__select--compact"
-            value={sourceId}
-            disabled={listening && !paused}
-            onChange={(event) => {
-              setSourceId(event.target.value);
-              if (listening) {
-                stopSession();
-                setStatus("Pick a source, then Start.");
-              }
-            }}
-          >
-            {sources.map((source) => (
-              <option key={source.id} value={source.id}>
-                {source.hasAudio ? source.label : `${source.label} (no audio)`}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
       {configOpen ? (
-        <div className="jayrr-called-embed__card">
-          <div className="jayrr-called-embed__title jayrr-called-embed__title--row">
-            <div className="jayrr-called-embed__label">Jev IQ</div>
-            <button
-              type="button"
-              className={
-                config.jevIq
-                  ? "jayrr-called-embed__switch is-on"
-                  : "jayrr-called-embed__switch"
-              }
-              aria-pressed={config.jevIq}
-              aria-label="Score speech with Jev IQ"
-              onClick={() => {
-                const next = { ...config, jevIq: !config.jevIq };
-                resetIq();
-                applyConfig(next, true);
-              }}
-            >
-              <span className="jayrr-called-embed__knob" />
-            </button>
-          </div>
-          <div className="jayrr-called-embed__bands">
-            {IQ_BANDS.map((band) => (
-              <span
-                key={band.label}
-                className={`jayrr-called-embed__iq jayrr-called-embed__iq--${band.shade}`}
+        <div className="jayrr-called-embed__cards">
+          <div className="jayrr-called-embed__card">
+            <div className="jayrr-called-embed__title jayrr-called-embed__title--row">
+              <div className="jayrr-called-embed__label">Jev IQ</div>
+              <button
+                type="button"
+                className={
+                  config.jevIq
+                    ? "jayrr-called-embed__switch is-on"
+                    : "jayrr-called-embed__switch"
+                }
+                aria-pressed={config.jevIq}
+                aria-label="Score speech with Jev IQ"
+                onClick={() => {
+                  const next = { ...config, jevIq: !config.jevIq };
+                  resetIq();
+                  applyConfig(next, true);
+                }}
               >
-                {band.label}
-              </span>
-            ))}
+                <span className="jayrr-called-embed__knob" />
+              </button>
+            </div>
+            <div className="jayrr-called-embed__bands">
+              {IQ_BANDS.map((band) => (
+                <span
+                  key={band.label}
+                  className={`jayrr-called-embed__iq jayrr-called-embed__iq--${band.shade}`}
+                >
+                  {band.label}
+                </span>
+              ))}
+            </div>
+          </div>
+          <div className="jayrr-called-embed__card">
+            <div className="jayrr-called-embed__title jayrr-called-embed__title--row">
+              <div className="jayrr-called-embed__label">Jev MBTI</div>
+              <button
+                type="button"
+                className={
+                  config.jevMbti
+                    ? "jayrr-called-embed__switch is-on"
+                    : "jayrr-called-embed__switch"
+                }
+                aria-pressed={config.jevMbti}
+                aria-label="Score speech with Jev MBTI"
+                onClick={() => {
+                  const next = { ...config, jevMbti: !config.jevMbti };
+                  resetIq();
+                  applyConfig(next, true);
+                }}
+              >
+                <span className="jayrr-called-embed__knob" />
+              </button>
+            </div>
+            <div className="jayrr-called-embed__bands jayrr-called-embed__bands--pairs">
+              {MBTI_BANDS.map((band) => (
+                <span
+                  key={band.letter}
+                  className={`jayrr-called-embed__iq jayrr-called-embed__mbti jayrr-called-embed__mbti--${band.letter.toLowerCase()}`}
+                >
+                  {band.letter}
+                </span>
+              ))}
+            </div>
           </div>
         </div>
       ) : (
@@ -803,36 +1039,66 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
                     if (!turn) {
                       return null;
                     }
-                    const iqScore = speakerAverages.get(
-                      speakerKey(turn.speaker),
-                    );
+                    const iqScore = turn.isFinal
+                      ? iqByTurn.get(turn.id)
+                      : live?.result?.substantive
+                      ? live.result.composite
+                      : undefined;
+                    const emotions = turn.isFinal
+                      ? emotionByTurn.get(turn.id) ?? []
+                      : live?.emotion ?? [];
+                    const mbti = turn.isFinal
+                      ? mbtiByTurn.get(turn.id)
+                      : live?.mbti ?? undefined;
+                    const prev = turns[index - 1];
+                    const follow =
+                      prev !== undefined && prev.speaker === turn.speaker;
                     return (
                       <div
                         key={turn.id}
                         className={`jayrr-called-embed__msg jayrr-called-embed__msg--${side}${
                           turn.isFinal ? "" : " is-draft"
-                        }`}
-                        style={speakerHueStyle(turn.speaker)}
+                        }${follow ? " is-follow" : ""}`}
+                        style={speakerHueStyle(turn.speaker, speakers)}
                       >
-                        <div className="jayrr-called-embed__who-row">
-                          <button
-                            type="button"
-                            className="jayrr-called-embed__who"
-                            onClick={() => {
-                              if (turn.speaker === null) {
-                                return;
-                              }
-                              setEditingSpeaker(turn.speaker);
-                            }}
-                          >
-                            {speakerLabel(turn.speaker, names)}
-                          </button>
-                          {config.jevIq ? (
-                            iqScore === undefined ? null : (
-                              <IqBadge composite={iqScore} />
-                            )
-                          ) : null}
-                        </div>
+                        {follow ? null : (
+                          <div className="jayrr-called-embed__who-row">
+                            <button
+                              type="button"
+                              className="jayrr-called-embed__who"
+                              onClick={() => {
+                                if (turn.speaker === null) {
+                                  return;
+                                }
+                                setEditingSpeaker(turn.speaker);
+                              }}
+                            >
+                              {speakerLabel(turn.speaker, names)}
+                            </button>
+                            {jevScoringOn(config) ? (
+                              <div className="jayrr-called-embed__who-badges">
+                                {config.jevIq
+                                  ? emotions.map((emotion) => (
+                                      <EmotionBadge
+                                        key={emotion.id}
+                                        emotion={emotion}
+                                      />
+                                    ))
+                                  : null}
+                                {config.jevIq ? (
+                                  iqScore === undefined ? null : (
+                                    <IqBadge composite={iqScore} />
+                                  )
+                                ) : null}
+                                {config.jevMbti ? (
+                                  mbti ? (
+                                    <MbtiBadge mbti={mbti} />
+                                  ) : null
+                                ) : null}
+                              </div>
+                            ) : null}
+                          </div>
+                        )}
                         <div className="jayrr-called-embed__bubble">
                           {turn.text}
                         </div>
@@ -852,7 +1118,7 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
                       <input
                         key={speaker}
                         className="jayrr-called-embed__who-input"
-                        style={speakerHueStyle(speaker)}
+                        style={speakerHueStyle(speaker, speakers)}
                         autoFocus
                         defaultValue={speakerLabel(speaker, names)}
                         aria-label="Rename speaker"
@@ -876,7 +1142,7 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
                           ? "jayrr-called-embed__now-name is-live"
                           : "jayrr-called-embed__now-name"
                       }
-                      style={speakerHueStyle(speaker)}
+                      style={speakerHueStyle(speaker, speakers)}
                       onClick={() => setEditingSpeaker(speaker)}
                     >
                       {speakerLabel(speaker, names)}

@@ -11,6 +11,7 @@ import {
   actionShortcuts,
   actionToggleArrowBinding,
   actionToggleGridMode,
+  actionToggleGridSnap,
   actionToggleMidpointSnapping,
   actionToggleObjectsSnapMode,
   actionToggleSearchMenu,
@@ -28,11 +29,11 @@ import { useSetAtom } from "../../editor-jotai";
 import { useI18n } from "../../i18n";
 import { activeConfirmDialogAtom } from "../ActiveConfirmDialog";
 import {
-  useExcalidrawSetAppState,
+  useApp,
+  useAppProps,
   useExcalidrawActionManager,
   useExcalidrawElements,
-  useAppProps,
-  useApp,
+  useExcalidrawSetAppState,
 } from "../App";
 import { openConfirmModal } from "../OverwriteConfirm/OverwriteConfirmState";
 import Trans from "../Trans";
@@ -42,20 +43,18 @@ import DropdownMenuItemContentRadio from "../dropdownMenu/DropdownMenuItemConten
 import DropdownMenuItemLink from "../dropdownMenu/DropdownMenuItemLink";
 import DropdownMenuSub from "../dropdownMenu/DropdownMenuSub";
 import {
-  GithubIcon,
-  settingsIcon,
-  emptyIcon,
-} from "../icons";
-import {
   boltIcon,
   DeviceDesktopIcon,
+  emptyIcon,
   ExportIcon,
   ExportImageIcon,
+  GithubIcon,
   HelpIcon,
   LoadIcon,
   MoonIcon,
   save,
   searchIcon,
+  settingsIcon,
   SunIcon,
   TrashIcon,
   usersIcon,
@@ -562,6 +561,28 @@ export const PreferencesToggleGridModeItem = () => {
   );
 };
 
+const PreferencesToggleGridSnapItem = () => {
+  const { t } = useI18n();
+  const actionManager = useExcalidrawActionManager();
+  const appState = useUIAppState();
+
+  if (!appState.gridModeEnabled) {
+    return null;
+  }
+
+  return (
+    <DropdownMenuItemCheckbox
+      checked={appState.gridSnapEnabled}
+      onSelect={(event) => {
+        actionManager.executeAction(actionToggleGridSnap);
+        event.preventDefault();
+      }}
+    >
+      {t("labels.gridSnap")}
+    </DropdownMenuItemCheckbox>
+  );
+};
+
 export const PreferencesToggleZenModeItem = () => {
   const { t } = useI18n();
   const actionManager = useExcalidrawActionManager();
@@ -640,6 +661,7 @@ export const Preferences = ({
             <PreferencesToggleToolLockItem />
             <PreferencesToggleSnapModeItem />
             <PreferencesToggleGridModeItem />
+            <PreferencesToggleGridSnapItem />
             <PreferencesToggleZenModeItem />
             <PreferencesToggleViewModeItem />
             <PreferencesToggleElementPropertiesItem />
@@ -660,6 +682,7 @@ Preferences.ToggleSnapMode = PreferencesToggleSnapModeItem;
 Preferences.ToggleArrowBinding = PreferencesToggleArrowBindingItem;
 Preferences.ToggleMidpointSnapping = PreferencesToggleMidpointSnappingItem;
 Preferences.ToggleGridMode = PreferencesToggleGridModeItem;
+Preferences.ToggleGridSnap = PreferencesToggleGridSnapItem;
 Preferences.ToggleZenMode = PreferencesToggleZenModeItem;
 Preferences.ToggleViewMode = PreferencesToggleViewModeItem;
 Preferences.ToggleElementProperties = PreferencesToggleElementPropertiesItem;

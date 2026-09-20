@@ -17,10 +17,13 @@ export const actionToggleGridMode = register({
     predicate: (appState) => appState.gridModeEnabled,
   },
   perform(elements, appState) {
+    const gridModeEnabled = !this.checked!(appState);
     return {
       appState: {
         ...appState,
-        gridModeEnabled: !this.checked!(appState),
+        gridModeEnabled,
+        // Turning the grid on defaults snap-to-grid on; turning off keeps preference.
+        ...(gridModeEnabled ? { gridSnapEnabled: true } : {}),
         objectsSnapModeEnabled: false,
       },
       captureUpdate: CaptureUpdateAction.EVENTUALLY,

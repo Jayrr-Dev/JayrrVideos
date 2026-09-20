@@ -8,36 +8,26 @@ type Burst = {
   y: number;
 };
 
-const SPARKS = [
-  { x: "-28px", y: "-22px" },
-  { x: "26px", y: "-18px" },
-  { x: "22px", y: "24px" },
-  { x: "-24px", y: "20px" },
-  { x: "4px", y: "-32px" },
-  { x: "-6px", y: "30px" },
-] as const;
+const BURST_LINE_COUNT = 12;
+const BURST_ANGLES = Array.from(
+  { length: BURST_LINE_COUNT },
+  (_, index) => (360 / BURST_LINE_COUNT) * index,
+);
 
 const PointerGlyph = () => (
-  <svg viewBox="0 0 88 88" aria-hidden="true" focusable="false">
+  <svg viewBox="0 0 32 32" aria-hidden="true" focusable="false">
     <path
-      d="M8 6v62l16-15 10 24 16-7-11-23h22Z"
-      fill="#fff7e8"
-      stroke="#1e1e1e"
-      strokeWidth="5.5"
+      d="M8 4v22l5.5-5.5 4 8.5 3.5-1.7-3.8-8.3h7.3Z"
+      fill="#1b1b1f"
+      stroke="#ffffff"
+      strokeWidth="2.2"
       strokeLinejoin="round"
-      strokeLinecap="round"
-    />
-    <path d="M18 22 58 40 40 46 30 68 22 64 32 44Z" fill="#fa5252" />
-    <circle
-      cx="14"
-      cy="14"
-      r="6"
-      fill="#ffd43b"
-      stroke="#1e1e1e"
-      strokeWidth="3"
     />
   </svg>
 );
+
+// Presses held longer than this show the hold ring instead of a burst.
+const HOLD_MS = 200;
 
 const writePointerTransform = (
   node: HTMLDivElement | null,
@@ -52,10 +42,25 @@ const writePointerTransform = (
   node.style.transform = `translate(${x}px, ${y}px) scale(${scale})`;
 };
 
+const writeHoldTransform = (
+  node: HTMLDivElement | null,
+  x: number,
+  y: number,
+) => {
+  if (!node) {
+    return;
+  }
+  node.style.transform = `translate(${x}px, ${y}px)`;
+};
+
 export const JayrrPresentCursor = () => {
   const pointerRef = useRef<HTMLDivElement | null>(null);
+  const holdRef = useRef<HTMLDivElement | null>(null);
   const pointRef = useRef({ x: 0, y: 0 });
   const pressedRef = useRef(false);
+  const holdingRef = useRef(false);
+  const holdTimerRef = useRef<number | null>(null);
+  const [holding, setHolding] = useState(false);
   const [bursts, setBursts] = useState<Burst[]>([]);
   const burstId = useRef(0);
 
@@ -67,6 +72,12 @@ export const JayrrPresentCursor = () => {
   }, []);
 
   useEffect(() => {
+    const clearHoldTimer = () => {
+      if (holdTimerRef.current !== null) {
+        window.clearTimeout(holdTimerRef.current);
+        holdTimerRef.current = null;
+      }
+    };
     const movePointer = (event: PointerEvent) => {
       pointRef.current = { x: event.clientX, y: event.clientY };
       writePointerTransform(
@@ -75,32 +86,51 @@ export const JayrrPresentCursor = () => {
         event.clientY,
         pressedRef.current,
       );
+      if (holdingRef.current) {
+        writeHoldTransform(holdRef.current, event.clientX, event.clientY);
+      }
     };
     const press = (event: PointerEvent) => {
       if (event.button !== 0) {
         return;
       }
       pressedRef.current = true;
+      pointRef.current = { x: event.clientX, y: event.clientY };
       writePointerTransform(
         pointerRef.current,
         event.clientX,
         event.clientY,
         true,
       );
-      burstId.current += 1;
-      setBursts((current) => [
-        ...current,
-        { id: burstId.current, x: event.clientX, y: event.clientY },
-      ]);
+      clearHoldTimer();
+      holdTimerRef.current = window.setTimeout(() => {
+        holdTimerRef.current = null;
+        holdingRef.current = true;
+        setHolding(true);
+      }, HOLD_MS);
     };
     const release = () => {
+      if (!pressedRef.current) {
+        return;
+      }
       pressedRef.current = false;
+      clearHoldTimer();
       writePointerTransform(
         pointerRef.current,
         pointRef.current.x,
         pointRef.current.y,
         false,
       );
+      if (holdingRef.current) {
+        holdingRef.current = false;
+        setHolding(false);
+        return;
+      }
+      burstId.current += 1;
+      setBursts((current) => [
+        ...current,
+        { id: burstId.current, x: pointRef.current.x, y: pointRef.current.y },
+      ]);
     };
 
     window.addEventListener("pointermove", movePointer);
@@ -108,6 +138,7 @@ export const JayrrPresentCursor = () => {
     window.addEventListener("pointerup", release);
     window.addEventListener("pointercancel", release);
     return () => {
+      clearHoldTimer();
       window.removeEventListener("pointermove", movePointer);
       window.removeEventListener("pointerdown", press);
       window.removeEventListener("pointerup", release);
@@ -117,33 +148,41 @@ export const JayrrPresentCursor = () => {
 
   return (
     <div className="jayrr-present-cursor" aria-hidden="true">
-      {bursts.map((burst) => (
-        <span
-          key={burst.id}
-          className="jayrr-present-cursor__ripple"
-          style={{ left: burst.x, top: burst.y }}
-          onAnimationEnd={() => {
-            setBursts((current) =>
-              current.filter((item) => item.id !== burst.id),
-            );
-          }}
-        />
-      ))}
       {bursts.map((burst) =>
-        SPARKS.map((spark, index) => (
+        BURST_ANGLES.map((angle, index) => (
           <span
-            key={`${burst.id}-spark-${index}`}
-            className="jayrr-present-cursor__spark"
+            key={`${burst.id}-line-${index}`}
+            className={
+              index % 2 === 0
+                ? "jayrr-present-cursor__line is-long"
+                : "jayrr-present-cursor__line"
+            }
             style={{
               left: burst.x,
               top: burst.y,
-              ["--spark-x" as string]: spark.x,
-              ["--spark-y" as string]: spark.y,
-              animationDelay: `${index * 18}ms`,
+              ["--angle" as string]: `${angle}deg`,
             }}
+            onAnimationEnd={
+              index === 0
+                ? () => {
+                    setBursts((current) =>
+                      current.filter((item) => item.id !== burst.id),
+                    );
+                  }
+                : undefined
+            }
           />
         )),
       )}
+      {holding ? (
+        <div
+          ref={(node) => {
+            holdRef.current = node;
+            writeHoldTransform(node, pointRef.current.x, pointRef.current.y);
+          }}
+          className="jayrr-present-cursor__hold"
+        />
+      ) : null}
       <div ref={pointerRef} className="jayrr-present-cursor__pointer">
         <PointerGlyph />
       </div>

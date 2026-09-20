@@ -1,38 +1,43 @@
 import clsx from "clsx";
 import { useState } from "react";
 
-import { KEYS } from "@excalidraw/common";
+import { CANVAS_SEARCH_TAB, DEFAULT_SIDEBAR, KEYS } from "@excalidraw/common";
 
+import { actionToggleSearchMenu } from "../actions";
 import { t } from "../i18n";
 
-import { useEditorInterface, useStylesPanelMode } from "./App";
-import { HintViewer } from "./HintViewer";
-import { Island } from "./Island";
-import { TimelineButton } from "./TimelineButton";
-import { LockButton } from "./LockButton";
-import { PenModeButton } from "./PenModeButton";
-import Stack from "./Stack";
-import DropdownMenu from "./dropdownMenu/DropdownMenu";
 import {
+  useEditorInterface,
+  useExcalidrawActionManager,
+  useStylesPanelMode,
+} from "./App";
+import DropdownMenu from "./dropdownMenu/DropdownMenu";
+import { HintViewer } from "./HintViewer";
+import {
+  bucketFillIcon,
+  DotsIcon,
   drawShapeToolIcon,
   EmbedIcon,
   ImageIcon,
-  LassoIcon,
   laserPointerToolIcon,
-  bucketFillIcon,
-  DotsIcon,
+  LassoIcon,
 } from "./icons";
+import { Island } from "./Island";
+import { LockButton } from "./LockButton";
+import { PenModeButton } from "./PenModeButton";
+import { SearchButton } from "./SearchButton";
+import Stack from "./Stack";
 import {
   ArrowToolButton,
   DiamondToolButton,
   EllipseToolButton,
   EraserToolButton,
-  FreedrawToolPopover,
+  FrameToolButton,
   FreedrawToolButton,
+  FreedrawToolPopover,
   getToolShortcut,
   HandToolButton,
   isToolButtonDisabled,
-  FrameToolButton,
   LassoToolButton,
   LineToolButton,
   RectangleToolButton,
@@ -199,9 +204,13 @@ export const Toolbar = ({
 }) => {
   const editorInterface = useEditorInterface();
   const isCompactStylesPanel = useStylesPanelMode() === "compact";
+  const actionManager = useExcalidrawActionManager();
 
   const activeTool = appState.activeTool;
   const toolProps = { app, activeTool };
+  const searchOpen =
+    appState.openSidebar?.name === DEFAULT_SIDEBAR.name &&
+    appState.openSidebar.tab === CANVAS_SEARCH_TAB;
 
   return (
     <Island
@@ -239,14 +248,12 @@ export const Toolbar = ({
               // the active tool — including its lock state — is host-controlled
               disabled={app.props.activeTool != null}
             />
-            <TimelineButton
-              checked={appState.timelineEnabled}
+            <SearchButton
+              checked={searchOpen}
               onChange={() =>
-                setAppState({
-                  timelineEnabled: !appState.timelineEnabled,
-                })
+                actionManager.executeAction(actionToggleSearchMenu)
               }
-              title={t("toolBar.timeline")}
+              title={t("search.title")}
             />
 
             <div

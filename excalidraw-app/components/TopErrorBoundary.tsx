@@ -22,7 +22,7 @@ interface TopErrorBoundaryState {
 
 const buildErrorReport = (state: TopErrorBoundaryState) => {
   const gitSha =
-    typeof window !== "undefined" ? (window.__EXCALIDRAW_SHA__ ?? "") : "";
+    typeof window !== "undefined" ? window.__EXCALIDRAW_SHA__ ?? "" : "";
   return [
     `Error: ${state.errorMessage}`,
     state.stack ? `Stack:\n${state.stack}` : "",
@@ -57,7 +57,7 @@ export class TopErrorBoundary extends React.Component<
     return {
       hasError: true,
       errorMessage: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? (error.stack ?? "") : "",
+      stack: error instanceof Error ? error.stack ?? "" : "",
       copyStatus: "idle" as const,
       issuePrompt: "idle" as const,
     };

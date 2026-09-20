@@ -57,6 +57,7 @@ export type ActionName =
   | "selectAll"
   | "pasteStyles"
   | "gridMode"
+  | "gridSnap"
   | "zenMode"
   | "objectsSnapMode"
   | "arrowBinding"
@@ -142,7 +143,9 @@ export type ActionName =
   | "cropEditor"
   | "wrapSelectionInFrame"
   | "toggleShapeSwitch"
-  | "togglePolygon";
+  | "togglePolygon"
+  | "jayrrCamera"
+  | "jayrrFrame";
 
 export type PanelComponentProps = {
   elements: readonly ExcalidrawElement[];

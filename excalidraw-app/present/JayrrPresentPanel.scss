@@ -84,7 +84,7 @@
     align-items: center;
     justify-content: space-between;
     gap: 0.75rem;
-    min-width: 12.5rem;
+    min-width: 14.5rem;
     font-size: 0.85rem;
   }
 
@@ -93,7 +93,7 @@
   }
 
   .jayrr-present__settings-select {
-    max-width: 8.5rem;
+    max-width: 10.5rem;
     font-size: 0.8rem;
   }
 
@@ -132,8 +132,311 @@
     gap: 0.5rem;
 
     .ExcButton {
+      flex: 1;
       justify-content: center;
     }
+  }
+
+  .jayrr-present--recordings {
+    padding-bottom: 0;
+  }
+
+  .jayrr-present__recordings-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    flex: 1;
+    min-height: 0;
+  }
+
+  .jayrr-present__back {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    padding: 0;
+    border: none;
+    border-radius: var(--border-radius-md);
+    background: none;
+    color: var(--icon-fill-color);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .jayrr-present__back:hover {
+    color: var(--color-primary);
+    background: var(--color-surface-mid);
+  }
+
+  .jayrr-present__back svg {
+    width: 1rem;
+    height: 1rem;
+  }
+
+  .jayrr-present__folder-title {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: none;
+    text-align: left;
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--color-primary);
+    cursor: pointer;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .jayrr-present__folder-rename {
+    flex: 1;
+    min-width: 0;
+    border: 1px solid var(--color-primary);
+    border-radius: var(--border-radius-md);
+    padding: 0.35rem 0.45rem;
+    background: var(--island-bg-color);
+    color: var(--text-primary-color);
+    font-size: 0.95rem;
+  }
+
+  .jayrr-present__section-label {
+    margin: 0.25rem 0 0;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: var(--color-gray-70);
+  }
+
+  .jayrr-present__empty-block {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    align-items: stretch;
+  }
+
+  .jayrr-present__recordings-footer {
+    margin-top: auto;
+    flex-shrink: 0;
+    padding: 0.75rem 0 0;
+    border-top: 1px solid var(--sidebar-border-color);
+  }
+
+  .jayrr-present__create-folder {
+    width: 100%;
+    justify-content: center;
+    font-weight: 600;
+  }
+
+  .jayrr-present__folder-thumbs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.25rem;
+    width: 100%;
+    height: 100%;
+    padding-top: 1.15rem;
+    box-sizing: border-box;
+    pointer-events: none;
+  }
+
+  .jayrr-present__folder-thumb {
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    border-radius: 0.35rem;
+    background: var(--color-surface-mid);
+
+    img,
+    video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+  }
+
+  .jayrr-present__recordings-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.65rem;
+  }
+
+  .jayrr-present__recording {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    min-width: 0;
+  }
+
+  .jayrr-present__recording-name,
+  .jayrr-present__recording-name-input {
+    position: absolute;
+    top: 0.4rem;
+    left: 0.4rem;
+    z-index: 1;
+    max-width: calc(100% - 0.8rem);
+    margin: 0;
+    border: none;
+    border-radius: 0.3rem;
+    background: rgb(0 0 0 / 45%);
+    color: #fff;
+    font-weight: 700;
+    font-size: 0.7rem;
+    line-height: 1.2;
+    padding: 0.12rem 0.28rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+
+  .jayrr-present__recording-name-input {
+    width: calc(100% - 0.8rem);
+    box-sizing: border-box;
+    outline: 2px solid var(--color-primary);
+    background: var(--island-bg-color);
+    color: var(--text-primary-color);
+    pointer-events: auto;
+  }
+
+  .jayrr-present__recording-thumb {
+    position: relative;
+    display: block;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid var(--sidebar-border-color);
+    border-radius: 0.7rem;
+    background: var(--color-surface-low);
+    cursor: grab;
+  }
+
+  .jayrr-present__recording-thumb:hover {
+    border-color: var(--color-primary);
+  }
+
+  .jayrr-present__recording-thumb img,
+  .jayrr-present__recording-thumb video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    pointer-events: none;
+  }
+
+  .jayrr-present__recording-play {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    background: rgb(0 0 0 / 22%);
+    pointer-events: none;
+  }
+
+  .jayrr-present__recording-thumb:hover .jayrr-present__recording-play {
+    background: rgb(0 0 0 / 38%);
+  }
+
+  .jayrr-present__recording-play svg {
+    width: 1.35rem;
+    height: 1.35rem;
+  }
+
+  .jayrr-present__recording-probe {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .jayrr-present__recording-badges {
+    position: absolute;
+    left: 0.3rem;
+    bottom: 0.25rem;
+    display: flex;
+    align-items: center;
+    gap: 0.2rem;
+    pointer-events: none;
+  }
+
+  .jayrr-present__recording-quality,
+  .jayrr-present__recording-size {
+    padding: 0.08rem 0.28rem;
+    border-radius: 0.25rem;
+    background: rgb(0 0 0 / 62%);
+    color: #fff;
+    font-size: 0.62rem;
+    font-weight: 600;
+    line-height: 1.2;
+  }
+
+  .jayrr-present__recording-clock {
+    position: absolute;
+    right: 0.3rem;
+    bottom: 0.25rem;
+    padding: 0.08rem 0.28rem;
+    border-radius: 0.25rem;
+    background: rgb(0 0 0 / 62%);
+    color: #fff;
+    font-size: 0.62rem;
+    font-weight: 600;
+    line-height: 1.2;
+  }
+
+  .jayrr-present__recording-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    min-width: 0;
+  }
+
+  .jayrr-present__recording-when {
+    min-width: 0;
+    flex: 1;
+    color: var(--text-primary-color);
+    font-size: 0.68rem;
+    opacity: 0.7;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .jayrr-present__recording-menu.dropdown-menu-button {
+    width: 1.5rem;
+    height: 1.5rem;
+    padding: 0;
+    border: none;
+    box-shadow: none;
+    background: none;
+    --background: transparent;
+    color: var(--icon-fill-color);
+    opacity: 0.55;
+    flex: 0 0 auto;
+  }
+
+  .jayrr-present__recording-menu.dropdown-menu-button:hover,
+  .jayrr-present__recording-menu.dropdown-menu-button:active,
+  .jayrr-present__recording-menu.dropdown-menu-button[data-state="open"] {
+    background: none;
+    --background: transparent;
+    box-shadow: none;
+    color: var(--color-primary);
+    opacity: 1;
+  }
+
+  .jayrr-present__recording-menu.dropdown-menu-button svg {
+    width: 1rem;
+    height: 1rem;
   }
 
   .jayrr-present__empty,
@@ -324,9 +627,28 @@
     order: 1;
   }
 
-  .jayrr-present__focus svg {
+  .jayrr-present__focus svg,
+  .jayrr-present__move-mark svg {
     width: 1rem;
     height: 1rem;
+  }
+
+  .jayrr-present__move-mark {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.05rem;
+    margin-left: 0.15rem;
+    color: var(--color-primary);
+  }
+
+  .jayrr-present__move-mark path {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
   }
 
   .jayrr-present__exit-mark {
@@ -380,6 +702,7 @@
     font-size: 0.78rem;
     line-height: 1.2;
     text-align: left;
+    white-space: nowrap;
     color: var(--text-primary-color);
     background: transparent;
     cursor: pointer;
@@ -537,6 +860,17 @@
   pointer-events: auto;
 }
 
+.jayrr-present-hud__dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: var(--color-danger, #e03131);
+}
+
+.jayrr-present-hud.is-paused .jayrr-present-hud__dot {
+  background: var(--color-gray-40, #868e96);
+}
+
 .jayrr-present-hud__keys {
   opacity: 0.7;
 }
@@ -568,22 +902,39 @@
   overflow: visible;
 }
 
-.jayrr-present-translation__svg line {
+.jayrr-present-translation__svg line,
+.jayrr-present-translation__svg path,
+.jayrr-present-translation__svg polyline {
   fill: none;
   stroke: var(--color-primary);
   stroke-width: 2;
   stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
-.jayrr-present-translation__svg polygon,
-.jayrr-present-translation__svg circle,
-.jayrr-present-translation__dot {
+.jayrr-present-translation__svg polygon {
   fill: var(--color-primary);
   stroke: var(--island-bg-color);
   stroke-width: 1;
 }
 
-.jayrr-present-translation__svg .is-active line {
+.jayrr-present-translation__dot {
+  fill: var(--island-bg-color);
+  stroke: var(--color-primary);
+  stroke-width: 1.5;
+}
+
+.jayrr-present-translation__handle {
+  fill: none;
+  stroke: var(--color-primary);
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.jayrr-present-translation__svg .is-active line,
+.jayrr-present-translation__svg .is-active path,
+.jayrr-present-translation__svg .is-active polyline {
   stroke-width: 2.4;
 }
 

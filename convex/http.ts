@@ -1,6 +1,8 @@
 import { httpRouter } from "convex/server";
 
+import { auth } from "./auth";
 import { httpAction } from "./_generated/server";
+import { canvasAiChat, canvasAiChatOptions } from "./canvasAi/chatHttp";
 import {
   MAX_HTML_BYTES,
   embedProxyErrorPage,
@@ -10,6 +12,7 @@ import {
 } from "./embedProxy";
 
 const http = httpRouter();
+auth.addHttpRoutes(http);
 
 /**
  * Serves a third-party page without its X-Frame-Options / frame-ancestors
@@ -78,6 +81,18 @@ http.route({
       headers: htmlHeaders,
     });
   }),
+});
+
+http.route({
+  path: "/ai/chat",
+  method: "OPTIONS",
+  handler: canvasAiChatOptions,
+});
+
+http.route({
+  path: "/ai/chat",
+  method: "POST",
+  handler: canvasAiChat,
 });
 
 export default http;

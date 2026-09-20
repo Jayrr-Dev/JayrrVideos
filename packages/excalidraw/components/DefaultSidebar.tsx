@@ -23,7 +23,7 @@ import { SceneMenu } from "./SceneMenu";
 import { SearchMenu } from "./SearchMenu";
 import { Sidebar } from "./Sidebar/Sidebar";
 import { withInternalFallback } from "./hoc/withInternalFallback";
-import { LibraryIcon, SceneIcon, searchIcon } from "./icons";
+import { LibraryIcon, SceneIcon } from "./icons";
 
 import type { SidebarProps, SidebarTriggerProps } from "./Sidebar/common";
 
@@ -59,6 +59,20 @@ const DefaultTabTriggers = ({ children }: { children: React.ReactNode }) => {
 };
 DefaultTabTriggers.displayName = "DefaultTabTriggers";
 
+const DefaultTrailingTabTriggers = ({
+  children,
+}: {
+  children: React.ReactNode;
+}) => {
+  const { DefaultSidebarTrailingTabTriggersTunnel } = useTunnels();
+  return (
+    <DefaultSidebarTrailingTabTriggersTunnel.In>
+      {children}
+    </DefaultSidebarTrailingTabTriggersTunnel.In>
+  );
+};
+DefaultTrailingTabTriggers.displayName = "DefaultTrailingTabTriggers";
+
 export const DefaultSidebar = Object.assign(
   withInternalFallback(
     "DefaultSidebar",
@@ -79,7 +93,10 @@ export const DefaultSidebar = Object.assign(
       const setAppState = useExcalidrawSetAppState();
       const { renderLibraryMenu, renderSceneMenu } = useAppProps();
 
-      const { DefaultSidebarTabTriggersTunnel } = useTunnels();
+      const {
+        DefaultSidebarTabTriggersTunnel,
+        DefaultSidebarTrailingTabTriggersTunnel,
+      } = useTunnels();
 
       const isForceDocked = appState.openSidebar?.tab === CANVAS_SEARCH_TAB;
       const openTab = appState.openSidebar?.tab;
@@ -125,9 +142,7 @@ export const DefaultSidebar = Object.assign(
           <Sidebar.Tabs>
             <Sidebar.Header>
               <Sidebar.TabTriggers>
-                <Sidebar.TabTrigger tab={CANVAS_SEARCH_TAB}>
-                  {searchIcon}
-                </Sidebar.TabTrigger>
+                <DefaultSidebarTabTriggersTunnel.Out />
                 <Sidebar.TabTrigger tab={LIBRARY_SIDEBAR_TAB}>
                   {LibraryIcon}
                 </Sidebar.TabTrigger>
@@ -138,7 +153,7 @@ export const DefaultSidebar = Object.assign(
                 >
                   {SceneIcon}
                 </Sidebar.TabTrigger>
-                <DefaultSidebarTabTriggersTunnel.Out />
+                <DefaultSidebarTrailingTabTriggersTunnel.Out />
               </Sidebar.TabTriggers>
             </Sidebar.Header>
             <Sidebar.Tab tab={LIBRARY_SIDEBAR_TAB}>
@@ -159,5 +174,6 @@ export const DefaultSidebar = Object.assign(
   {
     Trigger: DefaultSidebarTrigger,
     TabTriggers: DefaultTabTriggers,
+    TrailingTabTriggers: DefaultTrailingTabTriggers,
   },
 );

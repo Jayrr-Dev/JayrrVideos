@@ -1,7 +1,6 @@
+import { getFrame, KEYS } from "@excalidraw/common";
 import { trackEvent } from "@excalidraw/excalidraw/analytics";
 import { copyTextToSystemClipboard } from "@excalidraw/excalidraw/clipboard";
-import { Dialog } from "@excalidraw/excalidraw/components/Dialog";
-import { FilledButton } from "@excalidraw/excalidraw/components/FilledButton";
 import { TextField } from "@excalidraw/excalidraw/components/TextField";
 import {
   copyIcon,
@@ -15,14 +14,15 @@ import {
 import { useUIAppState } from "@excalidraw/excalidraw/context/ui-appState";
 import { useCopyStatus } from "@excalidraw/excalidraw/hooks/useCopiedIndicator";
 import { useI18n } from "@excalidraw/excalidraw/i18n";
-import { KEYS, getFrame } from "@excalidraw/common";
 import { useEffect, useRef, useState } from "react";
+
+import { Dialog, FilledButton } from "../components/ui";
 
 import { atom, useAtom, useAtomValue } from "../app-jotai";
 import { activeRoomLinkAtom } from "../collab/Collab";
 
-import "./ShareDialog.scss";
 import { QRCode } from "./QRCode";
+import "./ShareDialog.scss";
 
 import type { CollabAPI } from "../collab/Collab";
 

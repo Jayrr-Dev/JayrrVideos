@@ -1,0 +1,21 @@
+.jayrr-ui-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+}
+
+.jayrr-ui-field__label {
+  color: var(--color-on-surface-variant, inherit);
+}
+
+.jayrr-ui-input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--input-border-color, #3a3a44);
+  border-radius: 0.4rem;
+  background: var(--input-bg-color, #111114);
+  color: inherit;
+  font: inherit;
+}

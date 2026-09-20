@@ -17,39 +17,43 @@ export type IqBand = {
 
 // Legend chips only. The rubric Jev sees lives in IQ_DIMENSIONS below.
 export const IQ_BANDS: readonly IqBand[] = [
-  { shade: "white", label: "~70" },
-  { shade: "white2", label: "~80" },
-  { shade: "yellow", label: "~90" },
-  { shade: "yellow2", label: "~100" },
-  { shade: "yellow3", label: "~110" },
-  { shade: "orange", label: "~120" },
-  { shade: "orange2", label: "~130" },
-  { shade: "red", label: "~140" },
-  { shade: "red2", label: "~150" },
-  { shade: "red3", label: "~160" },
+  { shade: "white", label: "70" },
+  { shade: "white2", label: "80" },
+  { shade: "yellow", label: "90" },
+  { shade: "yellow2", label: "100" },
+  { shade: "yellow3", label: "110" },
+  { shade: "orange", label: "120" },
+  { shade: "orange2", label: "130" },
+  { shade: "red", label: "140" },
+  { shade: "red2", label: "150" },
+  { shade: "red3", label: "160" },
 ];
 
 type IqLevel = { what: string; examples: string[] };
 
 export type IqDimension = {
-  id: "structure" | "reasoning" | "language";
+  id: "reasoning" | "idea_density" | "lexical_fit" | "delivery";
   weight: number;
   instructions: string;
   levels: IqLevel[];
 };
 
 const UTTERANCE_SCOPE =
-  "Judge only `utterance`. `previous_turn`, when present, is only what the speaker is replying to.";
+  "Judge only `utterance`. If it has several sentences, score the most intellectually loaded complete sentence — not an average with filler, agreement, or small talk. `previous_text` is recent talk before this line; use it to read fragments and replies, not as extra speech to score.";
 
 /**
- * Composite scoring: one Score per dimension so each question measures a
- * single thing. Levels describe situations Jev can match, with spoken-style
- * examples. Weights are combined in code (compositeFromAnswers).
+ * Score intellectual speech in this utterance, not a running speaker mean.
+ * - idea density / propositional density (Snowdon, Kemper, Nun Study, 1996)
+ * - vocabulary ↔ reasoning mutualism (Kieffer et al., 2017)
+ * - lexical diversity → perceived competence (Bradac et al., 1977)
+ * - empty thesaurus words without extra meaning (Oppenheimer, 2006)
+ * - repairs/repetitions track verbal IQ; filled pauses (um) do not
+ *   (Engelhardt, Nigg, Ferreira, 2013/2018)
  */
 export const IQ_DIMENSIONS: readonly IqDimension[] = [
   {
     id: "reasoning",
-    weight: 0.5,
+    weight: 0.3,
     instructions: `How much reasoning does the speaker do in \`utterance\`? ${UTTERANCE_SCOPE}`,
     levels: [
       {
@@ -81,65 +85,96 @@ export const IQ_DIMENSIONS: readonly IqDimension[] = [
     ],
   },
   {
-    id: "structure",
-    weight: 0.25,
-    instructions: `How well does \`utterance\` hold together as one thought? ${UTTERANCE_SCOPE}`,
+    id: "idea_density",
+    weight: 0.2,
+    instructions: `How many distinct ideas per stretch of speech are packed into \`utterance\`? Count claims, qualifications, and links, not word count. ${UTTERANCE_SCOPE}`,
     levels: [
       {
-        what: "Fragments or filler with no complete statement.",
-        examples: ["uh, yeah, so", "the thing, the... yeah"],
+        what: "Almost no claim: names, fillers, or the same idea said twice.",
+        examples: ["the packages, the thing, you know, the packages"],
       },
       {
-        what: "Starts a statement but loses it: restarts, repeats, or drifts before finishing.",
-        examples: [
-          "So we could, like, the packages, I mean the thing is, so anyway.",
-        ],
+        what: "One simple claim; the rest is padding or repetition.",
+        examples: ["Yeah so packages, packages are scary, you know?"],
       },
       {
-        what: "Complete statements, loosely strung together.",
+        what: "Several claims listed side by side, not linked.",
         examples: ["We use a lot of packages. Some might be bad. It's scary."],
       },
       {
-        what: "Statements connect: each one follows from or supports the previous one.",
+        what: "Claims are linked: each one qualifies or follows from the last.",
         examples: [
           "We trust many packages, so one bad one is a real risk, which is why linting rules matter.",
         ],
       },
       {
-        what: "Tightly built: a clear line from premise to conclusion with nothing off track.",
+        what: "High density: several constraints or qualifications packed with almost no fluff.",
         examples: [
-          "Every package is trusted code we did not read. Trust without review cannot be audited, so we enforce conventions instead of trusting people.",
+          "We trust packages we never read, so one bad maintainer is inherited by every downstream project.",
         ],
       },
     ],
   },
   {
-    id: "language",
-    weight: 0.25,
-    instructions: `How precise is the word choice in \`utterance\`? Judge wording only, not the idea. ${UTTERANCE_SCOPE}`,
+    id: "lexical_fit",
+    weight: 0.4,
+    instructions: `How intellectual is the wording in \`utterance\`? Reward conceptual, academic, or technical register used correctly (abstractions, precise terms, epistemic framing). Penalize slang, placeholders (thing, stuff), and long words that add no meaning. ${UTTERANCE_SCOPE}`,
     levels: [
       {
-        what: "Mostly filler and placeholder words: like, thing, stuff, you know.",
+        what: "Slang, fillers, or placeholders: thing, stuff, like, you know.",
         examples: ["like the thing with the stuff, you know"],
       },
       {
-        what: "Everyday words, vague where a specific word was available.",
+        what: "Casual everyday chat; vague where a specific word was available.",
         examples: ["some package had a bad thing in it"],
       },
       {
-        what: "Everyday words with a few specific terms used correctly.",
-        examples: ["a package had an exploit that was added years ago"],
+        what: "Clear adult wording with a few specific terms.",
+        examples: ["a package had a security hole that was added years ago"],
       },
       {
-        what: "Specific, exact terms throughout; says precisely what it means.",
+        what: "Correct technical or academic terms; ideas are named, not gestured at.",
         examples: [
-          "a supply-chain exploit was engineered into a maintained package three years ago",
+          "a supply-chain exploit was planted in a transitive dependency years before detection",
         ],
       },
       {
-        what: "Dense, exact vocabulary with no wasted words; every term carries meaning.",
+        what: "Dense intellectual register: abstractions and precise jargon carrying the argument.",
         examples: [
-          "a dormant supply-chain compromise, staged by a maintainer three years prior, activated after adoption",
+          "Dependency risk is a trust graph: each unreviewed edge is inherited liability, so the constraint is audit cost, not package count.",
+        ],
+      },
+    ],
+  },
+  {
+    id: "delivery",
+    weight: 0.1,
+    instructions: `How clean is the delivery of \`utterance\`? Score repairs and false starts, not planning sounds. Um, uh, and like used while thinking do not lower the score by themselves. ${UTTERANCE_SCOPE}`,
+    levels: [
+      {
+        what: "Abandons the sentence and starts over with a different thought.",
+        examples: [
+          "So we could, like, the packages, I mean the thing is, so anyway.",
+        ],
+      },
+      {
+        what: "Repeats words or phrases while searching, then barely finishes.",
+        examples: ["We we we use packages packages that we we trust."],
+      },
+      {
+        what: "Finishes the thought. Planning sounds (um, uh, like) are fine.",
+        examples: [
+          "Um, we trust a lot of packages, and uh that is getting scary.",
+        ],
+      },
+      {
+        what: "One clean pass: maybe a brief um, no repairs or repeated words.",
+        examples: ["We trust a lot of packages, and that is getting scary."],
+      },
+      {
+        what: "Fluent run with no repairs, no repeated words, and no abandoned starts.",
+        examples: [
+          "We trust packages we never read, so one bad maintainer reaches every downstream project.",
         ],
       },
     ],
@@ -173,17 +208,17 @@ export const IQ_QUESTIONS = [
   })),
 ];
 
-const PREVIOUS_TURN_CHARS = 300;
+const PREVIOUS_TEXT_CHARS = 800;
 
 /** Named fields so instructions can point at `utterance` by name. */
 export const buildIqState = (
   utterance: string,
-  previousTurn: string | null,
+  previousText: string | null,
 ) => {
   const state: Record<string, string> = { utterance: utterance.trim() };
-  const context = previousTurn?.trim() ?? "";
+  const context = previousText?.trim() ?? "";
   if (context) {
-    state.previous_turn = context.slice(-PREVIOUS_TURN_CHARS);
+    state.previous_text = context.slice(-PREVIOUS_TEXT_CHARS);
   }
   return state;
 };
@@ -191,7 +226,13 @@ export const buildIqState = (
 export type IqAnswer =
   | { id: string; type: "noul"; noul: number }
   | { id: string; type: "score"; score: number; confidence: number }
-  | { id: string; type: "choice" };
+  | {
+      id: string;
+      type: "choice";
+      choice?: string;
+      probabilities?: Record<string, number>;
+      confidence?: number;
+    };
 
 export type IqResult = {
   /** 0–1 weighted composite across dimensions. */
@@ -232,7 +273,6 @@ export const compositeFromAnswers = (answers: IqAnswer[]): IqResult => {
 const IQ_MIN = 70;
 const IQ_MAX = 160;
 const IQ_TOP = IQ_BANDS.length - 1;
-const MIN_CONFIDENCE_WEIGHT = 0.05;
 
 export const iqFromComposite = (composite: number) => {
   const clamped = Math.min(1, Math.max(0, composite));
@@ -243,18 +283,3 @@ export const shadeFromComposite = (composite: number): IqShade => {
   const index = Math.min(IQ_TOP, Math.max(0, Math.round(composite * IQ_TOP)));
   return IQ_BANDS[index]?.shade ?? "white";
 };
-
-/** Confidence-weighted mean so a split distribution counts for less. */
-export const weightedComposite = (results: IqResult[]) => {
-  let total = 0;
-  let weight = 0;
-  for (const result of results) {
-    const w = Math.max(MIN_CONFIDENCE_WEIGHT, result.confidence);
-    total += w * result.composite;
-    weight += w;
-  }
-  return weight > 0 ? total / weight : null;
-};
-
-export const speakerKey = (speaker: number | null) =>
-  speaker === null ? "null" : String(speaker);

@@ -1,0 +1,55 @@
+.jayrr-camera-overlay {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  width: 320px;
+  height: 180px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.jayrr-camera-window__video {
+  display: block;
+  width: 320px;
+  height: 180px;
+  object-fit: cover;
+  background: #111;
+}
+
+.jayrr-camera-window__video.is-mirror {
+  transform: scaleX(-1);
+}
+
+.jayrr-camera-window__video.is-desktop {
+  object-fit: contain;
+}
+
+.jayrr-camera-picker {
+  margin: 0.15rem 0 0.35rem;
+}
+
+.jayrr-camera-picker legend {
+  padding: 0;
+}
+
+.jayrr-camera-picker__error {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 0.7rem;
+  color: var(--color-danger, #c0392b);
+}
+
+.excalidraw .jayrr-camera-picker__menu.dropdown-menu {
+  z-index: var(--zIndex-ui-styles-popup);
+  min-width: 11rem;
+  // portaled into .layer-ui__wrapper, which is pointer-events: none
+  pointer-events: var(--ui-pointerEvents, all);
+
+  .dropdown-menu-container {
+    gap: 1px;
+  }
+
+  .jayrr-camera-picker__error {
+    margin: 0.15rem 0.45rem 0.4rem;
+  }
+}

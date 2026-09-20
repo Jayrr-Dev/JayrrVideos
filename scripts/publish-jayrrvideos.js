@@ -96,13 +96,7 @@ const publishOne = (spec) => {
   pkg.dependencies = rewriteDeps(pkg.dependencies);
   if (spec.description) {
     pkg.description = spec.description;
-    pkg.keywords = [
-      "jayrrvideos",
-      "whiteboard",
-      "excalidraw",
-      "react",
-      "mit",
-    ];
+    pkg.keywords = ["jayrrvideos", "whiteboard", "excalidraw", "react", "mit"];
   }
   fs.writeFileSync(
     path.join(stage, "package.json"),

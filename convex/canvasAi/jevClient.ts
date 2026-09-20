@@ -192,7 +192,9 @@ export function toTypeSafeQuestions(questions: JevQuestion[]) {
       throw new Error(`Score "${id}" needs at least two levels.`);
     }
     if (question.levels.length > MAX_SCORE_LEVELS) {
-      throw new Error(`Score "${id}" allows at most ${MAX_SCORE_LEVELS} levels.`);
+      throw new Error(
+        `Score "${id}" allows at most ${MAX_SCORE_LEVELS} levels.`,
+      );
     }
     if (question.levels.some(levelIsBlank)) {
       throw new Error(`Score "${id}" has an empty level.`);
@@ -328,7 +330,9 @@ export async function callTypeSafeSystemOne(args: JevEvaluateArgs) {
           ? JSON.stringify(parsed)
           : text;
       throw new Error(
-        `Jev request failed (${response.status})${detail ? `: ${detail}` : "."}`,
+        `Jev request failed (${response.status})${
+          detail ? `: ${detail}` : "."
+        }`,
       );
     }
 
@@ -336,8 +340,8 @@ export async function callTypeSafeSystemOne(args: JevEvaluateArgs) {
       throw new Error("Jev returned no answers.");
     }
 
-    return {
-      ok: true as const,
+    const result: JevEvaluateResult = {
+      ok: true,
       model: parsed.model ?? DEFAULT_MODEL,
       answers: parseAnswers(args.questions, parsed.answers),
       usage:
@@ -349,7 +353,8 @@ export async function callTypeSafeSystemOne(args: JevEvaluateArgs) {
               output_tokens: parsed.usage.output_tokens,
             }
           : undefined,
-    } satisfies JevEvaluateResult;
+    };
+    return result;
   }
 
   throw new Error(lastError);

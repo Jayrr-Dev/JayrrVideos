@@ -17,8 +17,12 @@ import {
 import { PresentPlayer } from "./playPresentDeck";
 import { refocusPresentTrap, startPresentFocusGuard } from "./presentFocus";
 import { getPresentHideFrames } from "./presentHideFrames";
+import { getPresentInteract } from "./presentInteract";
 
 const PRESENTING_CLASS = "jayrr-presenting";
+// A press shorter than this, without drag, counts as "advance".
+const TAP_MS = 250;
+const TAP_MOVE_PX = 6;
 
 const isTypingTarget = (target: EventTarget | null) => {
   if (!(target instanceof HTMLElement)) {
@@ -52,6 +56,7 @@ export const usePresentPlayback = (
   const api = useExcalidrawAPI();
   const player = useRef(new PresentPlayer());
   const [presenting, setPresenting] = useState(false);
+  const [interactive, setInteractive] = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
   const presentingRef = useRef(false);
   const enteredFullscreenRef = useRef(false);
@@ -122,7 +127,7 @@ export const usePresentPlayback = (
 
   const startPresent = useCallback(() => {
     if (!api) {
-      return;
+      return false;
     }
     const nextDeck = deckRef.current;
     if (nextDeck.steps.length === 0) {
@@ -130,7 +135,7 @@ export const usePresentPlayback = (
         message: "Put shapes in frames, then press Present.",
         closable: true,
       });
-      return;
+      return false;
     }
     const appState = api.getAppState();
     restoreRef.current = {
@@ -149,9 +154,10 @@ export const usePresentPlayback = (
           enteredFullscreenRef.current = false;
         });
     }
+    const interact = getPresentInteract();
     api.updateScene({
       appState: {
-        viewModeEnabled: true,
+        viewModeEnabled: !interact,
         zenModeEnabled: true,
         openSidebar: null,
         openMenu: null,
@@ -159,13 +165,18 @@ export const usePresentPlayback = (
       },
       captureUpdate: CaptureUpdateAction.EVENTUALLY,
     });
+    if (interact) {
+      api.setActiveTool({ type: "selection" });
+    }
     if (getPresentHideFrames()) {
       api.updateFrameRendering({ enabled: false });
     }
     // Start on the opening showFrame so the first object is still hidden.
+    setInteractive(interact);
     setPresenting(true);
     applyStep(0, false);
     refocusPresentTrap();
+    return true;
   }, [api, applyStep]);
 
   const step = useCallback(
@@ -240,6 +251,54 @@ export const usePresentPlayback = (
     };
   }, [api, presenting, stopPresent]);
 
+  // Interactive mode: pointer events reach the canvas, so "click to advance"
+  // becomes "quick tap without drag advances". Holds and drags stay normal.
+  useEffect(() => {
+    if (!presenting || !interactive || !api) {
+      return;
+    }
+    let press: { x: number; y: number; time: number } | null = null;
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.button !== 0 || isTypingTarget(event.target)) {
+        press = null;
+        return;
+      }
+      press = { x: event.clientX, y: event.clientY, time: event.timeStamp };
+    };
+    const onPointerUp = (event: PointerEvent) => {
+      const start = press;
+      press = null;
+      if (!start || event.button !== 0) {
+        return;
+      }
+      const moved = Math.hypot(
+        event.clientX - start.x,
+        event.clientY - start.y,
+      );
+      if (event.timeStamp - start.time > TAP_MS || moved > TAP_MOVE_PX) {
+        return;
+      }
+      goNext();
+      // The tap also selected whatever was under it; drop that so the
+      // selection box does not sit on screen.
+      window.setTimeout(() => {
+        if (!presentingRef.current) {
+          return;
+        }
+        api.updateScene({
+          appState: { selectedElementIds: {} },
+          captureUpdate: CaptureUpdateAction.EVENTUALLY,
+        });
+      }, 0);
+    };
+    window.addEventListener("pointerdown", onPointerDown, true);
+    window.addEventListener("pointerup", onPointerUp, true);
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown, true);
+      window.removeEventListener("pointerup", onPointerUp, true);
+    };
+  }, [api, goNext, interactive, presenting]);
+
   useEffect(() => {
     if (!presenting) {
       return;
@@ -290,6 +349,7 @@ export const usePresentPlayback = (
   return {
     deck,
     presenting,
+    interactive,
     stepIndex,
     startPresent,
     stopPresent,

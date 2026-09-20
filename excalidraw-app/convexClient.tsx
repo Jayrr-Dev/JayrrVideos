@@ -1,4 +1,5 @@
-import { ConvexProvider, ConvexReactClient } from "convex/react";
+import { ConvexAuthProvider } from "@convex-dev/auth/react";
+import { ConvexReactClient } from "convex/react";
 
 import { api } from "../convex/_generated/api";
 
@@ -11,10 +12,16 @@ export { api };
 
 export const isConvexLinked = Boolean(convexClient);
 
+export const convexSiteUrl = convexUrl
+  ? convexUrl.replace(/\.convex\.cloud$/, ".convex.site")
+  : null;
+
 export const JayrrConvexProvider = ({ children }: { children: ReactNode }) => {
   if (!convexClient) {
     return children;
   }
 
-  return <ConvexProvider client={convexClient}>{children}</ConvexProvider>;
+  return (
+    <ConvexAuthProvider client={convexClient}>{children}</ConvexAuthProvider>
+  );
 };

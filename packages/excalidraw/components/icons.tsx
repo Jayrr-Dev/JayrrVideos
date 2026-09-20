@@ -173,8 +173,6 @@ export const LockedIcon = handdrawnUIIcon("lock");
 
 export const LockedIconFilled = handdrawnUIIcon("lock");
 
-export const timelineIcon = handdrawnUIIcon("timeline");
-
 // custom
 export const WelcomeScreenMenuArrow = createIcon(
   <>

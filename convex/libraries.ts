@@ -1,7 +1,11 @@
+import { v } from "convex/values";
+
 import { mutation, query } from "./_generated/server";
+
+import { getCurrentUser } from "./lib/auth";
+
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { v } from "convex/values";
 
 const MAX_NAME_LENGTH = 80;
 const MAX_PAYLOAD_BYTES = 900_000;
@@ -23,12 +27,6 @@ const assetDoc = v.object({
   createdAt: v.number(),
 });
 
-const requireOwnerKey = (ownerKey: string) => {
-  if (!ownerKey.trim()) {
-    throw new Error("Missing owner key");
-  }
-};
-
 const normalizeName = (name: string) => {
   const trimmed = name.trim();
   if (!trimmed) {
@@ -43,23 +41,23 @@ const normalizeName = (name: string) => {
 const getOwnedLibrary = async (
   ctx: QueryCtx | MutationCtx,
   libraryId: Id<"libraries">,
-  ownerKey: string,
+  userId: Id<"users">,
 ) => {
   const library = await ctx.db.get(libraryId);
-  if (!library || library.ownerKey !== ownerKey) {
+  if (!library || library.userId !== userId) {
     throw new Error("Library not found");
   }
   return library;
 };
 
 export const list = query({
-  args: { ownerKey: v.string() },
+  args: {},
   returns: v.array(libraryDoc),
-  handler: async (ctx, args) => {
-    requireOwnerKey(args.ownerKey);
+  handler: async (ctx) => {
+    const user = await getCurrentUser(ctx);
     const rows = await ctx.db
       .query("libraries")
-      .withIndex("by_ownerKey", (q) => q.eq("ownerKey", args.ownerKey))
+      .withIndex("by_userId", (q) => q.eq("userId", user._id))
       .collect();
     return rows
       .map((row) => ({
@@ -74,14 +72,13 @@ export const list = query({
 
 export const get = query({
   args: {
-    ownerKey: v.string(),
     libraryId: v.id("libraries"),
   },
   returns: v.union(libraryDoc, v.null()),
   handler: async (ctx, args) => {
-    requireOwnerKey(args.ownerKey);
+    const user = await getCurrentUser(ctx);
     const library = await ctx.db.get(args.libraryId);
-    if (!library || library.ownerKey !== args.ownerKey) {
+    if (!library || library.userId !== user._id) {
       return null;
     }
     return {
@@ -95,15 +92,15 @@ export const get = query({
 
 export const create = mutation({
   args: {
-    ownerKey: v.string(),
     name: v.string(),
   },
   returns: v.id("libraries"),
   handler: async (ctx, args) => {
-    requireOwnerKey(args.ownerKey);
+    const user = await getCurrentUser(ctx);
     const name = normalizeName(args.name);
     return await ctx.db.insert("libraries", {
-      ownerKey: args.ownerKey,
+      ownerKey: user._id,
+      userId: user._id,
       name,
       assetCount: 0,
       updatedAt: Date.now(),
@@ -113,14 +110,13 @@ export const create = mutation({
 
 export const rename = mutation({
   args: {
-    ownerKey: v.string(),
     libraryId: v.id("libraries"),
     name: v.string(),
   },
   returns: v.id("libraries"),
   handler: async (ctx, args) => {
-    requireOwnerKey(args.ownerKey);
-    const library = await getOwnedLibrary(ctx, args.libraryId, args.ownerKey);
+    const user = await getCurrentUser(ctx);
+    const library = await getOwnedLibrary(ctx, args.libraryId, user._id);
     await ctx.db.patch(library._id, {
       name: normalizeName(args.name),
       updatedAt: Date.now(),
@@ -131,13 +127,12 @@ export const rename = mutation({
 
 export const remove = mutation({
   args: {
-    ownerKey: v.string(),
     libraryId: v.id("libraries"),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    requireOwnerKey(args.ownerKey);
-    const library = await getOwnedLibrary(ctx, args.libraryId, args.ownerKey);
+    const user = await getCurrentUser(ctx);
+    const library = await getOwnedLibrary(ctx, args.libraryId, user._id);
     const assets = await ctx.db
       .query("libraryAssets")
       .withIndex("by_library", (q) => q.eq("libraryId", library._id))
@@ -152,14 +147,13 @@ export const remove = mutation({
 
 export const listAssets = query({
   args: {
-    ownerKey: v.string(),
     libraryId: v.id("libraries"),
   },
   returns: v.array(assetDoc),
   handler: async (ctx, args) => {
-    requireOwnerKey(args.ownerKey);
+    const user = await getCurrentUser(ctx);
     const library = await ctx.db.get(args.libraryId);
-    if (!library || library.ownerKey !== args.ownerKey) {
+    if (!library || library.userId !== user._id) {
       return [];
     }
     const rows = await ctx.db
@@ -182,7 +176,6 @@ export const listAssets = query({
 
 export const addAsset = mutation({
   args: {
-    ownerKey: v.string(),
     libraryId: v.id("libraries"),
     name: v.optional(v.string()),
     elementsJson: v.string(),
@@ -190,8 +183,8 @@ export const addAsset = mutation({
   },
   returns: v.id("libraryAssets"),
   handler: async (ctx, args) => {
-    requireOwnerKey(args.ownerKey);
-    const library = await getOwnedLibrary(ctx, args.libraryId, args.ownerKey);
+    const user = await getCurrentUser(ctx);
+    const library = await getOwnedLibrary(ctx, args.libraryId, user._id);
     const payloadSize =
       args.elementsJson.length + (args.filesJson?.length ?? 0);
     if (payloadSize > MAX_PAYLOAD_BYTES) {
@@ -200,7 +193,8 @@ export const addAsset = mutation({
     const createdAt = Date.now();
     const assetId = await ctx.db.insert("libraryAssets", {
       libraryId: library._id,
-      ownerKey: args.ownerKey,
+      ownerKey: user._id,
+      userId: user._id,
       name: args.name?.trim() ?? "",
       itemId: crypto.randomUUID(),
       elementsJson: args.elementsJson,
@@ -217,17 +211,16 @@ export const addAsset = mutation({
 
 export const removeAsset = mutation({
   args: {
-    ownerKey: v.string(),
     assetId: v.id("libraryAssets"),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    requireOwnerKey(args.ownerKey);
+    const user = await getCurrentUser(ctx);
     const asset = await ctx.db.get(args.assetId);
-    if (!asset || asset.ownerKey !== args.ownerKey) {
+    if (!asset || asset.userId !== user._id) {
       throw new Error("Asset not found");
     }
-    const library = await getOwnedLibrary(ctx, asset.libraryId, args.ownerKey);
+    const library = await getOwnedLibrary(ctx, asset.libraryId, user._id);
     await ctx.db.delete(asset._id);
     await ctx.db.patch(library._id, {
       assetCount: Math.max(0, library.assetCount - 1),

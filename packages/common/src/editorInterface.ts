@@ -29,7 +29,7 @@ export const MQ_MAX_TABLET = 1180; // ipad air
 export const MQ_MIN_WIDTH_DESKTOP = 1440;
 
 // sidebar
-export const MQ_RIGHT_SIDEBAR_MIN_WIDTH = 1229;
+export const MQ_RIGHT_SIDEBAR_MIN_WIDTH = 1265;
 
 // -----------------------------------------------------------------------------
 

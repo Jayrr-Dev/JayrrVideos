@@ -110,6 +110,16 @@ html.jayrr-presenting {
     background: transparent;
     pointer-events: auto;
   }
+
+  // Interactive present: let pointer events reach the canvas.
+  .jayrr-present-trap.is-passthrough {
+    pointer-events: none;
+  }
+}
+
+html.jayrr-presenting.jayrr-present-cursor-idle,
+html.jayrr-presenting.jayrr-present-cursor-idle * {
+  cursor: none !important;
 }
 
 .plus-banner {

@@ -20,17 +20,14 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { isFrameLikeElement } from "@excalidraw/element";
+import { isFrameLikeElement, isTextElement } from "@excalidraw/element";
 import {
   CaptureUpdateAction,
   newElementWith,
   useExcalidrawAPI,
 } from "@excalidraw/excalidraw";
 import { useExcalidrawContainer } from "@excalidraw/excalidraw/components/App";
-import { FilledButton } from "@excalidraw/excalidraw/components/FilledButton";
-import { Island } from "@excalidraw/excalidraw/components/Island";
-import { Switch } from "@excalidraw/excalidraw/components/Switch";
-import { Tooltip } from "@excalidraw/excalidraw/components/Tooltip";
+
 import {
   checkIcon,
   chevronDownIcon,
@@ -48,11 +45,20 @@ import {
   type ReactNode,
 } from "react";
 
+import { FilledButton, Island, Switch, Tooltip } from "../components/ui";
+
+import { listJayrrMics, unlockJayrrMics } from "../camera/jayrrCameraStreams";
+import { isConvexLinked } from "../convexClient";
+
 import {
   defaultPresentTranslation,
+  isPresentMove,
   JAYRR_PRESENT_TRANSLATION_TIME_DEFAULT,
   JAYRR_PRESENT_TRANSLATION_TIME_MAX,
   JAYRR_PRESENT_TRANSLATION_TIME_MIN,
+  JAYRR_PRESENT_TYPE_TIME_DEFAULT,
+  JAYRR_PRESENT_TYPE_TIME_MAX,
+  JAYRR_PRESENT_TYPE_TIME_MIN,
   JAYRR_PRESENT_ZOOM_PERCENT_DEFAULT,
   JAYRR_PRESENT_ZOOM_PERCENT_MAX,
   JAYRR_PRESENT_ZOOM_PERCENT_MIN,
@@ -64,6 +70,7 @@ import {
   writePresentMotion,
   writePresentOrder,
   writePresentPresence,
+  writePresentTextEffect,
   writePresentTranslation,
   writePresentZoomPercent,
   type PresentDeck,
@@ -72,6 +79,8 @@ import {
   type PresentFrame,
   type PresentMotion,
   type PresentPresence,
+  type PresentTextEffect,
+  type PresentTextEffectKind,
   type PresentTranslation,
 } from "./buildPresentDeck";
 import {
@@ -82,21 +91,45 @@ import {
   getPresentHideFrames,
   setPresentHideFrames,
 } from "./presentHideFrames";
+import { getPresentInteract, setPresentInteract } from "./presentInteract";
+import {
+  getPresentMic,
+  PRESENT_MIC_DEFAULT,
+  PRESENT_MIC_NONE,
+  setPresentMic,
+} from "./presentMic";
 import {
   getPresentDefaultMotion,
   PRESENT_MOTION_LABEL,
   PRESENT_MOTIONS,
   setPresentDefaultMotion,
 } from "./presentMotion";
+import { PresentMoveIcon } from "./presentMoveIcon";
 import {
   PRESENT_EASING_LABEL,
   PRESENT_EASINGS,
+  PRESENT_PATH_KIND_LABEL,
+  PRESENT_PATH_KINDS,
   startPresentTranslationPlace,
 } from "./presentTranslation";
 
 import "./JayrrPresentPanel.scss";
 
 type ObjectOrderMap = Record<string, string[]>;
+
+const recordIcon = (
+  <svg aria-hidden="true" focusable="false" viewBox="0 0 20 20">
+    <circle
+      cx="10"
+      cy="10"
+      r="7.15"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.3"
+    />
+    <circle cx="10" cy="10" r="3.55" fill="#e10600" />
+  </svg>
+);
 
 const focusTargetIcon = (
   <svg aria-hidden="true" focusable="false" viewBox="0 0 20 20">
@@ -147,7 +180,12 @@ const focusZoomIcon = (
   </svg>
 );
 
-type PresentMenuPane = "transitions" | "motion" | "translation" | "exit";
+type PresentMenuPane =
+  | "transitions"
+  | "motion"
+  | "translation"
+  | "exit"
+  | "text";
 
 const PresentEffectMenu = ({
   className,
@@ -158,6 +196,8 @@ const PresentEffectMenu = ({
   zoomPercent,
   skip,
   hide,
+  text,
+  textEffect,
   disabled,
   placeIds,
   onEffect,
@@ -166,6 +206,7 @@ const PresentEffectMenu = ({
   onTranslation,
   onZoomPercent,
   onPresence,
+  onTextEffect,
   children,
 }: {
   className?: string;
@@ -176,6 +217,8 @@ const PresentEffectMenu = ({
   zoomPercent?: number | null;
   skip?: boolean;
   hide?: boolean;
+  text?: boolean;
+  textEffect?: PresentTextEffect | null;
   disabled: boolean;
   placeIds?: readonly string[];
   onEffect: (effect: PresentEffect | null) => void;
@@ -184,19 +227,24 @@ const PresentEffectMenu = ({
   onTranslation?: (translation: PresentTranslation | null) => void;
   onZoomPercent?: (zoomPercent: number) => void;
   onPresence?: (presence: PresentPresence) => void;
+  onTextEffect?: (textEffect: PresentTextEffect | null) => void;
   children: ReactNode;
 }) => {
   const { container } = useExcalidrawContainer();
   const [zoomKind, setZoomKind] = useState<"zoom" | "scale" | null>(null);
+  const [typeKind, setTypeKind] = useState<PresentTextEffectKind | null>(null);
   const [moveOpen, setMoveOpen] = useState(false);
   const [pane, setPane] = useState<PresentMenuPane>("transitions");
   const inputRef = useRef<HTMLInputElement>(null);
+  const typeInputRef = useRef<HTMLInputElement>(null);
   const currentZoom = zoomPercent ?? JAYRR_PRESENT_ZOOM_PERCENT_DEFAULT;
   const [zoomDraft, setZoomDraft] = useState(String(currentZoom));
-  const move = translation?.kind === "move" ? translation : null;
+  const move = isPresentMove(translation) ? translation : null;
+  const currentTypeTime = textEffect?.time ?? JAYRR_PRESENT_TYPE_TIME_DEFAULT;
   const [timeDraft, setTimeDraft] = useState(
     String(move?.time ?? JAYRR_PRESENT_TRANSLATION_TIME_DEFAULT),
   );
+  const [typeDraft, setTypeDraft] = useState(String(currentTypeTime));
 
   useEffect(() => {
     setZoomDraft(String(currentZoom));
@@ -205,6 +253,18 @@ const PresentEffectMenu = ({
   useEffect(() => {
     setTimeDraft(String(move?.time ?? JAYRR_PRESENT_TRANSLATION_TIME_DEFAULT));
   }, [move?.time]);
+
+  useEffect(() => {
+    if (!typeKind) {
+      setTypeDraft(String(currentTypeTime));
+      return;
+    }
+    const time =
+      textEffect?.kind === typeKind
+        ? textEffect.time
+        : JAYRR_PRESENT_TYPE_TIME_DEFAULT;
+    setTypeDraft(String(time));
+  }, [currentTypeTime, textEffect?.kind, textEffect?.time, typeKind]);
 
   const commitZoomPercent = (kind: "zoom" | "scale") => {
     const next = Number(zoomDraft);
@@ -286,18 +346,118 @@ const PresentEffectMenu = ({
       </Popover.Root>
     );
   };
+  const pickTextEffect = (kind: PresentTextEffectKind) => {
+    onTextEffect?.({
+      kind,
+      time:
+        textEffect?.kind === kind
+          ? textEffect.time
+          : JAYRR_PRESENT_TYPE_TIME_DEFAULT,
+    });
+  };
+  const commitTypeTime = (kind: PresentTextEffectKind) => {
+    const fallback =
+      textEffect?.kind === kind
+        ? textEffect.time
+        : JAYRR_PRESENT_TYPE_TIME_DEFAULT;
+    const next = Number(typeDraft);
+    if (!Number.isFinite(next)) {
+      setTypeDraft(String(fallback));
+      return;
+    }
+    const clamped = Math.min(
+      JAYRR_PRESENT_TYPE_TIME_MAX,
+      Math.max(JAYRR_PRESENT_TYPE_TIME_MIN, Math.round(next)),
+    );
+    setTypeDraft(String(clamped));
+    onTextEffect?.({ kind, time: clamped });
+  };
+  const typeControl = (kind: PresentTextEffectKind) => {
+    if (!onTextEffect) {
+      return null;
+    }
+    const label = kind === "typewriter" ? "Typewriter" : "Words";
+    const time =
+      textEffect?.kind === kind
+        ? textEffect.time
+        : JAYRR_PRESENT_TYPE_TIME_DEFAULT;
+    return (
+      <Popover.Root
+        open={typeKind === kind}
+        onOpenChange={(open) => setTypeKind(open ? kind : null)}
+      >
+        <Popover.Trigger asChild>
+          <button
+            type="button"
+            className="jayrr-present__zoom-gear"
+            aria-label={`${label} type time`}
+            title={`${time} ms`}
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={() => pickTextEffect(kind)}
+          >
+            {settingsIcon}
+          </button>
+        </Popover.Trigger>
+        <Popover.Portal container={container}>
+          <Popover.Content
+            side="left"
+            align="center"
+            sideOffset={1}
+            className="jayrr-present__zoom-box jayrr-present__move-box"
+            data-prevent-outside-click
+            onOpenAutoFocus={(event) => {
+              event.preventDefault();
+              typeInputRef.current?.focus();
+              typeInputRef.current?.select();
+            }}
+            onCloseAutoFocus={(event) => event.preventDefault()}
+            onPointerDown={(event) => event.stopPropagation()}
+          >
+            <label className="jayrr-present__move-field">
+              Type time
+              <span className="jayrr-present__zoom-field">
+                <input
+                  ref={typeKind === kind ? typeInputRef : undefined}
+                  type="number"
+                  className="jayrr-present__settings-select jayrr-present__zoom-input"
+                  min={JAYRR_PRESENT_TYPE_TIME_MIN}
+                  max={JAYRR_PRESENT_TYPE_TIME_MAX}
+                  step={50}
+                  value={typeDraft}
+                  aria-label={`${label} type time`}
+                  onChange={(event) => setTypeDraft(event.target.value)}
+                  onBlur={() => commitTypeTime(kind)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      commitTypeTime(kind);
+                    }
+                  }}
+                />
+                ms
+              </span>
+            </label>
+          </Popover.Content>
+        </Popover.Portal>
+      </Popover.Root>
+    );
+  };
   const commitMove = (patch: Partial<PresentTranslation>) => {
     const base = move ?? defaultPresentTranslation();
     const nextTime = patch.time ?? base.time;
-    onTranslation?.({
+    const next: PresentTranslation = {
       ...base,
       ...patch,
-      kind: "move",
+      kind: patch.kind ?? base.kind,
       time: Math.min(
         JAYRR_PRESENT_TRANSLATION_TIME_MAX,
         Math.max(JAYRR_PRESENT_TRANSLATION_TIME_MIN, Math.round(nextTime)),
       ),
-    });
+    };
+    if (next.pathKind === "line") {
+      delete next.path;
+    }
+    onTranslation?.(next);
   };
   const moveControl = () => {
     if (!onTranslation) {
@@ -382,15 +542,42 @@ const PresentEffectMenu = ({
                 ))}
               </select>
             </label>
+            <label className="jayrr-present__move-field">
+              Call path
+              <select
+                className="jayrr-present__settings-select"
+                value={move?.pathKind ?? "line"}
+                aria-label="Move call path"
+                onChange={(event) => {
+                  const pathKind = PRESENT_PATH_KINDS.find(
+                    (item) => item === event.target.value,
+                  );
+                  if (!pathKind) {
+                    return;
+                  }
+                  if (pathKind === (move?.pathKind ?? "line")) {
+                    return;
+                  }
+                  commitMove({ pathKind, path: undefined });
+                }}
+              >
+                {PRESENT_PATH_KINDS.map((item) => (
+                  <option key={item} value={item}>
+                    {PRESENT_PATH_KIND_LABEL[item]}
+                  </option>
+                ))}
+              </select>
+            </label>
             <button
               type="button"
               className="jayrr-present__move-position"
               onClick={() => {
+                const pathKind = move?.pathKind ?? "line";
                 if (!move) {
                   onTranslation(defaultPresentTranslation());
                 }
                 if (placeIds && placeIds.length > 0) {
-                  startPresentTranslationPlace(placeIds);
+                  startPresentTranslationPlace(placeIds, pathKind);
                 }
                 setMoveOpen(false);
               }}
@@ -460,8 +647,13 @@ const PresentEffectMenu = ({
         </span>
       ) : null}
       {move && !parked ? (
-        <span className="jayrr-present__motion-tag" title="Move">
-          Move
+        <span
+          className="jayrr-present__move-mark"
+          role="img"
+          aria-label={move.kind === "showMove" ? "Show n Move" : "Move"}
+          title={move.kind === "showMove" ? "Show n Move" : "Move"}
+        >
+          <PresentMoveIcon />
         </span>
       ) : null}
       {skip ? (
@@ -474,6 +666,14 @@ const PresentEffectMenu = ({
           Hide
         </span>
       ) : null}
+      {textEffect && !parked ? (
+        <span
+          className="jayrr-present__motion-tag"
+          title={textEffect.kind === "typewriter" ? "Typewriter" : "Words"}
+        >
+          {textEffect.kind === "typewriter" ? "Typewriter" : "Words"}
+        </span>
+      ) : null}
     </>
   );
   if (disabled) {
@@ -482,14 +682,17 @@ const PresentEffectMenu = ({
   const panes: { id: PresentMenuPane; label: string }[] = [
     { id: "transitions", label: "Transitions" },
   ];
-  if (onMotion && !parked) {
-    panes.push({ id: "motion", label: "Motion-in" });
-  }
   if (onTranslation && !parked) {
     panes.push({ id: "translation", label: "Translation" });
   }
+  if (onMotion && !parked) {
+    panes.push({ id: "motion", label: "Motion-in" });
+  }
   if (onExit && !parked) {
     panes.push({ id: "exit", label: "Motion-out" });
+  }
+  if (text && onTextEffect && !parked) {
+    panes.push({ id: "text", label: "Text-effect" });
   }
   const activePane = panes.some((item) => item.id === pane)
     ? pane
@@ -621,6 +824,7 @@ const PresentEffectMenu = ({
                     motion === null || motion === undefined,
                     () => onMotion(null),
                   )}
+                  {option("None", motion === "none", () => onMotion("none"))}
                   {PRESENT_MOTIONS.map((item) =>
                     option(
                       PRESENT_MOTION_LABEL[item],
@@ -637,16 +841,30 @@ const PresentEffectMenu = ({
                   {option("None", !move, () => onTranslation(null))}
                   {option(
                     "Move",
-                    Boolean(move),
-                    () => onTranslation(move ?? defaultPresentTranslation()),
-                    moveControl(),
+                    move?.kind === "move",
+                    () =>
+                      onTranslation({
+                        ...(move ?? defaultPresentTranslation()),
+                        kind: "move",
+                      }),
+                    move?.kind === "move" ? moveControl() : undefined,
+                  )}
+                  {option(
+                    "Show n Move",
+                    move?.kind === "showMove",
+                    () =>
+                      onTranslation({
+                        ...(move ?? defaultPresentTranslation("showMove")),
+                        kind: "showMove",
+                      }),
+                    move?.kind === "showMove" ? moveControl() : undefined,
                   )}
                 </>
               ) : null}
               {activePane === "exit" && onExit ? (
                 <>
                   {option("None", !exit, () => onExit(null))}
-                  {PRESENT_MOTIONS.map((item) =>
+                  {PRESENT_MOTIONS.map((item: PresentExit) =>
                     option(
                       PRESENT_MOTION_LABEL[item],
                       exit === item,
@@ -654,6 +872,23 @@ const PresentEffectMenu = ({
                       undefined,
                       `out-${item}`,
                     ),
+                  )}
+                </>
+              ) : null}
+              {activePane === "text" && onTextEffect ? (
+                <>
+                  {option("None", !textEffect, () => onTextEffect(null))}
+                  {option(
+                    "Typewriter",
+                    textEffect?.kind === "typewriter",
+                    () => pickTextEffect("typewriter"),
+                    typeControl("typewriter"),
+                  )}
+                  {option(
+                    "Words",
+                    textEffect?.kind === "words",
+                    () => pickTextEffect("words"),
+                    typeControl("words"),
                   )}
                 </>
               ) : null}
@@ -671,11 +906,44 @@ const PresentSettingsPopover = () => {
   const [open, setOpen] = useState(false);
   const [hideFrames, setHideFrames] = useState(getPresentHideFrames);
   const [customCursor, setCustomCursor] = useState(getPresentCustomCursor);
+  const [interact, setInteract] = useState(getPresentInteract);
   const [motion, setMotion] = useState(getPresentDefaultMotion);
+  const [micId, setMicId] = useState(getPresentMic);
+  const [mics, setMics] = useState<MediaDeviceInfo[]>([]);
+  const savedMicMissing =
+    micId !== PRESENT_MIC_DEFAULT &&
+    micId !== PRESENT_MIC_NONE &&
+    !mics.some((device) => device.deviceId === micId);
 
   useEffect(() => {
     api?.updateFrameRendering({ enabled: true });
   }, [api]);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    const ownerWindow = container?.ownerDocument.defaultView ?? window;
+    let cancelled = false;
+    const load = async () => {
+      let devices: MediaDeviceInfo[] = [];
+      try {
+        devices = await unlockJayrrMics(ownerWindow);
+      } catch {
+        devices = await listJayrrMics();
+      }
+      if (!cancelled) {
+        setMics(devices);
+      }
+    };
+    void load();
+    const media = ownerWindow.navigator.mediaDevices;
+    media?.addEventListener("devicechange", load);
+    return () => {
+      cancelled = true;
+      media?.removeEventListener("devicechange", load);
+    };
+  }, [container, open]);
 
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
@@ -703,7 +971,7 @@ const PresentSettingsPopover = () => {
             <div className="jayrr-present__settings-head">
               <h3 className="jayrr-present__settings-title">Settings</h3>
               <Tooltip
-                label="Motion is the default enter for every object. Right-click a row for transition, motion-in, or motion-out. Hide frames removes borders and names in Present. Big cursor shows an oversized pointer with a click burst."
+                label="Motion is the default enter for every object. Right-click a row for transition, motion-in, motion-out, or text-effect on text. Hide frames removes borders and names in Present. Big cursor shows an oversized pointer with a click burst. Interact keeps shapes draggable while presenting; a quick tap still advances. Mic is the voice recorded with Present."
                 long
                 position="top"
               >
@@ -722,6 +990,7 @@ const PresentSettingsPopover = () => {
                   setPresentDefaultMotion(next);
                 }}
               >
+                <option value="none">{PRESENT_MOTION_LABEL.none}</option>
                 {PRESENT_MOTIONS.map((item) => (
                   <option key={item} value={item}>
                     {PRESENT_MOTION_LABEL[item]}
@@ -741,6 +1010,17 @@ const PresentSettingsPopover = () => {
               />
             </div>
             <div className="jayrr-present__settings-row">
+              <label htmlFor="presentInteract">Interact</label>
+              <Switch
+                name="presentInteract"
+                checked={interact}
+                onChange={(checked) => {
+                  setInteract(checked);
+                  setPresentInteract(checked);
+                }}
+              />
+            </div>
+            <div className="jayrr-present__settings-row">
               <label htmlFor="customCursor">Big cursor</label>
               <Switch
                 name="customCursor"
@@ -750,6 +1030,30 @@ const PresentSettingsPopover = () => {
                   setPresentCustomCursor(checked);
                 }}
               />
+            </div>
+            <div className="jayrr-present__settings-row">
+              <label htmlFor="presentMic">Mic</label>
+              <select
+                id="presentMic"
+                className="jayrr-present__settings-select"
+                value={micId}
+                onChange={(event) => {
+                  const next = event.target.value;
+                  setMicId(next);
+                  setPresentMic(next);
+                }}
+              >
+                <option value={PRESENT_MIC_DEFAULT}>Default</option>
+                <option value={PRESENT_MIC_NONE}>None</option>
+                {savedMicMissing ? (
+                  <option value={micId}>Saved microphone</option>
+                ) : null}
+                {mics.map((device, index) => (
+                  <option key={device.deviceId} value={device.deviceId}>
+                    {device.label || `Microphone ${index + 1}`}
+                  </option>
+                ))}
+              </select>
             </div>
           </Island>
         </Popover.Content>
@@ -1007,6 +1311,8 @@ const SortableObjectBlock = ({
   zoomPercent,
   skip,
   hide,
+  text,
+  textEffect,
   placeIds,
   onSelect,
   onStartRename,
@@ -1019,6 +1325,7 @@ const SortableObjectBlock = ({
   onTranslation,
   onZoomPercent,
   onPresence,
+  onTextEffect,
 }: {
   id: string;
   index: number | null;
@@ -1034,6 +1341,8 @@ const SortableObjectBlock = ({
   zoomPercent: number | null;
   skip: boolean;
   hide: boolean;
+  text: boolean;
+  textEffect: PresentTextEffect | null;
   placeIds: readonly string[];
   onSelect: () => void;
   onStartRename: () => void;
@@ -1046,6 +1355,7 @@ const SortableObjectBlock = ({
   onTranslation: (translation: PresentTranslation | null) => void;
   onZoomPercent: (zoomPercent: number) => void;
   onPresence: (presence: PresentPresence) => void;
+  onTextEffect: (textEffect: PresentTextEffect | null) => void;
 }) => {
   const {
     attributes,
@@ -1075,6 +1385,8 @@ const SortableObjectBlock = ({
         zoomPercent={zoomPercent}
         skip={skip}
         hide={hide}
+        text={text}
+        textEffect={textEffect}
         disabled={renaming}
         placeIds={placeIds}
         onEffect={onEffect}
@@ -1083,6 +1395,7 @@ const SortableObjectBlock = ({
         onTranslation={onTranslation}
         onZoomPercent={onZoomPercent}
         onPresence={onPresence}
+        onTextEffect={onTextEffect}
       >
         <EditablePresentName
           index={index}
@@ -1106,16 +1419,20 @@ const SortableObjectBlock = ({
 export const JayrrPresentPanel = ({
   deck,
   presenting,
+  uploading,
   stepIndex,
   selectedElementIds,
   startPresent,
+  startRecordPresent,
   stopPresent,
 }: {
   deck: PresentDeck;
   presenting: boolean;
+  uploading: boolean;
   stepIndex: number;
   selectedElementIds: Record<string, boolean>;
   startPresent: () => void;
+  startRecordPresent: () => void;
   stopPresent: () => void;
 }) => {
   const api = useExcalidrawAPI();
@@ -1309,6 +1626,29 @@ export const JayrrPresentPanel = ({
     [api],
   );
 
+  const persistPresentTextEffect = useCallback(
+    (ids: readonly string[], textEffect: PresentTextEffect | null) => {
+      if (!api || ids.length === 0) {
+        return;
+      }
+      const targets = new Set(ids);
+      const all = api.getSceneElementsIncludingDeleted();
+      const next = all.map((element) => {
+        if (!targets.has(element.id) || !isTextElement(element)) {
+          return element;
+        }
+        return newElementWith(element, {
+          customData: writePresentTextEffect(element, textEffect),
+        });
+      });
+      api.updateScene({
+        elements: next,
+        captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+      });
+    },
+    [api],
+  );
+
   const persistPresentPresence = useCallback(
     (ids: readonly string[], presence: PresentPresence) => {
       if (!api || ids.length === 0) {
@@ -1485,13 +1825,21 @@ export const JayrrPresentPanel = ({
     setActiveId(null);
   };
 
+  const textIds = new Set<string>();
+  for (const element of api?.getSceneElements() ?? []) {
+    if (isTextElement(element)) {
+      textIds.add(element.id);
+    }
+  }
+
   return (
     <div className="jayrr-present">
       <div className="jayrr-present__title-row">
         <h2 className="jayrr-present__title">Present</h2>
         <span className="jayrr-present__sr">
           Nested reveal order for frames and the shapes inside them. Drag a
-          block to reorder. Right-click a row to set its transition.
+          block to reorder. Right-click a row to set its transition. Text rows
+          also have text-effect.
         </span>
         <PresentSettingsPopover />
       </div>
@@ -1507,16 +1855,29 @@ export const JayrrPresentPanel = ({
             Exit
           </FilledButton>
         ) : (
-          <FilledButton
-            color="primary"
-            label="Present"
-            icon={presentationIcon}
-            onClick={startPresent}
-            fullWidth
-            disabled={deck.frames.length === 0}
-          >
-            Present
-          </FilledButton>
+          <>
+            <FilledButton
+              color="primary"
+              label="Present"
+              icon={presentationIcon}
+              onClick={startPresent}
+              disabled={deck.frames.length === 0}
+            >
+              Present
+            </FilledButton>
+            <FilledButton
+              color="danger"
+              label="Record"
+              icon={recordIcon}
+              onClick={startRecordPresent}
+              disabled={
+                deck.frames.length === 0 || uploading || !isConvexLinked
+              }
+              status={uploading ? "loading" : null}
+            >
+              Record
+            </FilledButton>
+          </>
         )}
       </div>
       {frameIds.length === 0 ? (
@@ -1627,6 +1988,13 @@ export const JayrrPresentPanel = ({
                                   zoomPercent={object.zoomPercent}
                                   skip={object.skip}
                                   hide={object.hide}
+                                  text={
+                                    object.memberIds.length > 0 &&
+                                    object.memberIds.every((id) =>
+                                      textIds.has(id),
+                                    )
+                                  }
+                                  textEffect={object.textEffect}
                                   placeIds={object.memberIds}
                                   onSelect={() => selectId(object.id)}
                                   onStartRename={() =>
@@ -1668,6 +2036,12 @@ export const JayrrPresentPanel = ({
                                       presence,
                                     )
                                   }
+                                  onTextEffect={(textEffect) =>
+                                    persistPresentTextEffect(
+                                      object.memberIds,
+                                      textEffect,
+                                    )
+                                  }
                                 />
                               );
                             });
@@ -1687,29 +2061,61 @@ export const JayrrPresentPanel = ({
           {stepCaption(deck, stepIndex)}
         </p>
       ) : null}
+      {uploading ? (
+        <p className="jayrr-present__status" aria-live="polite">
+          Saving recording…
+        </p>
+      ) : null}
     </div>
   );
 };
 
 export const JayrrPresentHud = ({
   caption,
+  recording = false,
+  paused = false,
+  onPause,
+  onResume,
   onExit,
 }: {
   caption: string;
+  recording?: boolean;
+  paused?: boolean;
+  onPause?: () => void;
+  onResume?: () => void;
   onExit: () => void;
 }) => {
   return (
     <div
-      className="jayrr-present-hud"
+      className={
+        recording
+          ? paused
+            ? "jayrr-present-hud is-recording is-paused"
+            : "jayrr-present-hud is-recording"
+          : "jayrr-present-hud"
+      }
       onClick={(event) => event.stopPropagation()}
       onMouseDown={(event) => event.stopPropagation()}
     >
+      {recording ? (
+        <span className="jayrr-present-hud__dot" aria-hidden="true" />
+      ) : null}
       <span>{caption}</span>
-      <span className="jayrr-present-hud__keys">
-        → next · ← back · Esc exit
-      </span>
+      {recording ? (
+        <button
+          type="button"
+          onClick={paused ? onResume : onPause}
+          aria-label={paused ? "Resume recording" : "Pause recording"}
+        >
+          {paused ? "Play" : "Pause"}
+        </button>
+      ) : (
+        <span className="jayrr-present-hud__keys">
+          → next · ← back · Esc stop
+        </span>
+      )}
       <button type="button" onClick={onExit}>
-        Exit
+        {recording ? "Stop" : "Exit"}
       </button>
     </div>
   );

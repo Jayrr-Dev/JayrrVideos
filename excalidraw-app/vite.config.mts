@@ -1,13 +1,27 @@
 import path from "path";
 import { defineConfig, loadEnv } from "vite";
+
 import react from "@vitejs/plugin-react";
-import svgrPlugin from "vite-plugin-svgr";
-import { ViteEjsPlugin } from "vite-plugin-ejs";
-import { VitePWA } from "vite-plugin-pwa";
 import checker from "vite-plugin-checker";
+import { ViteEjsPlugin } from "vite-plugin-ejs";
 import { createHtmlPlugin } from "vite-plugin-html";
+import { VitePWA } from "vite-plugin-pwa";
 import Sitemap from "vite-plugin-sitemap";
+import svgrPlugin from "vite-plugin-svgr";
 import { woff2BrowserPlugin } from "../scripts/woff2/woff2-vite-plugins";
+import { sttStreamProxy } from "./sttStreamProxy";
+
+process.on("uncaughtException", (error) => {
+  if (
+    error instanceof Error &&
+    "code" in error &&
+    error.code === "ERR_CLOSED_SERVER"
+  ) {
+    return;
+  }
+  throw error;
+});
+
 export default defineConfig(({ mode }) => {
   // To load .env variables
   const envVars = loadEnv(mode, `../`);
@@ -22,7 +36,15 @@ export default defineConfig(({ mode }) => {
     //more located in parallel with the vite.config.ts file but in parent dir
     envDir: "../",
     resolve: {
+      dedupe: ["react", "react-dom", "convex", "convex/react"],
       alias: [
+        {
+          find: /^convex\/react$/,
+          replacement: path.resolve(
+            __dirname,
+            "../node_modules/convex/dist/esm/react/index.js",
+          ),
+        },
         {
           find: /^@excalidraw\/common$/,
           replacement: path.resolve(
@@ -132,6 +154,7 @@ export default defineConfig(({ mode }) => {
       assetsInlineLimit: 0,
     },
     plugins: [
+      sttStreamProxy(),
       Sitemap({
         hostname: "https://excalidraw.com",
         outDir: "build",
@@ -321,5 +344,13 @@ export default defineConfig(({ mode }) => {
       }),
     ],
     publicDir: "../public",
+    optimizeDeps: {
+      include: [
+        "convex/react",
+        "@convex-dev/auth/react",
+        "marked",
+        "dompurify",
+      ],
+    },
   };
 });

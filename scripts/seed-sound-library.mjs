@@ -1,0 +1,288 @@
+import { spawn } from "node:child_process";
+import { existsSync, mkdirSync, readFileSync, unlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { ConvexHttpClient } from "convex/browser";
+
+import { api } from "../convex/_generated/api.js";
+
+const rootDir = dirname(fileURLToPath(import.meta.url));
+const repoRoot = join(rootDir, "..");
+const loadEnv = (filePath) => {
+  if (!existsSync(filePath)) {
+    return;
+  }
+  for (const line of readFileSync(filePath, "utf8").split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) {
+      continue;
+    }
+    const eq = trimmed.indexOf("=");
+    if (eq < 1) {
+      continue;
+    }
+    const key = trimmed.slice(0, eq).trim();
+    const value = trimmed
+      .slice(eq + 1)
+      .trim()
+      .replace(/^["']|["']$/g, "");
+    if (!process.env[key]) {
+      process.env[key] = value;
+    }
+  }
+};
+
+loadEnv(join(repoRoot, ".env.local"));
+loadEnv(join(repoRoot, "excalidraw-app", ".env.development.local"));
+loadEnv(join(repoRoot, ".env.example"));
+
+const CATALOG_PATH = join(
+  "C:\\Users\\Main\\Documents\\Projects\\sound-effect-picker",
+  "src",
+  "data",
+  "catalog.json",
+);
+
+const LIBRARY_CANDIDATES = [
+  process.env.SOUND_LIBRARY_ROOT,
+  "C:\\Users\\Main\\OneDrive\\Sound Library\\Flatten",
+  "C:\\Users\\Main\\Documents\\Sound Library\\Flatten",
+].filter(Boolean);
+
+const FFMPEG =
+  process.env.FFMPEG ??
+  "C:\\Users\\Main\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-8.1.2-full_build\\bin\\ffmpeg.exe";
+
+const url = process.env.VITE_CONVEX_URL ?? process.env.CONVEX_URL;
+const secret = process.env.SEED_SECRET ?? "";
+const reset = process.argv.includes("--reset");
+const metadataOnly = process.argv.includes("--metadata-only");
+
+if (!url) {
+  throw new Error("VITE_CONVEX_URL is not set");
+}
+
+if (!existsSync(CATALOG_PATH)) {
+  throw new Error(`Catalog not found: ${CATALOG_PATH}`);
+}
+
+const catalog = JSON.parse(readFileSync(CATALOG_PATH, "utf8"));
+const client = new ConvexHttpClient(url);
+const tmpOggDir = join(tmpdir(), "jayrr-sound-ogg");
+mkdirSync(tmpOggDir, { recursive: true });
+
+const findLibraryRoot = () => {
+  for (const candidate of LIBRARY_CANDIDATES) {
+    if (existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  return null;
+};
+
+const toSound = (file) => {
+  const folderPath = file.folders.join("/");
+  return {
+    path: file.path,
+    name: file.name,
+    source: file.source ?? file.name,
+    owner: file.owner ?? "",
+    credit: file.credit ?? "",
+    license: file.license ?? "",
+    folders: file.folders,
+    folderPath,
+    category: file.folders[0] ?? "",
+    ext: ".ogg",
+    durationSec: file.durationSec,
+    sampleRate: file.sampleRate,
+    centroidHz: file.centroidHz,
+    search: [
+      file.name,
+      file.source ?? file.name,
+      file.owner ?? "",
+      file.credit ?? "",
+      file.license ?? "",
+      file.path,
+      folderPath,
+    ]
+      .join(" ")
+      .toLowerCase(),
+  };
+};
+
+const buildFolders = (files) => {
+  const map = new Map();
+  map.set("", { path: "", name: "Library", parent: "", count: files.length });
+  for (const file of files) {
+    let parent = "";
+    for (const name of file.folders) {
+      const path = parent ? `${parent}/${name}` : name;
+      const row = map.get(path) ?? { path, name, parent, count: 0 };
+      row.count += 1;
+      map.set(path, row);
+      parent = path;
+    }
+  }
+  return [...map.values()];
+};
+
+const runFfmpeg = (input, output) =>
+  new Promise((resolve, reject) => {
+    const child = spawn(
+      FFMPEG,
+      [
+        "-y",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-i",
+        input,
+        "-vn",
+        "-c:a",
+        "libopus",
+        "-b:a",
+        "64k",
+        "-ar",
+        "48000",
+        output,
+      ],
+      { windowsHide: true },
+    );
+    let stderr = "";
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      reject(new Error(stderr || `ffmpeg exited ${code}`));
+    });
+  });
+
+const uploadOgg = async (oggPath) => {
+  const uploadUrl = await client.mutation(api.soundSeed.generateUploadUrl, {
+    secret,
+  });
+  const body = readFileSync(oggPath);
+  const response = await fetch(uploadUrl, {
+    method: "POST",
+    headers: { "Content-Type": "audio/ogg" },
+    body,
+  });
+  if (!response.ok) {
+    throw new Error(`Upload failed: ${response.status}`);
+  }
+  const json = await response.json();
+  return json.storageId;
+};
+
+const sourcePathFor = (libraryRoot, file) => join(libraryRoot, file.path);
+
+if (reset) {
+  console.log("Clearing existing sounds...");
+  for (;;) {
+    const cleared = await client.mutation(api.soundSeed.clearPage, { secret });
+    console.log(`  deleted sounds=${cleared.sounds} folders=${cleared.folders}`);
+    if (cleared.sounds === 0 && cleared.folders === 0) {
+      break;
+    }
+  }
+}
+
+const libraryRoot = findLibraryRoot();
+if (!libraryRoot && !metadataOnly) {
+  console.warn(
+    "Flatten library was not found. Seeding metadata only. Re-run after OneDrive syncs C:\\Users\\Main\\OneDrive\\Sound Library\\Flatten",
+  );
+}
+
+const files = catalog.files;
+console.log(`Catalog files: ${files.length}`);
+console.log(`Library root: ${libraryRoot ?? "(missing)"}`);
+
+const SOUND_BATCH = 80;
+console.log(`Upserting ${files.length} sound rows...`);
+for (let i = 0; i < files.length; i += SOUND_BATCH) {
+  const batch = files.slice(i, i + SOUND_BATCH).map(toSound);
+  await client.mutation(api.soundSeed.insertSounds, { secret, files: batch });
+  console.log(`  ${Math.min(i + SOUND_BATCH, files.length)}/${files.length}`);
+}
+
+const folders = buildFolders(files);
+const FOLDER_BATCH = 100;
+console.log(`Upserting ${folders.length} folders...`);
+for (let i = 0; i < folders.length; i += FOLDER_BATCH) {
+  const batch = folders.slice(i, i + FOLDER_BATCH);
+  await client.mutation(api.soundSeed.insertFolders, { secret, folders: batch });
+}
+
+if (!libraryRoot || !existsSync(FFMPEG) || metadataOnly) {
+  console.log(
+    `Done. Audio conversion skipped (root=${libraryRoot ?? "missing"} ffmpeg=${existsSync(FFMPEG)} metadataOnly=${metadataOnly}).`,
+  );
+  process.exit(0);
+}
+
+const CHECK_BATCH = 80;
+const existing = new Map();
+for (let i = 0; i < files.length; i += CHECK_BATCH) {
+  const slice = files.slice(i, i + CHECK_BATCH).map((file) => toSound(file).path);
+  const rows = await client.mutation(api.soundSeed.existingPaths, {
+    secret,
+    paths: slice,
+  });
+  for (const row of rows) {
+    existing.set(row.path, row.hasAudio);
+  }
+}
+
+let converted = 0;
+let skipped = 0;
+let failed = 0;
+
+for (let i = 0; i < files.length; i += 1) {
+  const file = files[i];
+  const sound = toSound(file);
+  if (existing.get(sound.path) === true) {
+    skipped += 1;
+    continue;
+  }
+
+  const sourcePath = sourcePathFor(libraryRoot, file);
+  if (!existsSync(sourcePath)) {
+    failed += 1;
+    continue;
+  }
+
+  const oggPath = join(tmpOggDir, `${i}.ogg`);
+  try {
+    await runFfmpeg(sourcePath, oggPath);
+    const storageId = await uploadOgg(oggPath);
+    await client.mutation(api.soundSeed.saveSound, {
+      secret,
+      file: sound,
+      storageId,
+    });
+    converted += 1;
+  } catch (error) {
+    failed += 1;
+    console.error(`  fail ${file.path}: ${error.message}`);
+  } finally {
+    if (existsSync(oggPath)) {
+      unlinkSync(oggPath);
+    }
+  }
+
+  if ((i + 1) % 50 === 0 || i + 1 === files.length) {
+    console.log(
+      `  ${i + 1}/${files.length} converted=${converted} skipped=${skipped} failed=${failed}`,
+    );
+  }
+}
+
+console.log(`Done. converted=${converted} skipped=${skipped} failed=${failed}`);

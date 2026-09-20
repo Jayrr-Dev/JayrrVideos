@@ -1,9 +1,10 @@
 import { STORAGE_KEYS } from "../app_constants";
-import { type PresentMotion } from "./buildPresentDeck";
+
+import { type PresentExit, type PresentMotion } from "./buildPresentDeck";
 
 const MOTION_KEY = STORAGE_KEYS.LOCAL_STORAGE_PRESENT_MOTION;
 
-export const PRESENT_MOTIONS: readonly PresentMotion[] = [
+export const PRESENT_MOTIONS: readonly PresentExit[] = [
   "fade",
   "fadeUp",
   "fadeDown",
@@ -12,6 +13,7 @@ export const PRESENT_MOTIONS: readonly PresentMotion[] = [
 ];
 
 export const PRESENT_MOTION_LABEL: Record<PresentMotion, string> = {
+  none: "None",
   fade: "Fade",
   fadeUp: "Fade up",
   fadeDown: "Fade down",
@@ -20,6 +22,7 @@ export const PRESENT_MOTION_LABEL: Record<PresentMotion, string> = {
 };
 
 const isPresentMotion = (value: string | null): value is PresentMotion =>
+  value === "none" ||
   value === "fade" ||
   value === "fadeUp" ||
   value === "fadeDown" ||

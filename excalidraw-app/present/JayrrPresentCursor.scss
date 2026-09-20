@@ -9,11 +9,11 @@
   position: absolute;
   top: 0;
   left: 0;
-  width: 88px;
-  height: 88px;
-  margin: -6px 0 0 -8px;
-  transform-origin: 10px 8px;
-  filter: drop-shadow(0 6px 8px rgba(30, 20, 10, 0.28));
+  width: 64px;
+  height: 64px;
+  margin: -8px 0 0 -16px;
+  transform-origin: 16px 8px;
+  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.35));
   will-change: transform;
 }
 
@@ -23,28 +23,45 @@
   height: 100%;
 }
 
-.jayrr-present-cursor__ripple {
+.jayrr-present-cursor__line {
+  --burst-length: 22px;
+  --burst-travel: 54px;
   position: absolute;
-  width: 148px;
-  height: 148px;
-  margin: -74px 0 0 -74px;
-  border-radius: 50%;
-  border: 4px solid #fa5252;
-  box-shadow:
-    0 0 0 6px rgba(250, 82, 82, 0.18),
-    inset 0 0 0 10px rgba(255, 212, 59, 0.35);
-  animation: jayrr-present-cursor-ripple 420ms ease-out forwards;
+  width: 4px;
+  height: var(--burst-length);
+  margin: calc(var(--burst-length) / -2) 0 0 -2px;
+  border-radius: 2px;
+  background: #6965db;
+  transform-origin: center;
+  animation: jayrr-present-cursor-line 460ms cubic-bezier(0.2, 0.7, 0.2, 1)
+    forwards;
 }
 
-.jayrr-present-cursor__spark {
+.jayrr-present-cursor__line.is-long {
+  --burst-length: 34px;
+  --burst-travel: 72px;
+}
+
+.jayrr-present-cursor__hold {
   position: absolute;
-  width: 10px;
-  height: 10px;
-  margin: -5px 0 0 -5px;
-  border-radius: 2px;
-  background: #ffd43b;
-  box-shadow: 0 0 0 2px #c92a2a;
-  animation: jayrr-present-cursor-spark 380ms ease-out forwards;
+  top: 0;
+  left: 0;
+  width: 56px;
+  height: 56px;
+  margin: -28px 0 0 -28px;
+  border-radius: 50%;
+  border: 3px solid #6965db;
+  background: rgba(105, 101, 219, 0.18);
+  box-shadow: 0 0 0 6px rgba(105, 101, 219, 0.12);
+  will-change: transform;
+}
+
+.jayrr-present-cursor__hold::before {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  animation: jayrr-present-cursor-hold-in 180ms ease-out;
 }
 
 html.jayrr-presenting.jayrr-present-custom-cursor,
@@ -52,31 +69,46 @@ html.jayrr-presenting.jayrr-present-custom-cursor * {
   cursor: none !important;
 }
 
-@keyframes jayrr-present-cursor-ripple {
-  from {
-    transform: scale(0.18);
-    opacity: 0.95;
+html.jayrr-present-cursor-idle .jayrr-present-cursor__pointer,
+html.jayrr-present-cursor-idle .jayrr-present-cursor__hold {
+  opacity: 0;
+  transition: opacity 280ms ease;
+}
+
+@keyframes jayrr-present-cursor-line {
+  0% {
+    transform: rotate(var(--angle)) translateY(-12px) scaleY(0.25);
+    opacity: 1;
   }
-  to {
-    transform: scale(1.15);
+  35% {
+    transform: rotate(var(--angle))
+      translateY(calc(var(--burst-travel) * -0.55)) scaleY(1);
+    opacity: 1;
+  }
+  100% {
+    transform: rotate(var(--angle)) translateY(calc(var(--burst-travel) * -1))
+      scaleY(0);
     opacity: 0;
   }
 }
 
-@keyframes jayrr-present-cursor-spark {
+@keyframes jayrr-present-cursor-hold-in {
   from {
-    transform: translate(0, 0) scale(1);
-    opacity: 1;
+    box-shadow: 0 0 0 0 rgba(105, 101, 219, 0.45);
   }
   to {
-    transform: translate(var(--spark-x), var(--spark-y)) scale(0.2);
-    opacity: 0;
+    box-shadow: 0 0 0 14px rgba(105, 101, 219, 0);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .jayrr-present-cursor__ripple,
-  .jayrr-present-cursor__spark {
+  .jayrr-present-cursor__line,
+  .jayrr-present-cursor__hold::before {
     animation-duration: 1ms;
+  }
+
+  html.jayrr-present-cursor-idle .jayrr-present-cursor__pointer,
+  html.jayrr-present-cursor-idle .jayrr-present-cursor__hold {
+    transition-duration: 1ms;
   }
 }

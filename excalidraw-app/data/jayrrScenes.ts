@@ -15,12 +15,14 @@ import { appJotaiStore, atom } from "../app-jotai";
 import { STORAGE_KEYS } from "../app_constants";
 import { api, convexClient } from "../convexClient";
 
-import { getOwnerKey } from "./ownerKey";
-
 import type { Id } from "../../convex/_generated/dataModel";
 
 export const activeSceneIdAtom = atom<Id<"scenes"> | null>(
   readStoredActiveSceneId(),
+);
+
+export const openSceneFolderIdAtom = atom<Id<"sceneFolders"> | null>(
+  readStoredOpenSceneFolderId(),
 );
 
 function readStoredActiveSceneId(): Id<"scenes"> | null {
@@ -34,6 +36,17 @@ function readStoredActiveSceneId(): Id<"scenes"> | null {
   }
 }
 
+function readStoredOpenSceneFolderId(): Id<"sceneFolders"> | null {
+  try {
+    const stored = localStorage.getItem(
+      STORAGE_KEYS.LOCAL_STORAGE_OPEN_SCENE_FOLDER_ID,
+    );
+    return stored ? (stored as Id<"sceneFolders">) : null;
+  } catch {
+    return null;
+  }
+}
+
 export const setActiveSceneId = (sceneId: Id<"scenes"> | null) => {
   appJotaiStore.set(activeSceneIdAtom, sceneId);
   try {
@@ -42,6 +55,23 @@ export const setActiveSceneId = (sceneId: Id<"scenes"> | null) => {
       return;
     }
     localStorage.removeItem(STORAGE_KEYS.LOCAL_STORAGE_ACTIVE_SCENE_ID);
+  } catch {
+    // ignore quota / private mode
+  }
+};
+
+export const persistOpenSceneFolderId = (
+  folderId: Id<"sceneFolders"> | null,
+) => {
+  try {
+    if (folderId) {
+      localStorage.setItem(
+        STORAGE_KEYS.LOCAL_STORAGE_OPEN_SCENE_FOLDER_ID,
+        folderId,
+      );
+      return;
+    }
+    localStorage.removeItem(STORAGE_KEYS.LOCAL_STORAGE_OPEN_SCENE_FOLDER_ID);
   } catch {
     // ignore quota / private mode
   }
@@ -128,18 +158,20 @@ export const nextSceneName = (existingNames: string[]) => {
 export const saveCanvasAsScene = async (
   apiClient: ExcalidrawImperativeAPI,
   name?: string,
+  folderId?: Id<"sceneFolders">,
 ): Promise<Id<"scenes">> => {
   if (!convexClient) {
     throw new Error("Convex is not connected.");
   }
-  const ownerKey = getOwnerKey();
-  const listed = await convexClient.query(api.scenes.list, { ownerKey });
+  const listed = await convexClient.query(api.scenes.list, {
+    folderId: folderId ?? null,
+  });
   const sceneJson = serializeCurrentCanvas(apiClient);
   const sceneId = await convexClient.mutation(api.scenes.create, {
-    ownerKey,
     name: name?.trim() || nextSceneName(listed.map((scene) => scene.name)),
     sceneJson,
     previewDataUrl: await buildScenePreviewDataUrl(sceneJson),
+    folderId,
   });
   setActiveSceneId(sceneId);
   return sceneId;

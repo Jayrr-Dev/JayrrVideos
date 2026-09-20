@@ -42,6 +42,15 @@ export type StaticCanvasRenderConfig = {
   pendingFlowchartNodes: PendingExcalidrawElements | null;
   theme: AppState["theme"];
   elementRenderOverrides?: ElementRenderOverrides;
+  paintLiveMedia?: (
+    element: NonDeletedExcalidrawElement,
+    context: CanvasRenderingContext2D,
+    appState: StaticCanvasAppState | InteractiveCanvasAppState,
+    renderState: {
+      opacity: number;
+      offset: Readonly<{ x: number; y: number }>;
+    },
+  ) => void;
 };
 
 export type SVGRenderConfig = {

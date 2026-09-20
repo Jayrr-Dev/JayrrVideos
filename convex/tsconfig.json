@@ -11,6 +11,11 @@
     "jsx": "react-jsx",
     "skipLibCheck": true,
     "allowSyntheticDefaultImports": true,
+    "baseUrl": ".",
+    "paths": {
+      "@openrouter/ai-sdk-provider": ["../node_modules/@openrouter/ai-sdk-provider/dist/index.d.ts"],
+      "ai": ["../node_modules/ai/dist/index.d.ts"]
+    },
 
     /* These compiler options are required by Convex */
     "target": "ESNext",

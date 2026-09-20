@@ -1,4 +1,9 @@
-import { KEYS, arrayToMap, randomId } from "@excalidraw/common";
+import {
+  KEYS,
+  MOBILE_ACTION_BUTTON_BG,
+  arrayToMap,
+  randomId,
+} from "@excalidraw/common";
 
 import {
   elementsAreInSameGroup,
@@ -11,9 +16,12 @@ import { CaptureUpdateAction } from "@excalidraw/element";
 
 import type { ExcalidrawElement } from "@excalidraw/element/types";
 
+import { useStylesPanelMode } from "../components/App";
+import { IconButton } from "../components/IconButton";
 import { LockedIcon, UnlockedIcon } from "../components/icons";
-
+import { t } from "../i18n";
 import { getSelectedElements } from "../scene";
+import { getShortcutKey } from "../shortcut";
 
 import { register } from "./register";
 
@@ -153,6 +161,30 @@ export const actionToggleElementLock = register({
         selectedElementIds: appState.selectedElementIds,
         includeBoundTextElement: false,
       }).length > 0
+    );
+  },
+  PanelComponent: ({ elements, appState, updateData }) => {
+    const isMobile = useStylesPanelMode() === "mobile";
+    const selectedElements = getSelectedElements(elements, appState);
+    const willLock = shouldLock(selectedElements);
+    const label = willLock
+      ? t("labels.elementLock.lock")
+      : t("labels.elementLock.unlock");
+
+    return (
+      <IconButton
+        type="button"
+        icon={willLock ? LockedIcon : UnlockedIcon}
+        title={`${label} — ${getShortcutKey("CtrlOrCmd+Shift+L")}`}
+        aria-label={label}
+        onClick={() => updateData(null)}
+        disabled={selectedElements.length === 0}
+        style={{
+          ...(isMobile && appState.openPopup !== "compactOtherProperties"
+            ? MOBILE_ACTION_BUTTON_BG
+            : {}),
+        }}
+      />
     );
   },
 });

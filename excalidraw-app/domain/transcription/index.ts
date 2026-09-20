@@ -8,6 +8,14 @@ export {
 export { clearCaption, readCaption, writeCaption } from "./captions";
 export { listenDisplayAudio } from "./listenDisplayAudio";
 export { listenStreamTranscript } from "./listenStreamTranscript";
+export type { TranscriptDebug } from "./listenStreamTranscript";
+export {
+  clearTranscript,
+  listTranscriptFeeds,
+  publishTranscript,
+  readTranscript,
+  subscribeTranscripts,
+} from "./publishTranscript";
 export {
   ensureSpeakerNames,
   speakerLabel,

@@ -35,11 +35,7 @@ import { t } from "@excalidraw/excalidraw/i18n";
 import polyfill from "@excalidraw/excalidraw/polyfill";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import {
-  isElementLink,
-  isInitializedImageElement,
-  newElementWith,
-} from "@excalidraw/element";
+import { isElementLink, newElementWith } from "@excalidraw/element";
 import { GithubIcon, usersIcon } from "@excalidraw/excalidraw/components/icons";
 import {
   parseLibraryTokensFromUrl,
@@ -59,6 +55,7 @@ import type {
   NonDeletedExcalidrawElement,
   OrderedExcalidrawElement,
 } from "@excalidraw/element/types";
+import type { ClipboardData } from "@excalidraw/excalidraw/clipboard";
 import type { RemoteExcalidrawElement } from "@excalidraw/excalidraw/data/reconcile";
 import type { RestoredDataState } from "@excalidraw/excalidraw/data/restore";
 import type {
@@ -93,9 +90,8 @@ import Collab, {
 import { AppFooter } from "./components/AppFooter";
 import { AppMainMenu } from "./components/AppMainMenu";
 import { AppWelcomeScreen } from "./components/AppWelcomeScreen";
-import { JayrrLibraryMenu } from "./components/JayrrLibraryMenu";
-import { JayrrSceneMenu } from "./components/JayrrSceneMenu";
 import { TopErrorBoundary } from "./components/TopErrorBoundary";
+import { JayrrLibraryMenu, JayrrSceneMenu } from "./components/ui";
 import CustomStats from "./CustomStats";
 import { JayrrPresentHost } from "./present/JayrrPresentHost";
 
@@ -116,6 +112,7 @@ import {
 import { getPreferredLanguage } from "./app-language/language-detector";
 import { useAppLangCode } from "./app-language/language-state";
 import { AIComponents } from "./components/AI";
+import { AppSidebar } from "./components/AppSidebar";
 import DebugCanvas, {
   debugRenderer,
   isVisualDebuggerEnabled,
@@ -136,10 +133,18 @@ import {
 } from "./data/LocalData";
 import { isBrowserStorageStateNewer } from "./data/tabSync";
 import { useSimulatedCollaborators } from "./debugCollaborators";
+import {
+  JayrrCalledObjectEmbed,
+  collectSceneFileIds,
+  isJayrrCalledObjectLink,
+  readCalledObjectKind,
+  renderJayrrCalledHyperlinkPopup,
+  tryPasteMarkdown,
+  tryPastePdf,
+} from "./domain/widgets";
 import { ShareDialog, shareDialogStateAtom } from "./share/ShareDialog";
 import { useHandleAppTheme } from "./useHandleAppTheme";
 
-import { AppSidebar } from "./components/AppSidebar";
 import "./index.scss";
 
 import type { CollabAPI } from "./collab/Collab";
@@ -181,9 +186,13 @@ window.addEventListener(
 );
 
 const EMBED_PROTOCOLS = new Set(["http:", "https:"]);
+const DIRECT_VIDEO_LINK = /^https?:\/\/\S+\.(?:mp4|webm|ogg)(?:\?.*)?$/i;
 
 /** Any http(s) link except this app. Paste turns it into an embed. */
 const canEmbedPastedLink = (link: string): boolean => {
+  if (isJayrrCalledObjectLink(link)) {
+    return true;
+  }
   let url: URL;
   try {
     url = new URL(link);
@@ -508,13 +517,7 @@ const ExcalidrawWrapper = () => {
             });
         }
       } else {
-        const fileIds =
-          data.scene.elements?.reduce((acc, element) => {
-            if (isInitializedImageElement(element)) {
-              return acc.concat(element.fileId);
-            }
-            return acc;
-          }, [] as FileId[]) || [];
+        const fileIds = collectSceneFileIds(data.scene.elements ?? []);
 
         if (data.isExternalScene) {
           if (fileIds.length) {
@@ -634,17 +637,9 @@ const ExcalidrawWrapper = () => {
         if (isBrowserStorageStateNewer(STORAGE_KEYS.VERSION_FILES)) {
           const elements = excalidrawAPI.getSceneElementsIncludingDeleted();
           const currFiles = excalidrawAPI.getFiles();
-          const fileIds =
-            elements?.reduce((acc, element) => {
-              if (
-                isInitializedImageElement(element) &&
-                // only load and update images that aren't already loaded
-                !currFiles[element.fileId]
-              ) {
-                return acc.concat(element.fileId);
-              }
-              return acc;
-            }, [] as FileId[]) || [];
+          const fileIds = collectSceneFileIds(elements, {
+            onlyMissing: currFiles,
+          });
           if (fileIds.length) {
             LocalData.fileStorage
               .getFiles(fileIds)
@@ -843,6 +838,24 @@ const ExcalidrawWrapper = () => {
     Required<ExcalidrawProps>["renderEmbeddable"]
   >(
     (element) => {
+      const calledKind = readCalledObjectKind(element);
+      if (calledKind) {
+        return (
+          <JayrrCalledObjectEmbed kind={calledKind} elementId={element.id} />
+        );
+      }
+      if (element.link && DIRECT_VIDEO_LINK.test(element.link)) {
+        return (
+          <video
+            className="excalidraw__embeddable"
+            data-element-id={element.id}
+            src={element.link}
+            controls
+            playsInline
+            preload="metadata"
+          />
+        );
+      }
       const src = resolveProxiedEmbedSrc(element.link, embedFrameStatuses);
       if (!src) {
         return null;
@@ -863,6 +876,26 @@ const ExcalidrawWrapper = () => {
     },
     [embedFrameStatuses],
   );
+
+  const onPaste = useCallback<NonNullable<ExcalidrawProps["onPaste"]>>(
+    async (data: ClipboardData, event) => {
+      if (!excalidrawAPI) {
+        return true;
+      }
+      if (await tryPastePdf(excalidrawAPI, data, event)) {
+        return false;
+      }
+      if (await tryPasteMarkdown(excalidrawAPI, data, event)) {
+        return false;
+      }
+      return true;
+    },
+    [excalidrawAPI],
+  );
+
+  const renderHyperlinkPopup = useCallback<
+    NonNullable<ExcalidrawProps["renderHyperlinkPopup"]>
+  >((args) => renderJayrrCalledHyperlinkPopup(args), []);
 
   const imageOptions = useMemo(() => {
     if (!googleDriveConnected) {
@@ -960,6 +993,8 @@ const ExcalidrawWrapper = () => {
       <Excalidraw
         validateEmbeddable={canEmbedPastedLink}
         renderEmbeddable={renderEmbeddable}
+        renderHyperlinkPopup={renderHyperlinkPopup}
+        onPaste={onPaste}
         viewportStatusFrame={viewportStatusFrame}
         userToFollow={userToFollow}
         onChange={onChange}

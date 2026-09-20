@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from "convex/react";
+import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import {
   Component,
   useCallback,
@@ -27,25 +27,23 @@ import type { BinaryFiles } from "@excalidraw/excalidraw/types";
 
 import type { NonDeletedExcalidrawElement } from "@excalidraw/element/types";
 
-import { useAtom } from "../app-jotai";
-import { STORAGE_KEYS } from "../app_constants";
-import { api, isConvexLinked } from "../convexClient";
+import { useAtom } from "../../app-jotai";
+import { STORAGE_KEYS } from "../../app_constants";
+import { api, isConvexLinked } from "../../convexClient";
 import {
   openLibraryIdAtom,
   serializeFilesForElements,
-} from "../data/jayrrLibraries";
-import { getOwnerKey } from "../data/ownerKey";
+} from "../../data/jayrrLibraries";
 
-import "../../packages/excalidraw/components/LibraryMenuItems.scss";
-import "../../packages/excalidraw/components/LibraryUnit.scss";
+import "../../../packages/excalidraw/components/LibraryMenuItems.scss";
+import "../../../packages/excalidraw/components/LibraryUnit.scss";
 
+import { JayrrConfirmDialog } from "./JayrrConfirmDialog";
 import "./JayrrLibraryMenu.scss";
 
 import type { ReactNode } from "react";
 
-import type { Id } from "../../convex/_generated/dataModel";
-
-const ownerKey = getOwnerKey();
+import type { Id } from "../../../convex/_generated/dataModel";
 
 const persistOpenLibraryId = (libraryId: Id<"libraries"> | null) => {
   try {
@@ -110,8 +108,14 @@ export const JayrrLibraryMenu = () => {
     );
   }
 
+  return <JayrrLibraryMenuAuthed />;
+};
+
+const JayrrLibraryMenuAuthed = () => {
+  const { isAuthenticated } = useConvexAuth();
+
   return (
-    <LibraryMenuErrorBoundary>
+    <LibraryMenuErrorBoundary key={isAuthenticated ? "in" : "out"}>
       <JayrrLibraryMenuConnected />
     </LibraryMenuErrorBoundary>
   );
@@ -123,16 +127,22 @@ const JayrrLibraryMenuConnected = () => {
   const [openMenuId, setOpenMenuId] = useState<Id<"libraries"> | null>(null);
   const [renamingId, setRenamingId] = useState<Id<"libraries"> | null>(null);
   const [draftName, setDraftName] = useState("");
+  const [pendingDelete, setPendingDelete] = useState<{
+    id: Id<"libraries">;
+    name: string;
+  } | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const renameInputRef = useRef<HTMLInputElement>(null);
 
-  const libraries = useQuery(api.libraries.list, { ownerKey });
+  const { isAuthenticated } = useConvexAuth();
+  const libraries = useQuery(api.libraries.list, isAuthenticated ? {} : "skip");
   const openLibrary = useQuery(
     api.libraries.get,
-    openLibraryId ? { ownerKey, libraryId: openLibraryId } : "skip",
+    openLibraryId ? { libraryId: openLibraryId } : "skip",
   );
   const assets = useQuery(
     api.libraries.listAssets,
-    openLibraryId ? { ownerKey, libraryId: openLibraryId } : "skip",
+    openLibraryId ? { libraryId: openLibraryId } : "skip",
   );
 
   const createLibrary = useMutation(api.libraries.create);
@@ -182,7 +192,6 @@ const JayrrLibraryMenuConnected = () => {
     try {
       const nextIndex = (libraries?.length ?? 0) + 1;
       const libraryId = await createLibrary({
-        ownerKey,
         name: `Library ${nextIndex}`,
       });
       openLibraryById(libraryId);
@@ -197,6 +206,25 @@ const JayrrLibraryMenuConnected = () => {
     }
   };
 
+  const onConfirmDelete = async () => {
+    if (!pendingDelete || deleting) {
+      return;
+    }
+    setDeleting(true);
+    try {
+      await removeLibrary({ libraryId: pendingDelete.id });
+      setPendingDelete(null);
+    } catch (error) {
+      excalidrawAPI?.setToast({
+        message:
+          error instanceof Error ? error.message : "Could not delete library",
+        closable: true,
+      });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const commitRename = async () => {
     if (!renamingId) {
       return;
@@ -207,7 +235,7 @@ const JayrrLibraryMenuConnected = () => {
       return;
     }
     try {
-      await renameLibrary({ ownerKey, libraryId: renamingId, name });
+      await renameLibrary({ libraryId: renamingId, name });
     } catch (error) {
       excalidrawAPI?.setToast({
         message: error instanceof Error ? error.message : "Rename failed",
@@ -229,7 +257,6 @@ const JayrrLibraryMenuConnected = () => {
     }
     try {
       await addAsset({
-        ownerKey,
         libraryId: openLibraryId,
         elementsJson: JSON.stringify(pendingElements),
         filesJson: serializeFilesForElements(
@@ -363,7 +390,7 @@ const JayrrLibraryMenuConnected = () => {
                     void onInsertAsset(asset.elementsJson, asset.filesJson);
                   }}
                   onDelete={() => {
-                    void removeAsset({ ownerKey, assetId: asset._id });
+                    void removeAsset({ assetId: asset._id });
                   }}
                 />
               ))}
@@ -463,16 +490,10 @@ const JayrrLibraryMenuConnected = () => {
                     <DropdownMenu.Item
                       icon={TrashIcon}
                       onSelect={() => {
-                        if (
-                          window.confirm(
-                            `Delete "${library.name}" and its assets?`,
-                          )
-                        ) {
-                          void removeLibrary({
-                            ownerKey,
-                            libraryId: library._id,
-                          });
-                        }
+                        setPendingDelete({
+                          id: library._id,
+                          name: library.name,
+                        });
                       }}
                     >
                       Delete
@@ -496,6 +517,21 @@ const JayrrLibraryMenuConnected = () => {
           </Button>
         </div>
       )}
+      {pendingDelete ? (
+        <JayrrConfirmDialog
+          title={`Delete "${pendingDelete.name}"?`}
+          info="This permanently removes the library and its assets. You cannot undo it."
+          busy={deleting}
+          onCancel={() => {
+            if (!deleting) {
+              setPendingDelete(null);
+            }
+          }}
+          onConfirm={() => {
+            void onConfirmDelete();
+          }}
+        />
+      ) : null}
     </div>
   );
 };
@@ -509,7 +545,7 @@ const LibraryCardThumbs = ({
 }) => {
   const assets = useQuery(
     api.libraries.listAssets,
-    assetCount > 0 ? { ownerKey, libraryId } : "skip",
+    assetCount > 0 ? { libraryId } : "skip",
   );
   const previews = assets?.slice(0, 4) ?? [];
 

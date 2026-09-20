@@ -8,7 +8,7 @@ import {
 } from "@excalidraw/element";
 import { resizeSingleElement } from "@excalidraw/element";
 import { isImageElement } from "@excalidraw/element";
-import { isFrameLikeElement } from "@excalidraw/element";
+import { isFrameAspectLocked, isFrameLikeElement } from "@excalidraw/element";
 import { getElementsInResizingFrame } from "@excalidraw/element";
 import { replaceAllElementsInFrame } from "@excalidraw/element";
 
@@ -37,7 +37,7 @@ interface DimensionDragInputProps {
 
 const STEP_SIZE = 10;
 const _shouldKeepAspectRatio = (element: ExcalidrawElement) => {
-  return element.type === "image";
+  return element.type === "image" || isFrameAspectLocked(element);
 };
 
 const handleDimensionChange: DragInputCallbackType<

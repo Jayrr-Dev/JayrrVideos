@@ -1,0 +1,148 @@
+.excalidraw {
+  .jayrr-sound-library .Dialog__title {
+    margin-bottom: 0.85rem;
+    padding-bottom: 0.65rem;
+  }
+
+  .jayrr-sound-library__title-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    min-width: 0;
+  }
+
+  .jayrr-sound-library__info {
+    display: inline-flex;
+    flex: 0 0 auto;
+    color: var(--icon-fill-color);
+    cursor: help;
+  }
+
+  .jayrr-sound-library__info svg {
+    width: 1rem;
+    height: 1rem;
+  }
+
+  .jayrr-sound-library__toolbar {
+    margin-bottom: 0.65rem;
+  }
+
+  .jayrr-sound-library__search {
+    width: 100%;
+    padding: 0.45rem 0.65rem;
+    border: 1px solid var(--dialog-border-color);
+    border-radius: 0.4rem;
+    background: var(--input-bg-color, var(--island-bg-color));
+    color: inherit;
+    font: inherit;
+  }
+
+  .jayrr-sound-library__crumbs {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem;
+    margin-bottom: 0.65rem;
+    font-size: 0.85rem;
+  }
+
+  .jayrr-sound-library__crumb {
+    border: 0;
+    padding: 0;
+    background: transparent;
+    color: var(--color-primary);
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .jayrr-sound-library__crumb-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+
+  .jayrr-sound-library__folders,
+  .jayrr-sound-library__sounds {
+    list-style: none;
+    margin: 0 0 0.75rem;
+    padding: 0;
+    max-height: 16rem;
+    overflow: auto;
+  }
+
+  .jayrr-sound-library__folders button,
+  .jayrr-sound-library__sounds li {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.4rem 0.5rem;
+    border: 0;
+    border-bottom: 1px solid var(--dialog-border-color);
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+  }
+
+  .jayrr-sound-library__folders button {
+    cursor: pointer;
+    justify-content: space-between;
+  }
+
+  .jayrr-sound-library__play {
+    flex: 0 0 auto;
+    padding: 0.25rem 0.5rem;
+    border: 1px solid var(--dialog-border-color);
+    border-radius: 0.35rem;
+    background: var(--button-gray-1);
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .jayrr-sound-library__play:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  .jayrr-sound-library__meta {
+    display: flex;
+    min-width: 0;
+    flex: 1;
+    flex-direction: column;
+  }
+
+  .jayrr-sound-library__name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .jayrr-sound-library__path {
+    color: var(--color-gray-40);
+    font-size: 0.75rem;
+  }
+
+  .jayrr-sound-library__clock {
+    flex: 0 0 auto;
+    font-variant-numeric: tabular-nums;
+    font-size: 0.8rem;
+  }
+
+  .jayrr-sound-library__more {
+    width: 100%;
+    padding: 0.45rem;
+    border: 1px solid var(--dialog-border-color);
+    border-radius: 0.4rem;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .jayrr-sound-library__empty {
+    margin: 0.5rem 0 0;
+    color: var(--color-gray-40);
+  }
+}
