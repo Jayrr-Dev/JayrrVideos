@@ -2030,17 +2030,16 @@ class App extends React.Component<AppProps, AppState> {
             this.state.activeEmbeddable?.element === el &&
             this.state.activeEmbeddable?.state === "hover";
 
-          // Custom HTML embeds (Jayrr widgets) and videos sit under the
-          // canvas zoom transform. Native <button>/<select> double-paint
-          // when that net scale is not 1, so keep their inner scale at 1:1.
+          // Videos render into a larger offscreen buffer then counter-scale
+          // so playback stays sharp when zoomed. Custom React embeds (Jayrr
+          // widgets) stay 1:1 with scene units so they zoom like canvas text.
           const customEmbed = isEmbeddableElement(el)
             ? this.props.renderEmbeddable?.(el, this.state)
             : null;
-          const shouldScaleEmbeddableViewport =
-            src?.type === "video" || customEmbed != null;
+          const shouldScaleEmbeddableViewport = src?.type === "video";
           const embeddableViewportScale = clamp(
             shouldScaleEmbeddableViewport ? scale : 1,
-            customEmbed != null ? 0.25 : 0.75,
+            0.75,
             MAX_EMBEDDABLE_VIEWPORT_SCALE,
           );
 

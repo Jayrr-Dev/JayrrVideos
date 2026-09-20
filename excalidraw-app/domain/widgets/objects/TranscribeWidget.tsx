@@ -42,6 +42,8 @@ import {
   speakerLabel,
   type TranscriptTurn,
 } from "../../transcription/transcriptTurns";
+import { LiveWidgetToolbar } from "../ui/LiveWidgetToolbar";
+import { useRegisterWidgetToolbar } from "../widgetToolbarRegistry";
 
 import {
   EMBED_PREFIX,
@@ -79,8 +81,6 @@ import {
   writeTranscribeConfig,
   type TranscribeConfig,
 } from "./transcribeConfig";
-import { LiveWidgetToolbar } from "../ui/LiveWidgetToolbar";
-import { useRegisterWidgetToolbar } from "../widgetToolbarRegistry";
 
 const LIVE_TURN_ID = "__live__";
 const LIVE_DEBOUNCE_MS = 500;

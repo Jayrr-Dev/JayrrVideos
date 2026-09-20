@@ -46,6 +46,8 @@ import {
   setPresentMic,
 } from "../../../present/presentMic";
 import { JAYRR_CAPTION_FOR_KEY } from "../model";
+import { LiveWidgetToolbar } from "../ui/LiveWidgetToolbar";
+import { useRegisterWidgetToolbar } from "../widgetToolbarRegistry";
 
 import {
   CAPTION_PLACEHOLDER,
@@ -70,8 +72,6 @@ import {
   writeTranscriptionConfig,
   type TranscriptionConfig,
 } from "./transcriptionConfig";
-import { LiveWidgetToolbar } from "../ui/LiveWidgetToolbar";
-import { useRegisterWidgetToolbar } from "../widgetToolbarRegistry";
 
 type ChatTurn = TranscriptTurn & {
   id: string;

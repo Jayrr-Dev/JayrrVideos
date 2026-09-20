@@ -11,6 +11,9 @@
     padding: 0.85rem;
     background: transparent;
     color: var(--text-primary-color);
+    // Scene-pixel root: outer embed container scales with canvas zoom,
+    // so rem/em inside track Excalidraw element sizing (not screen UI).
+    font-size: 16px;
     font-family: Assistant, system-ui, sans-serif;
     font-synthesis: none;
     letter-spacing: normal;

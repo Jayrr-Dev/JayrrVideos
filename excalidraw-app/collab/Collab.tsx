@@ -37,9 +37,6 @@ import { PureComponent } from "react";
 
 import { bumpElementVersions } from "@excalidraw/excalidraw/data/restore";
 
-import { readCalledObjectKind } from "../domain/widgets/model";
-import { readPdfFileId } from "../domain/widgets/objects/pdfConfig";
-
 import type { Mutable, ValueOf } from "@excalidraw/common/utility-types";
 import type {
   ExcalidrawElement,
@@ -96,6 +93,8 @@ import {
   saveUsernameToLocalStorage,
 } from "../data/localStorage";
 import { resetBrowserStateVersions } from "../data/tabSync";
+import { readCalledObjectKind } from "../domain/widgets/model";
+import { readPdfFileId } from "../domain/widgets/objects/pdfConfig";
 
 import { collabErrorIndicatorAtom } from "./CollabError";
 import Portal from "./Portal";

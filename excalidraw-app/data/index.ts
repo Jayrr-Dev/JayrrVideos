@@ -33,8 +33,8 @@ import {
   FILE_UPLOAD_MAX_BYTES,
   ROOM_ID_BYTES,
 } from "../app_constants";
-
 import { collectSceneFileIds } from "../domain/widgets/collectSceneFileIds";
+
 import { encodeFilesForUpload } from "./FileManager";
 import { saveFilesToFirebase } from "./firebase";
 

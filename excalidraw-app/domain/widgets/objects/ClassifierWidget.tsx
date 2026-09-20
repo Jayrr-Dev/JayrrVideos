@@ -25,7 +25,6 @@ import {
   writeClassifierConfig,
   type ClassifierConfig,
 } from "./classifierConfig";
-import { useRegisterWidgetToolbar } from "../widgetToolbarRegistry";
 
 type TabId = "classes" | "config" | "output";
 
