@@ -12,6 +12,10 @@ import {
   type TranscriptFeedTurn,
 } from "../../transcription/publishTranscript";
 import { speakerLabel } from "../../transcription/transcriptTurns";
+import {
+  ConversationIndicators,
+  useConversationContext,
+} from "../../transcription/useConversationContext";
 import { readCalledObjectKind } from "../model";
 
 import {
@@ -66,7 +70,7 @@ const TABS: { id: TabId; label: string }[] = [
 ];
 
 const LIVE_TURN_ID = "__live__";
-const LIVE_DEBOUNCE_MS = 450;
+const LIVE_DEBOUNCE_MS = 300;
 const MIN_PHRASE_CHARS = 3;
 const SNIPPET_CHARS = 140;
 const MAX_SCORED_TURNS = 200;
@@ -217,6 +221,7 @@ const buildSpeakerCards = (
 };
 
 export const ClassifierWidget = ({ elementId }: { elementId: string }) => {
+  const rootRef = useRef<HTMLDivElement | null>(null);
   const editor = useExcalidrawAPI();
   const [tab, setTab] = useState<TabId>("classes");
   const [config, setConfig] = useState<ClassifierConfig>(DEFAULT_CLASSIFIER);
@@ -230,12 +235,23 @@ export const ClassifierWidget = ({ elementId }: { elementId: string }) => {
   );
   const [scores, setScores] = useState<TurnScore[]>([]);
   const [live, setLive] = useState<TurnScore | null>(null);
+  const conversation = useConversationContext(
+    config.sourceId,
+    !!config.contextEnabled,
+    rootRef,
+  );
+  const evaluateContext = conversation.evaluate;
+  const contextVersionRef = useRef(conversation.version);
+  contextVersionRef.current = conversation.version;
+  const turnsRef = useRef(turns);
+  turnsRef.current = turns;
 
   const configRef = useRef(config);
   configRef.current = config;
   const queueRef = useRef<Job[]>([]);
   const liveJobRef = useRef<Job | null>(null);
   const runningRef = useRef(false);
+  const inFlightRef = useRef<Job | null>(null);
   const generationRef = useRef(0);
   const scoredTextRef = useRef(new Map<string, string>());
 
@@ -282,6 +298,10 @@ export const ClassifierWidget = ({ elementId }: { elementId: string }) => {
   }, []);
 
   useEffect(() => {
+    resetScores();
+  }, [config, conversation.session, resetScores]);
+
+  useEffect(() => {
     const element = editor
       ?.getSceneElementsIncludingDeleted()
       .find((item) => item.id === elementId);
@@ -306,30 +326,49 @@ export const ClassifierWidget = ({ elementId }: { elementId: string }) => {
       setListening(feed?.listening ?? false);
     };
     refresh();
-    const interval = window.setInterval(refresh, 1200);
+    const ownerWindow = rootRef.current?.ownerDocument.defaultView;
+    const interval = ownerWindow?.setInterval(refresh, 1200);
     const unsubscribe = subscribeTranscripts(refresh);
     return () => {
-      window.clearInterval(interval);
+      ownerWindow?.clearInterval(interval);
       unsubscribe();
     };
   }, [applyConfig, config.sourceId, editor]);
 
-  const classifyText = useCallback(async (text: string): Promise<JevResult> => {
-    if (!convexClient) {
-      throw new Error("Convex is not connected.");
-    }
-    const current = configRef.current;
-    return await convexClient.action(api.canvasAi.jev.classify, {
-      state: text,
-      instructions: current.instructions,
-      classes: current.classes.map((row) => ({
-        id: row.id,
-        name: row.name,
-        hint: row.hint || undefined,
-      })),
-      includeOther: current.includeOther,
-    });
-  }, []);
+  const classifyText = useCallback(
+    async (text: string, turnId: string): Promise<JevResult> => {
+      if (!convexClient) {
+        throw new Error("Convex is not connected.");
+      }
+      const current = configRef.current;
+      if (current.contextEnabled) {
+        const result = await evaluateContext(text, turnId, [
+          {
+            id: "label",
+            type: "choice",
+            instructions: current.instructions,
+            options: classOptionsForJev(current),
+          },
+        ]);
+        const answer = result.answers.find((item) => item.id === "label");
+        if (!answer || answer.type !== "choice") {
+          throw new Error("Jev did not return class scores.");
+        }
+        return answer;
+      }
+      return await convexClient.action(api.canvasAi.jev.classify, {
+        state: text,
+        instructions: current.instructions,
+        classes: current.classes.map((row) => ({
+          id: row.id,
+          name: row.name,
+          hint: row.hint || undefined,
+        })),
+        includeOther: current.includeOther,
+      });
+    },
+    [evaluateContext],
+  );
 
   /** Drain finished bubbles first, then the live one. One Jev call at a time. */
   const pump = useCallback(async () => {
@@ -338,19 +377,43 @@ export const ClassifierWidget = ({ elementId }: { elementId: string }) => {
     }
     runningRef.current = true;
     setBusy(true);
+    let lastWasLive = false;
     try {
       for (;;) {
         const generation = generationRef.current;
-        const job = queueRef.current.shift() ?? liveJobRef.current;
+        const contextVersion = contextVersionRef.current;
+        const job = lastWasLive
+          ? queueRef.current.shift() ?? liveJobRef.current
+          : liveJobRef.current ?? queueRef.current.shift();
         if (!job) {
           break;
         }
+        if (
+          job.turnId !== LIVE_TURN_ID &&
+          scoredTextRef.current.get(job.turnId) ===
+            `${contextVersion}:${job.text}`
+        ) {
+          continue;
+        }
+        inFlightRef.current = job;
+        lastWasLive = job.turnId === LIVE_TURN_ID;
         if (job.turnId === LIVE_TURN_ID) {
           liveJobRef.current = null;
         }
         try {
-          const result = await classifyText(job.text);
+          const result = await classifyText(job.text, job.turnId);
           if (generation !== generationRef.current) {
+            continue;
+          }
+          const currentTurn =
+            job.turnId === LIVE_TURN_ID
+              ? turnsRef.current.filter((turn) => !turn.isFinal).at(-1)
+              : turnsRef.current.find((turn) => turn.id === job.turnId);
+          if (
+            !currentTurn ||
+            currentTurn.text.trim() !== job.text ||
+            currentTurn.speaker !== job.speaker
+          ) {
             continue;
           }
           const score: TurnScore = {
@@ -362,7 +425,10 @@ export const ClassifierWidget = ({ elementId }: { elementId: string }) => {
           if (job.turnId === LIVE_TURN_ID) {
             setLive(score);
           } else {
-            scoredTextRef.current.set(job.turnId, job.text);
+            scoredTextRef.current.set(
+              job.turnId,
+              `${contextVersion}:${job.text}`,
+            );
             setScores((current) =>
               [
                 ...current.filter((item) => item.turnId !== job.turnId),
@@ -372,13 +438,29 @@ export const ClassifierWidget = ({ elementId }: { elementId: string }) => {
           }
           setStatus("Live from Jev.");
         } catch (error: unknown) {
+          if (
+            error instanceof Error &&
+            error.message === "Stale conversation result"
+          ) {
+            if (
+              generation === generationRef.current &&
+              job.turnId !== LIVE_TURN_ID &&
+              turnsRef.current.some(
+                (turn) =>
+                  turn.id === job.turnId && turn.text.trim() === job.text,
+              )
+            ) {
+              queueRef.current.push(job);
+            }
+            continue;
+          }
           if (generation !== generationRef.current) {
             continue;
           }
           setStatus(classifyErrorMessage(error));
-          // Stop hammering the server if the call itself is broken.
-          queueRef.current = [];
-          liveJobRef.current = null;
+          // A failed request must not discard queued final speech.
+        } finally {
+          inFlightRef.current = null;
         }
       }
     } finally {
@@ -389,15 +471,29 @@ export const ClassifierWidget = ({ elementId }: { elementId: string }) => {
 
   const enqueueFinal = useCallback((turn: TranscriptFeedTurn) => {
     const text = turn.text.trim();
-    if (text.length < MIN_PHRASE_CHARS) {
+    if (
+      inFlightRef.current?.turnId === turn.id &&
+      inFlightRef.current.text === text
+    ) {
       return false;
     }
-    if (scoredTextRef.current.get(turn.id) === text) {
+    if (
+      text.length < (configRef.current.contextEnabled ? 1 : MIN_PHRASE_CHARS)
+    ) {
       return false;
     }
-    if (queueRef.current.some((job) => job.turnId === turn.id)) {
+    const previous = scoredTextRef.current.get(turn.id);
+    const recent = turnsRef.current
+      .filter((item) => item.isFinal)
+      .slice(-6)
+      .some((item) => item.id === turn.id);
+    if (
+      previous === `${contextVersionRef.current}:${text}` ||
+      (previous?.endsWith(`:${text}`) && !recent)
+    ) {
       return false;
     }
+    queueRef.current = queueRef.current.filter((job) => job.turnId !== turn.id);
     queueRef.current.push({ turnId: turn.id, speaker: turn.speaker, text });
     return true;
   }, []);
@@ -426,7 +522,15 @@ export const ClassifierWidget = ({ elementId }: { elementId: string }) => {
     if (added) {
       void pump();
     }
-  }, [classesReady, config.sourceId, enqueueFinal, pump, recipeKey, turns]);
+  }, [
+    classesReady,
+    config.sourceId,
+    enqueueFinal,
+    pump,
+    recipeKey,
+    turns,
+    conversation.version,
+  ]);
 
   const liveTurn = useMemo(
     () => turns.filter((turn) => !turn.isFinal).at(-1) ?? null,
@@ -439,10 +543,14 @@ export const ClassifierWidget = ({ elementId }: { elementId: string }) => {
     if (!config.sourceId || !classesReady || !liveTurn) {
       return;
     }
-    if (livePhrase.length < MIN_PHRASE_CHARS) {
+    if (livePhrase.length < (config.contextEnabled ? 1 : MIN_PHRASE_CHARS)) {
       return;
     }
-    const handle = window.setTimeout(() => {
+    const ownerWindow = rootRef.current?.ownerDocument.defaultView;
+    if (!ownerWindow) {
+      return;
+    }
+    const handle = ownerWindow.setTimeout(() => {
       liveJobRef.current = {
         turnId: LIVE_TURN_ID,
         speaker: liveTurn.speaker,
@@ -450,8 +558,15 @@ export const ClassifierWidget = ({ elementId }: { elementId: string }) => {
       };
       void pump();
     }, LIVE_DEBOUNCE_MS);
-    return () => window.clearTimeout(handle);
-  }, [classesReady, config.sourceId, livePhrase, liveTurn, pump]);
+    return () => ownerWindow.clearTimeout(handle);
+  }, [
+    classesReady,
+    config.sourceId,
+    config.contextEnabled,
+    livePhrase,
+    liveTurn,
+    pump,
+  ]);
 
   // Once the live bubble lands as final, drop the provisional score.
   useEffect(() => {
@@ -461,11 +576,32 @@ export const ClassifierWidget = ({ elementId }: { elementId: string }) => {
   }, [liveTurn]);
 
   const names = useMemo(() => classNames(config), [config]);
-  const cards = useMemo(
-    () =>
-      buildSpeakerCards(live ? [...scores, live] : scores, speakerNames, names),
-    [live, names, scores, speakerNames],
-  );
+  const cards = useMemo(() => {
+    void conversation.version;
+    return buildSpeakerCards(
+      config.contextEnabled
+        ? scores.filter(
+            (row) =>
+              conversation.topicId !== null &&
+              conversation.context.results.get(row.turnId)?.topicId ===
+                conversation.topicId,
+          )
+        : live
+        ? [...scores, live]
+        : scores,
+      speakerNames,
+      names,
+    );
+  }, [
+    live,
+    names,
+    scores,
+    speakerNames,
+    config.contextEnabled,
+    conversation.topicId,
+    conversation.context,
+    conversation.version,
+  ]);
   const preview =
     livePhrase.length > SNIPPET_CHARS
       ? livePhrase.slice(-SNIPPET_CHARS)
@@ -490,7 +626,13 @@ export const ClassifierWidget = ({ elementId }: { elementId: string }) => {
   };
 
   return (
-    <div className="jayrr-called-embed jayrr-called-embed--classifier">
+    <div
+      ref={rootRef}
+      className="jayrr-called-embed jayrr-called-embed--classifier"
+    >
+      {config.contextEnabled ? (
+        <ConversationIndicators conversation={conversation} />
+      ) : null}
       <div className="jayrr-called-embed__tabs" role="tablist">
         {TABS.map((item) => (
           <button
@@ -619,6 +761,19 @@ export const ClassifierWidget = ({ elementId }: { elementId: string }) => {
       ) : null}
       {tab === "config" ? (
         <div className="jayrr-called-embed__stack">
+          <label className="jayrr-called-embed__check">
+            <input
+              type="checkbox"
+              checked={!!config.contextEnabled}
+              onChange={(event) =>
+                applyConfig(
+                  { ...config, contextEnabled: event.target.checked },
+                  true,
+                )
+              }
+            />
+            Conversation context (preview)
+          </label>
           <label className="jayrr-called-embed__field">
             <span>Source</span>
             <select

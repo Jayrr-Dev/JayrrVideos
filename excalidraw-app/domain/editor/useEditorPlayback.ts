@@ -1,21 +1,75 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { clipAtTime, type EditorTimeline } from "./buildEditorTimeline";
 import {
-  findEditorTargetVideo,
+  clipAtTime,
+  editorHasClips,
+  overlayOnLaneAtTime,
+  type EditorClip,
+  type EditorTimeline,
+} from "./buildEditorTimeline";
+import {
+  findEditorPreviewLayers,
   getEditorPreviewAudio,
   subscribeEditorPreviewVideos,
+  type EditorPreviewLayers,
 } from "./editorPreviewModel";
 
 type UseEditorPlaybackOpts = {
   timeline: EditorTimeline;
+  stackLaneIds: readonly string[];
   /** Linked canvas element that hosts the video. */
   previewElementId: string | null;
   ownerDocument: Document;
 };
 
+const LAYER_ON = "is-on";
+const LAYER_SOLO = "is-solo";
+
+const waitForData = (video: HTMLVideoElement) =>
+  new Promise<void>((resolve) => {
+    if (video.readyState >= 2) {
+      resolve();
+      return;
+    }
+    const onReady = () => {
+      video.removeEventListener("loadeddata", onReady);
+      resolve();
+    };
+    video.addEventListener("loadeddata", onReady);
+  });
+
+const sourceOffsetSec = (clip: EditorClip, timeMs: number) =>
+  Math.max(0, ((clip.sourceOffsetMs ?? 0) + (timeMs - clip.startMs)) / 1000);
+
+const seekVideo = (video: HTMLVideoElement, offsetSec: number) => {
+  try {
+    video.currentTime = Math.min(
+      offsetSec,
+      Number.isFinite(video.duration) ? video.duration : offsetSec,
+    );
+  } catch {
+    // Seeking before metadata is ready — ignore.
+  }
+};
+
+const projectMsFromVideo = (video: HTMLVideoElement, clip: EditorClip) => {
+  const sourceOffsetMs = clip.sourceOffsetMs ?? 0;
+  const withinMs = Math.max(0, video.currentTime * 1000 - sourceOffsetMs);
+  return Math.min(clip.startMs + clip.durationMs, clip.startMs + withinMs);
+};
+
+const setLayerVisible = (
+  video: HTMLVideoElement,
+  on: boolean,
+  solo: boolean,
+) => {
+  video.classList.toggle(LAYER_ON, on);
+  video.classList.toggle(LAYER_SOLO, on && solo);
+};
+
 export const useEditorPlayback = ({
   timeline,
+  stackLaneIds,
   previewElementId,
   ownerDocument,
 }: UseEditorPlaybackOpts) => {
@@ -23,21 +77,25 @@ export const useEditorPlayback = ({
   const [playing, setPlaying] = useState(false);
   const timeRef = useRef(0);
   const playingRef = useRef(false);
-  const clipIdRef = useRef<string | null>(null);
+  const baseClipIdRef = useRef<string | null>(null);
+  const stackClipIdsRef = useRef<(string | null)[]>([]);
+  const lastTickRef = useRef(0);
   const rafRef = useRef(0);
   const timelineRef = useRef(timeline);
   timelineRef.current = timeline;
+  const stackLaneIdsRef = useRef(stackLaneIds);
+  stackLaneIdsRef.current = stackLaneIds;
   const previewIdRef = useRef(previewElementId);
   previewIdRef.current = previewElementId;
   const docRef = useRef(ownerDocument);
   docRef.current = ownerDocument;
 
-  const resolveVideo = useCallback((): HTMLVideoElement | null => {
+  const resolveLayers = useCallback((): EditorPreviewLayers | null => {
     const id = previewIdRef.current;
     if (!id) {
       return null;
     }
-    return findEditorTargetVideo(id, docRef.current);
+    return findEditorPreviewLayers(id, docRef.current);
   }, []);
 
   const stopRaf = useCallback(() => {
@@ -47,108 +105,239 @@ export const useEditorPlayback = ({
     }
   }, []);
 
-  const applyClipToVideo = useCallback(
-    async (timeMs: number, shouldPlay: boolean) => {
-      const video = resolveVideo();
-      const clip = clipAtTime(timelineRef.current.sequence, timeMs);
-      if (!video || !clip) {
-        if (shouldPlay && !clip) {
-          playingRef.current = false;
-          setPlaying(false);
-        }
-        return;
+  const pauseAll = useCallback((layers: EditorPreviewLayers | null) => {
+    layers?.base.pause();
+    for (const stack of layers?.stacks ?? []) {
+      stack.pause();
+    }
+  }, []);
+
+  const applyClipToLayer = useCallback(
+    async (
+      video: HTMLVideoElement,
+      clip: EditorClip | null,
+      timeMs: number,
+      shouldPlay: boolean,
+      prevClipId: string | null,
+      solo: boolean,
+      isClockMaster: boolean,
+    ): Promise<string | null> => {
+      if (!clip) {
+        video.pause();
+        setLayerVisible(video, false, false);
+        return null;
       }
-      const sourceOffsetMs = clip.sourceOffsetMs ?? 0;
-      const offsetSec = Math.max(
-        0,
-        (sourceOffsetMs + (timeMs - clip.startMs)) / 1000,
-      );
-      const needsSrc =
-        clipIdRef.current !== clip.id || video.getAttribute("src") !== clip.url;
-      clipIdRef.current = clip.id;
       const audio = getEditorPreviewAudio();
       video.volume = audio.volume;
       video.muted = audio.muted;
+      const needsSrc =
+        prevClipId !== clip.id || video.getAttribute("src") !== clip.url;
       if (needsSrc) {
         video.src = clip.url;
         video.load();
-        await new Promise<void>((resolve) => {
-          const onReady = () => {
-            video.removeEventListener("loadeddata", onReady);
-            resolve();
-          };
-          if (video.readyState >= 2) {
-            resolve();
-            return;
-          }
-          video.addEventListener("loadeddata", onReady);
-        });
+        await waitForData(video);
         video.volume = audio.volume;
         video.muted = audio.muted;
       }
-      try {
-        video.currentTime = Math.min(
-          offsetSec,
-          Number.isFinite(video.duration) ? video.duration : offsetSec,
-        );
-      } catch {
-        // Seeking before metadata is ready — ignore.
-      }
+      seekVideo(video, sourceOffsetSec(clip, timeMs));
+      setLayerVisible(video, true, solo);
       if (shouldPlay) {
         try {
           await video.play();
         } catch {
-          playingRef.current = false;
-          setPlaying(false);
+          if (isClockMaster) {
+            playingRef.current = false;
+            setPlaying(false);
+          }
         }
       } else {
         video.pause();
       }
+      return clip.id;
     },
-    [resolveVideo],
+    [],
   );
 
-  const syncFromVideo = useCallback(() => {
-    const video = resolveVideo();
-    const clip = clipAtTime(timelineRef.current.sequence, timeRef.current);
-    if (!video || !clip || clipIdRef.current !== clip.id) {
-      return;
-    }
-    const sourceOffsetMs = clip.sourceOffsetMs ?? 0;
-    const withinMs = Math.max(0, video.currentTime * 1000 - sourceOffsetMs);
-    const projectMs = Math.min(
-      clip.startMs + clip.durationMs,
-      clip.startMs + withinMs,
-    );
-    timeRef.current = projectMs;
-    setCurrentTimeMs(projectMs);
-
-    if (projectMs >= clip.startMs + clip.durationMs - 16) {
-      const next = timelineRef.current.sequence.find(
-        (item) => item.startMs >= clip.startMs + clip.durationMs,
-      );
-      if (next && playingRef.current) {
-        timeRef.current = next.startMs;
-        setCurrentTimeMs(next.startMs);
-        void applyClipToVideo(next.startMs, true);
+  const applyProgram = useCallback(
+    async (timeMs: number, shouldPlay: boolean) => {
+      const layers = resolveLayers();
+      if (!layers) {
         return;
       }
-      if (playingRef.current) {
-        playingRef.current = false;
-        setPlaying(false);
-        video.pause();
-        stopRaf();
+      const { sequence, overlays } = timelineRef.current;
+      const sequenceClip = clipAtTime(sequence, timeMs);
+      const laneClips = stackLaneIdsRef.current.map((laneId) =>
+        overlayOnLaneAtTime(overlays, laneId, timeMs),
+      );
+      const firstOverlay = laneClips.find((clip) => clip) ?? null;
+      const orphanOverlay =
+        !sequenceClip && !firstOverlay && layers.stacks.length === 0
+          ? clipAtTime(overlays, timeMs)
+          : null;
+      const baseClip = sequenceClip ?? orphanOverlay;
+      const overlaySolo = !sequenceClip;
+
+      if (!baseClip && !firstOverlay && !orphanOverlay) {
+        pauseAll(layers);
+        setLayerVisible(layers.base, false, false);
+        for (const stack of layers.stacks) {
+          setLayerVisible(stack, false, false);
+        }
+        baseClipIdRef.current = null;
+        stackClipIdsRef.current = layers.stacks.map(() => null);
+        return;
+      }
+
+      const nextBaseId = await applyClipToLayer(
+        layers.base,
+        baseClip,
+        timeMs,
+        shouldPlay,
+        baseClipIdRef.current,
+        Boolean(baseClip) && !sequenceClip,
+        Boolean(baseClip),
+      );
+      if (!playingRef.current && shouldPlay) {
+        return;
+      }
+      baseClipIdRef.current = nextBaseId;
+
+      const nextStackIds: (string | null)[] = [];
+      for (let index = 0; index < layers.stacks.length; index++) {
+        const video = layers.stacks[index];
+        if (!video) {
+          nextStackIds.push(null);
+          continue;
+        }
+        if (!playingRef.current && shouldPlay) {
+          return;
+        }
+        const clip = laneClips[index] ?? null;
+        nextStackIds.push(
+          await applyClipToLayer(
+            video,
+            clip,
+            timeMs,
+            shouldPlay,
+            stackClipIdsRef.current[index] ?? null,
+            overlaySolo,
+            !baseClip && clip !== null && clip === firstOverlay,
+          ),
+        );
+      }
+      stackClipIdsRef.current = nextStackIds;
+    },
+    [applyClipToLayer, pauseAll, resolveLayers],
+  );
+
+  const syncFromMaster = useCallback(() => {
+    const layers = resolveLayers();
+    const timeMs = timeRef.current;
+    const { sequence, overlays } = timelineRef.current;
+    const sequenceClip = clipAtTime(sequence, timeMs);
+    if (layers && sequenceClip && baseClipIdRef.current === sequenceClip.id) {
+      return projectMsFromVideo(layers.base, sequenceClip);
+    }
+    const lanes = stackLaneIdsRef.current;
+    for (let index = 0; index < lanes.length; index++) {
+      const laneId = lanes[index];
+      if (!laneId) {
+        continue;
+      }
+      const clip = overlayOnLaneAtTime(overlays, laneId, timeMs);
+      const video = layers?.stacks[index];
+      if (!clip || !video || stackClipIdsRef.current[index] !== clip.id) {
+        continue;
+      }
+      return projectMsFromVideo(video, clip);
+    }
+    if (layers && !sequenceClip) {
+      const overlay = clipAtTime(overlays, timeMs);
+      if (overlay && baseClipIdRef.current === overlay.id) {
+        return projectMsFromVideo(layers.base, overlay);
       }
     }
-  }, [applyClipToVideo, resolveVideo, stopRaf]);
+    return null;
+  }, [resolveLayers]);
+
+  const stopAtEnd = useCallback(() => {
+    playingRef.current = false;
+    setPlaying(false);
+    stopRaf();
+    pauseAll(resolveLayers());
+  }, [pauseAll, resolveLayers, stopRaf]);
 
   const tick = useCallback(() => {
     if (!playingRef.current) {
       return;
     }
-    syncFromVideo();
+    const now = performance.now();
+    const elapsed = lastTickRef.current ? now - lastTickRef.current : 0;
+    lastTickRef.current = now;
+    const timelineNow = timelineRef.current;
+    const masterMs = syncFromMaster();
+    const nextMs = Math.min(
+      timelineNow.totalMs,
+      masterMs ?? timeRef.current + elapsed,
+    );
+    const prevMs = timeRef.current;
+    timeRef.current = nextMs;
+    setCurrentTimeMs(nextMs);
+    if (nextMs >= timelineNow.totalMs) {
+      stopAtEnd();
+      return;
+    }
+    const prevSeq = clipAtTime(timelineNow.sequence, prevMs)?.id ?? null;
+    const nextSeq = clipAtTime(timelineNow.sequence, nextMs)?.id ?? null;
+    const prevOverlay = stackLaneIdsRef.current
+      .map(
+        (laneId) =>
+          overlayOnLaneAtTime(timelineNow.overlays, laneId, prevMs)?.id ?? "",
+      )
+      .join("|");
+    const nextOverlay = stackLaneIdsRef.current
+      .map(
+        (laneId) =>
+          overlayOnLaneAtTime(timelineNow.overlays, laneId, nextMs)?.id ?? "",
+      )
+      .join("|");
+    const prevOrphan = clipAtTime(timelineNow.overlays, prevMs)?.id ?? null;
+    const nextOrphan = clipAtTime(timelineNow.overlays, nextMs)?.id ?? null;
+    if (
+      prevSeq !== nextSeq ||
+      prevOverlay !== nextOverlay ||
+      prevOrphan !== nextOrphan
+    ) {
+      void applyProgram(nextMs, true);
+    } else {
+      const layers = resolveLayers();
+      if (layers) {
+        const sequenceClip = clipAtTime(timelineNow.sequence, nextMs);
+        if (sequenceClip && baseClipIdRef.current === sequenceClip.id) {
+          const expected = sourceOffsetSec(sequenceClip, nextMs);
+          if (Math.abs(layers.base.currentTime - expected) > 0.12) {
+            seekVideo(layers.base, expected);
+          }
+        }
+        stackLaneIdsRef.current.forEach((laneId, index) => {
+          const clip = overlayOnLaneAtTime(
+            timelineNow.overlays,
+            laneId,
+            nextMs,
+          );
+          const video = layers.stacks[index];
+          if (!clip || !video || stackClipIdsRef.current[index] !== clip.id) {
+            return;
+          }
+          const expected = sourceOffsetSec(clip, nextMs);
+          if (Math.abs(video.currentTime - expected) > 0.12) {
+            seekVideo(video, expected);
+          }
+        });
+      }
+    }
     rafRef.current = requestAnimationFrame(tick);
-  }, [syncFromVideo]);
+  }, [applyProgram, resolveLayers, stopAtEnd, syncFromMaster]);
 
   const seek = useCallback(
     (nextMs: number) => {
@@ -156,46 +345,54 @@ export const useEditorPlayback = ({
       const clamped = Math.max(0, Math.min(total, nextMs));
       timeRef.current = clamped;
       setCurrentTimeMs(clamped);
-      void applyClipToVideo(clamped, playingRef.current);
+      void applyProgram(clamped, playingRef.current);
     },
-    [applyClipToVideo],
+    [applyProgram],
   );
 
   const pause = useCallback(() => {
     playingRef.current = false;
     setPlaying(false);
     stopRaf();
-    resolveVideo()?.pause();
-  }, [resolveVideo, stopRaf]);
+    pauseAll(resolveLayers());
+  }, [pauseAll, resolveLayers, stopRaf]);
 
   const stop = useCallback(() => {
     pause();
     timeRef.current = 0;
     setCurrentTimeMs(0);
-    clipIdRef.current = null;
-    const video = resolveVideo();
-    if (video) {
-      video.pause();
-      // Keep src on dedicated preview; clear only if we own the element via registry.
+    baseClipIdRef.current = null;
+    stackClipIdsRef.current = [];
+    const layers = resolveLayers();
+    if (layers) {
+      setLayerVisible(layers.base, false, false);
+      for (const stack of layers.stacks) {
+        setLayerVisible(stack, false, false);
+      }
     }
-  }, [pause, resolveVideo]);
+  }, [pause, resolveLayers]);
 
   const play = useCallback(() => {
-    if (timelineRef.current.sequence.length === 0 || !previewIdRef.current) {
+    if (!editorHasClips(timelineRef.current) || !previewIdRef.current) {
       return;
     }
     if (timeRef.current >= timelineRef.current.totalMs) {
       timeRef.current = 0;
       setCurrentTimeMs(0);
-      clipIdRef.current = null;
+      baseClipIdRef.current = null;
+      stackClipIdsRef.current = [];
     }
     playingRef.current = true;
     setPlaying(true);
-    void applyClipToVideo(timeRef.current, true).then(() => {
+    lastTickRef.current = performance.now();
+    void applyProgram(timeRef.current, true).then(() => {
+      if (!playingRef.current) {
+        return;
+      }
       stopRaf();
       rafRef.current = requestAnimationFrame(tick);
     });
-  }, [applyClipToVideo, stopRaf, tick]);
+  }, [applyProgram, stopRaf, tick]);
 
   const togglePlay = useCallback(() => {
     if (playingRef.current) {
@@ -211,36 +408,40 @@ export const useEditorPlayback = ({
       timeRef.current = total;
       setCurrentTimeMs(total);
     }
-    if (timeline.sequence.length === 0) {
+    if (!editorHasClips(timeline)) {
       pause();
-      clipIdRef.current = null;
+      baseClipIdRef.current = null;
+      stackClipIdsRef.current = [];
+      return;
     }
-  }, [pause, timeline.sequence.length, timeline.totalMs]);
+    void applyProgram(timeRef.current, playingRef.current);
+  }, [applyProgram, pause, timeline]);
 
   useEffect(() => {
-    clipIdRef.current = null;
+    baseClipIdRef.current = null;
+    stackClipIdsRef.current = [];
     if (!previewElementId) {
       pause();
       return;
     }
-    void applyClipToVideo(timeRef.current, playingRef.current);
-  }, [applyClipToVideo, pause, previewElementId]);
+    void applyProgram(timeRef.current, playingRef.current);
+  }, [applyProgram, pause, previewElementId]);
 
   useEffect(() => {
     return subscribeEditorPreviewVideos(() => {
       if (!previewIdRef.current) {
         return;
       }
-      void applyClipToVideo(timeRef.current, playingRef.current);
+      void applyProgram(timeRef.current, playingRef.current);
     });
-  }, [applyClipToVideo]);
+  }, [applyProgram]);
 
   useEffect(() => {
     return () => {
       stopRaf();
-      resolveVideo()?.pause();
+      pauseAll(resolveLayers());
     };
-  }, [resolveVideo, stopRaf]);
+  }, [pauseAll, resolveLayers, stopRaf]);
 
   return {
     currentTimeMs,

@@ -271,11 +271,15 @@ function retryDelayMs(response: Response, attempt: number) {
   return base / 2 + Math.random() * (base / 2);
 }
 
-async function postSystemOne(apiKey: string, body: string, timeoutMs = REQUEST_TIMEOUT_MS) {
+async function postSystemOne(
+  apiKey: string,
+  body: string,
+  timeoutMs = REQUEST_TIMEOUT_MS,
+) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    return await fetch(TYPESAFE_URL, {
+    const response = await fetch(TYPESAFE_URL, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -284,6 +288,8 @@ async function postSystemOne(apiKey: string, body: string, timeoutMs = REQUEST_T
       body,
       signal: controller.signal,
     });
+    // Keep the deadline active while reading the body, not just the headers.
+    return { response, text: await response.text() };
   } catch (error: unknown) {
     if (error instanceof Error && error.name === "AbortError") {
       throw new Error("Jev timed out.");
@@ -294,7 +300,10 @@ async function postSystemOne(apiKey: string, body: string, timeoutMs = REQUEST_T
   }
 }
 
-export async function callTypeSafeSystemOne(args: JevEvaluateArgs, live = false) {
+export async function callTypeSafeSystemOne(
+  args: JevEvaluateArgs,
+  live = false,
+) {
   const apiKey = process.env.TYPESAFE_API_KEY?.trim();
   if (!apiKey) {
     throw new Error("TypeSafe is not configured on the server.");
@@ -308,16 +317,21 @@ export async function callTypeSafeSystemOne(args: JevEvaluateArgs, live = false)
 
   let lastError = "Jev request failed.";
   for (let attempt = 1; attempt <= (live ? 1 : MAX_ATTEMPTS); attempt += 1) {
-    const response = await postSystemOne(apiKey, body, live ? 2000 : REQUEST_TIMEOUT_MS);
+    const { response, text } = await postSystemOne(
+      apiKey,
+      body,
+      live ? 2000 : REQUEST_TIMEOUT_MS,
+    );
 
     if (response.status === 429 || response.status === 529) {
       lastError = `Jev is busy (${response.status}).`;
-      if (live) { throw new Error(lastError); }
+      if (live) {
+        throw new Error(lastError);
+      }
       await sleep(retryDelayMs(response, attempt));
       continue;
     }
 
-    const text = await response.text();
     let parsed: TypeSafeResponse = {};
     try {
       parsed = text ? (JSON.parse(text) as TypeSafeResponse) : {};

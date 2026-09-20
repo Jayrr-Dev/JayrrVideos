@@ -243,7 +243,8 @@ const emptyProbabilities = (): Record<SocionId, number> => {
   return probabilities;
 };
 
-const isSocionId = (id: string): id is SocionId => SOCION_BY_ID.has(id as SocionId);
+const isSocionId = (id: string): id is SocionId =>
+  SOCION_BY_ID.has(id as SocionId);
 
 const pickId = (
   probabilities: Record<SocionId, number>,

@@ -1,3 +1,5 @@
+import { conversationFor, resetConversation } from "./conversationContext";
+
 export type TranscriptFeedTurn = {
   id: string;
   speaker: number | null;
@@ -23,7 +25,9 @@ const notify = () => {
 };
 
 export const publishTranscript = (feed: TranscriptFeed) => {
-  if (!feed.turns.length && feeds.get(feed.sourceId)?.turns.length) { resetConversation(feed.sourceId); }
+  if (!feed.turns.length && feeds.get(feed.sourceId)?.turns.length) {
+    resetConversation(feed.sourceId);
+  }
   conversationFor(feed.sourceId).ingest(feed.turns);
   feeds.set(feed.sourceId, feed);
   notify();
@@ -48,4 +52,3 @@ export const subscribeTranscripts = (onChange: () => void) => {
     listeners.delete(onChange);
   };
 };
-import { conversationFor, resetConversation } from "./conversationContext";

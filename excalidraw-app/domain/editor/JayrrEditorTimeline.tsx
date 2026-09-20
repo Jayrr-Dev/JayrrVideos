@@ -10,7 +10,9 @@ import {
   useSensors,
   type CollisionDetection,
   type DragEndEvent,
+  type DragMoveEvent,
   type DragStartEvent,
+  type Modifier,
 } from "@dnd-kit/core";
 import {
   useCallback,
@@ -28,10 +30,12 @@ import { PlusIcon } from "@excalidraw/excalidraw/components/icons";
 
 import {
   clipLaneId,
+  collectSnapPointsMs,
   EDITOR_PX_PER_SECOND,
   formatEditorClock,
   MAX_STACK_LANES,
   SEQUENCE_LANE_ID,
+  snapClipStart,
   type EditorClip,
   type EditorTimeline,
 } from "./buildEditorTimeline";
@@ -45,6 +49,16 @@ const laneDroppableId = (laneId: string) => `${LANE_PREFIX}${laneId}`;
 
 const parseLaneDroppable = (id: string) =>
   id.startsWith(LANE_PREFIX) ? id.slice(LANE_PREFIX.length) : null;
+
+type DragPlacement = {
+  clipId: string;
+  toLaneId: string;
+  /** Pointer-driven start before snap. */
+  rawStartMs: number;
+  startMs: number;
+  guideMs: number | null;
+  durationMs: number;
+};
 
 type JayrrEditorTimelineProps = {
   timeline: EditorTimeline;
@@ -60,8 +74,7 @@ type JayrrEditorTimelineProps = {
   onMoveClip: (args: {
     clipId: string;
     toLaneId: string;
-    timeMs: number;
-    overClipId?: string | null;
+    startMs: number;
   }) => void;
   onAddStackLane: () => void;
 };
@@ -70,6 +83,7 @@ const msToPx = (ms: number, pxPerMs: number) => ms * pxPerMs;
 
 const RULER_TICK_MS = 1000;
 const TRACK_PAD_PX = 10;
+const SNAP_THRESHOLD_PX = 8;
 
 const collideLanes: CollisionDetection = (args) => {
   const pointerHits = pointerWithin(args);
@@ -102,8 +116,11 @@ export const JayrrEditorTimeline = ({
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const draggingSeekRef = useRef(false);
   const skipClickRef = useRef(false);
+  const altHeldRef = useRef(false);
+  const placementRef = useRef<DragPlacement | null>(null);
   const [bodyHeight, setBodyHeight] = useState(360);
   const [activeClipId, setActiveClipId] = useState<string | null>(null);
+  const [placement, setPlacement] = useState<DragPlacement | null>(null);
 
   const clipsById = useMemo(() => {
     const map = new Map<string, EditorClip>();
@@ -166,6 +183,8 @@ export const JayrrEditorTimeline = ({
     return Math.max(0.02, (bodyHeight - TRACK_PAD_PX * 2) / total);
   }, [bodyHeight, timeline.totalMs, zoomMode]);
 
+  const snapThresholdMs = SNAP_THRESHOLD_PX / pxPerMs;
+
   const totalHeight = Math.max(
     80,
     msToPx(timeline.totalMs, pxPerMs) + TRACK_PAD_PX * 2,
@@ -199,6 +218,175 @@ export const JayrrEditorTimeline = ({
     [pxPerMs, timeline.totalMs],
   );
 
+  const clearPlacement = useCallback(() => {
+    placementRef.current = null;
+    setPlacement(null);
+  }, []);
+
+  const updatePlacement = useCallback((next: DragPlacement | null) => {
+    placementRef.current = next;
+    setPlacement(next);
+  }, []);
+
+  useEffect(() => {
+    if (!activeClipId) {
+      altHeldRef.current = false;
+      return;
+    }
+    const body = bodyRef.current;
+    const doc = body?.ownerDocument;
+    if (!doc) {
+      return;
+    }
+    const applyAlt = (held: boolean) => {
+      if (altHeldRef.current === held) {
+        return;
+      }
+      altHeldRef.current = held;
+      const clip = clipsById.get(activeClipId);
+      const current = placementRef.current;
+      if (!clip || !current) {
+        return;
+      }
+      if (held) {
+        updatePlacement({
+          ...current,
+          startMs: Math.round(current.rawStartMs),
+          guideMs: null,
+        });
+        return;
+      }
+      const snapped = snapClipStart({
+        startMs: current.rawStartMs,
+        durationMs: clip.durationMs,
+        snapPoints: collectSnapPointsMs({
+          timeline,
+          excludeClipId: clip.id,
+          playheadMs: currentTimeMs,
+        }),
+        thresholdMs: snapThresholdMs,
+      });
+      updatePlacement({
+        ...current,
+        startMs: snapped.startMs,
+        guideMs: snapped.guideMs,
+      });
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Alt") {
+        applyAlt(true);
+      }
+    };
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (event.key === "Alt") {
+        applyAlt(false);
+      }
+    };
+    doc.addEventListener("keydown", onKeyDown);
+    doc.addEventListener("keyup", onKeyUp);
+    return () => {
+      doc.removeEventListener("keydown", onKeyDown);
+      doc.removeEventListener("keyup", onKeyUp);
+    };
+  }, [
+    activeClipId,
+    clipsById,
+    currentTimeMs,
+    snapThresholdMs,
+    timeline,
+    updatePlacement,
+  ]);
+
+  const pxPerMsRef = useRef(pxPerMs);
+  pxPerMsRef.current = pxPerMs;
+  const snapThresholdMsRef = useRef(snapThresholdMs);
+  snapThresholdMsRef.current = snapThresholdMs;
+  const timelineRef = useRef(timeline);
+  timelineRef.current = timeline;
+  const currentTimeMsRef = useRef(currentTimeMs);
+  currentTimeMsRef.current = currentTimeMs;
+  const clipsByIdRef = useRef(clipsById);
+  clipsByIdRef.current = clipsById;
+
+  const resolveTargetLane = useCallback(
+    (overId: string | null | undefined, fallbackLaneId: string) => {
+      if (!overId) {
+        return fallbackLaneId;
+      }
+      const laneFromDrop = parseLaneDroppable(overId);
+      if (laneFromDrop) {
+        return laneFromDrop;
+      }
+      const overClip = clipsByIdRef.current.get(overId);
+      if (overClip) {
+        return clipLaneId(overClip);
+      }
+      return fallbackLaneId;
+    },
+    [],
+  );
+
+  const placementFromDelta = useCallback(
+    (
+      clip: EditorClip,
+      deltaY: number,
+      overId: string | null | undefined,
+    ): DragPlacement => {
+      const rawStartMs = Math.max(
+        0,
+        clip.startMs + deltaY / pxPerMsRef.current,
+      );
+      const toLaneId = resolveTargetLane(overId, clipLaneId(clip));
+      const base = {
+        clipId: clip.id,
+        toLaneId,
+        rawStartMs,
+        durationMs: clip.durationMs,
+      };
+      if (altHeldRef.current) {
+        return {
+          ...base,
+          startMs: Math.round(rawStartMs),
+          guideMs: null,
+        };
+      }
+      const snapped = snapClipStart({
+        startMs: rawStartMs,
+        durationMs: clip.durationMs,
+        snapPoints: collectSnapPointsMs({
+          timeline: timelineRef.current,
+          excludeClipId: clip.id,
+          playheadMs: currentTimeMsRef.current,
+        }),
+        thresholdMs: snapThresholdMsRef.current,
+      });
+      return {
+        ...base,
+        startMs: snapped.startMs,
+        guideMs: snapped.guideMs,
+      };
+    },
+    [resolveTargetLane],
+  );
+
+  const snapYModifier: Modifier = useCallback(
+    ({ transform, active, over }) => {
+      const clipId = active ? String(active.id) : null;
+      const clip = clipId ? clipsByIdRef.current.get(clipId) : null;
+      if (!clip) {
+        return transform;
+      }
+      const overId = over ? String(over.id) : null;
+      const next = placementFromDelta(clip, transform.y, overId);
+      placementRef.current = next;
+      return {
+        ...transform,
+        y: msToPx(next.startMs - clip.startMs, pxPerMsRef.current),
+      };
+    },
+    [placementFromDelta],
+  );
+
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
     if (disabled || event.button !== 0) {
       return;
@@ -230,45 +418,77 @@ export const JayrrEditorTimeline = ({
   };
 
   const onDragStart = (event: DragStartEvent) => {
-    setActiveClipId(String(event.active.id));
+    const clipId = String(event.active.id);
+    const clip = clipsById.get(clipId);
+    setActiveClipId(clipId);
+    if (!clip) {
+      return;
+    }
+    updatePlacement({
+      clipId,
+      toLaneId: clipLaneId(clip),
+      rawStartMs: clip.startMs,
+      startMs: clip.startMs,
+      guideMs: null,
+      durationMs: clip.durationMs,
+    });
+  };
+
+  const onDragMove = (event: DragMoveEvent) => {
+    const clipId = String(event.active.id);
+    const clip = clipsById.get(clipId);
+    if (!clip) {
+      return;
+    }
+    const overId = event.over ? String(event.over.id) : null;
+    // Modifier already wrote placementRef from the same transform; refresh
+    // lane from the latest over target and push React state for guides.
+    const fromRef = placementRef.current;
+    const next =
+      fromRef?.clipId === clipId
+        ? {
+            ...fromRef,
+            toLaneId: resolveTargetLane(overId, fromRef.toLaneId),
+          }
+        : placementFromDelta(clip, event.delta.y, overId);
+    updatePlacement(next);
   };
 
   const onDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
+    const clipId = String(event.active.id);
+    const clip = clipsById.get(clipId);
+    const overId = event.over ? String(event.over.id) : null;
+    const next =
+      placementRef.current?.clipId === clipId
+        ? {
+            ...placementRef.current,
+            toLaneId: resolveTargetLane(overId, placementRef.current.toLaneId),
+          }
+        : clip
+        ? placementFromDelta(clip, event.delta.y, overId)
+        : null;
     setActiveClipId(null);
-    if (!over) {
+    clearPlacement();
+    if (!next || !clip) {
       return;
     }
-    const clipId = String(active.id);
-    const overId = String(over.id);
-    if (clipId === overId) {
+    if (
+      next.toLaneId === clipLaneId(clip) &&
+      next.startMs === Math.round(clip.startMs)
+    ) {
       return;
     }
-    const laneFromDrop = parseLaneDroppable(overId);
-    const overClip = clipsById.get(overId);
-    const toLaneId = laneFromDrop ?? (overClip ? clipLaneId(overClip) : null);
-    if (!toLaneId) {
-      return;
-    }
-    const activator = event.activatorEvent as { clientY?: number };
-    const clientY =
-      typeof activator.clientY === "number"
-        ? activator.clientY + event.delta.y
-        : event.active.rect.current.translated?.top;
-    const timeMs =
-      typeof clientY === "number"
-        ? timeFromClientY(clientY)
-        : overClip?.startMs ?? 0;
     skipClickRef.current = true;
     onMoveClip({
-      clipId,
-      toLaneId,
-      timeMs,
-      overClipId:
-        overClip && clipLaneId(overClip) === SEQUENCE_LANE_ID
-          ? overClip.id
-          : null,
+      clipId: next.clipId,
+      toLaneId: next.toLaneId,
+      startMs: next.startMs,
     });
+  };
+
+  const onDragCancel = () => {
+    setActiveClipId(null);
+    clearPlacement();
   };
 
   const canAddStackLane = stackLaneIds.length < MAX_STACK_LANES;
@@ -277,6 +497,21 @@ export const JayrrEditorTimeline = ({
   } as CSSProperties;
   const activeClip = activeClipId ? clipsById.get(activeClipId) : null;
   const hasClips = timeline.sequence.length + timeline.overlays.length > 0;
+  const dropSlotTop =
+    placement != null
+      ? TRACK_PAD_PX + msToPx(placement.startMs, pxPerMs)
+      : null;
+  const dropSlotHeight =
+    placement != null
+      ? Math.max(18, msToPx(placement.durationMs, pxPerMs))
+      : null;
+  const snapLineTop =
+    placement?.guideMs != null
+      ? TRACK_PAD_PX + msToPx(placement.guideMs, pxPerMs)
+      : null;
+  const snapIsPlayhead =
+    placement?.guideMs != null &&
+    Math.abs(placement.guideMs - currentTimeMs) < 0.5;
 
   return (
     <div className="jayrr-editor-timeline" style={laneCountStyle}>
@@ -312,16 +547,27 @@ export const JayrrEditorTimeline = ({
         <DndContext
           sensors={sensors}
           collisionDetection={collideLanes}
+          modifiers={[snapYModifier]}
           onDragStart={onDragStart}
+          onDragMove={onDragMove}
           onDragEnd={onDragEnd}
-          onDragCancel={() => setActiveClipId(null)}
+          onDragCancel={onDragCancel}
         >
           <div
             className="jayrr-editor-timeline__tracks"
             style={{ height: totalHeight }}
           >
             <TimelineRuler ticks={ticks} pxPerMs={pxPerMs} />
-            <TrackLane laneId={SEQUENCE_LANE_ID} packed>
+            <TrackLane
+              laneId={SEQUENCE_LANE_ID}
+              dropSlot={
+                placement?.toLaneId === SEQUENCE_LANE_ID &&
+                dropSlotTop != null &&
+                dropSlotHeight != null ? (
+                  <DropSlot top={dropSlotTop} height={dropSlotHeight} />
+                ) : null
+              }
+            >
               {timeline.sequence.map((clip) => (
                 <TimelineClip
                   key={clip.id}
@@ -329,7 +575,6 @@ export const JayrrEditorTimeline = ({
                   pxPerMs={pxPerMs}
                   selected={selectedClipIds.has(clip.id)}
                   playhead={playheadClipId === clip.id}
-                  packed
                   hidden={activeClipId === clip.id}
                   onSelect={(toggle) => {
                     if (skipClickRef.current) {
@@ -345,7 +590,17 @@ export const JayrrEditorTimeline = ({
               ))}
             </TrackLane>
             {stackLaneIds.map((laneId) => (
-              <TrackLane key={laneId} laneId={laneId}>
+              <TrackLane
+                key={laneId}
+                laneId={laneId}
+                dropSlot={
+                  placement?.toLaneId === laneId &&
+                  dropSlotTop != null &&
+                  dropSlotHeight != null ? (
+                    <DropSlot top={dropSlotTop} height={dropSlotHeight} />
+                  ) : null
+                }
+              >
                 {(overlaysByLane.get(laneId) ?? []).map((clip) => (
                   <TimelineClip
                     key={clip.id}
@@ -368,6 +623,19 @@ export const JayrrEditorTimeline = ({
                 ))}
               </TrackLane>
             ))}
+            {snapLineTop != null && placement?.guideMs != null ? (
+              <div
+                className={`jayrr-editor-timeline__snap-line${
+                  snapIsPlayhead ? " is-playhead" : ""
+                }`}
+                style={{ top: snapLineTop }}
+                aria-hidden
+              >
+                <span className="jayrr-editor-timeline__snap-label">
+                  {formatEditorClock(placement.guideMs)}
+                </span>
+              </div>
+            ) : null}
             <div
               className="jayrr-editor-timeline__playhead"
               style={{ top: playheadTop }}
@@ -451,14 +719,22 @@ const TimelineRuler = ({
   </div>
 );
 
+const DropSlot = ({ top, height }: { top: number; height: number }) => (
+  <div
+    className="jayrr-editor-timeline__drop-slot"
+    style={{ top, height }}
+    aria-hidden
+  />
+);
+
 const TrackLane = ({
   laneId,
-  packed,
   children,
+  dropSlot,
 }: {
   laneId: string;
-  packed?: boolean;
   children: ReactNode;
+  dropSlot?: ReactNode;
 }) => {
   const { setNodeRef, isOver } = useDroppable({
     id: laneDroppableId(laneId),
@@ -466,12 +742,11 @@ const TrackLane = ({
   return (
     <div
       ref={setNodeRef}
-      className={`jayrr-editor-timeline__lane${
-        packed
-          ? " jayrr-editor-timeline__lane--sequence"
-          : " jayrr-editor-timeline__lane--stack"
-      }${isOver ? " is-drop-target" : ""}`}
+      className={`jayrr-editor-timeline__lane jayrr-editor-timeline__lane--stack${
+        isOver ? " is-drop-target" : ""
+      }`}
     >
+      {dropSlot}
       {children}
     </div>
   );

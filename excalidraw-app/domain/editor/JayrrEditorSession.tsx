@@ -23,6 +23,8 @@ import {
   newEditorClipId,
   newEditorLaneId,
   SEQUENCE_LANE_ID,
+  sequenceEndMs,
+  withFrozenStarts,
   type EditorProjectClip,
 } from "./buildEditorTimeline";
 import { publishEditorPlayback } from "./editorPlaybackBridge";
@@ -210,9 +212,8 @@ export const JayrrEditorSession = ({ children }: { children: ReactNode }) => {
   );
 
   const [clips, setClips] = useState<EditorProjectClip[]>([]);
-  const [stackLaneIds, setStackLaneIds] = useState<readonly string[]>(
-    readStoredStackLanes,
-  );
+  const [stackLaneIds, setStackLaneIds] =
+    useState<readonly string[]>(readStoredStackLanes);
   const [previewElementId, setPreviewElementId] = useState<string | null>(
     readStoredPreviewId,
   );
@@ -328,6 +329,7 @@ export const JayrrEditorSession = ({ children }: { children: ReactNode }) => {
   const { currentTimeMs, playing, play, pause, stop, seek, togglePlay } =
     useEditorPlayback({
       timeline,
+      stackLaneIds,
       previewElementId,
       ownerDocument,
     });
@@ -349,8 +351,9 @@ export const JayrrEditorSession = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const persist = useCallback((next: EditorProjectClip[]) => {
-    setClips(next);
-    writeStoredClips(next);
+    const frozen = withFrozenStarts(next);
+    setClips(frozen);
+    writeStoredClips(frozen);
   }, []);
 
   const addStackLane = useCallback(() => {
@@ -433,6 +436,7 @@ export const JayrrEditorSession = ({ children }: { children: ReactNode }) => {
 
   const addRecording = useCallback(
     (row: EditorRecordingPick) => {
+      const frozen = withFrozenStarts(clips);
       const next: EditorProjectClip = {
         id: newEditorClipId(),
         recordingId: row._id,
@@ -440,14 +444,18 @@ export const JayrrEditorSession = ({ children }: { children: ReactNode }) => {
         posterUrl: row.posterUrl,
         label: row.name?.trim() || "Recording",
         durationMs: Math.max(1, row.durationMs),
+        laneId: SEQUENCE_LANE_ID,
+        laneStartMs: sequenceEndMs(frozen),
       };
-      persist([...clips, next]);
+      persist([...frozen, next]);
       return next.id;
     },
     [clips, persist],
   );
 
-  const disabled = timeline.sequence.length === 0 || !previewElementId;
+  const disabled =
+    (timeline.sequence.length === 0 && timeline.overlays.length === 0) ||
+    !previewElementId;
 
   const value = useMemo(
     (): EditorSessionValue => ({

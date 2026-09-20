@@ -23,7 +23,6 @@ import {
   mergeProjectClips,
   moveEditorClip,
   newEditorClipId,
-  SEQUENCE_LANE_ID,
   type EditorClip,
   type EditorProjectClip,
 } from "./buildEditorTimeline";
@@ -111,7 +110,13 @@ export const JayrrEditorPanel = () => {
       (clip) =>
         currentTimeMs >= clip.startMs &&
         currentTimeMs < clip.startMs + clip.durationMs,
-    )?.id ?? null;
+    )?.id ??
+    timeline.overlays.find(
+      (clip) =>
+        currentTimeMs >= clip.startMs &&
+        currentTimeMs < clip.startMs + clip.durationMs,
+    )?.id ??
+    null;
 
   const removeSelected = useCallback(() => {
     if (selectedClipIds.length === 0) {
@@ -174,6 +179,7 @@ export const JayrrEditorPanel = () => {
       return;
     }
     const sourceOffsetMs = clip.sourceOffsetMs ?? 0;
+    const startMs = clip.laneStartMs ?? clip.startMs;
     const left: EditorProjectClip = {
       id: clip.id,
       recordingId: clip.recordingId,
@@ -183,7 +189,7 @@ export const JayrrEditorPanel = () => {
       durationMs: offsetInClip,
       sourceOffsetMs,
       laneId: clip.laneId,
-      laneStartMs: clip.laneStartMs,
+      laneStartMs: startMs,
     };
     const right: EditorProjectClip = {
       id: newEditorClipId(),
@@ -194,9 +200,7 @@ export const JayrrEditorPanel = () => {
       durationMs: clip.durationMs - offsetInClip,
       sourceOffsetMs: sourceOffsetMs + offsetInClip,
       laneId: clip.laneId,
-      ...(clip.laneId && clip.laneId !== SEQUENCE_LANE_ID
-        ? { laneStartMs: (clip.laneStartMs ?? clip.startMs) + offsetInClip }
-        : {}),
+      laneStartMs: startMs + offsetInClip,
     };
     const index = clips.findIndex((item) => item.id === clip.id);
     if (index < 0) {
@@ -229,12 +233,7 @@ export const JayrrEditorPanel = () => {
   );
 
   const moveClip = useCallback(
-    (args: {
-      clipId: string;
-      toLaneId: string;
-      timeMs: number;
-      overClipId?: string | null;
-    }) => {
+    (args: { clipId: string; toLaneId: string; startMs: number }) => {
       const next = moveEditorClip({ clips, ...args });
       if (!next) {
         return;
@@ -289,7 +288,7 @@ export const JayrrEditorPanel = () => {
               {playing ? "Pause" : "Play"}
             </FilledButton>
           ) : null}
-          {timeline.sequence.length > 0 ? (
+          {timeline.sequence.length > 0 || timeline.overlays.length > 0 ? (
             <FilledButton
               color="muted"
               variant="outlined"

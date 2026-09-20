@@ -3,6 +3,7 @@ import type { ExcalidrawElement } from "@excalidraw/element/types";
 import { JAYRR_CALLED_OBJECT_KEY } from "../model";
 
 export type TranscribeConfig = {
+  contextEnabled?: boolean;
   jevIq: boolean;
   jevSmart: boolean;
   jevMbti: boolean;
@@ -18,6 +19,7 @@ export type TranscribeConfig = {
 };
 
 export const DEFAULT_TRANSCRIBE: TranscribeConfig = {
+  contextEnabled: true,
   jevIq: false,
   jevSmart: false,
   jevMbti: false,
@@ -41,6 +43,8 @@ export const readTranscribeConfig = (
   }
   const sourceId = (bag as { sourceId?: unknown }).sourceId;
   return {
+    contextEnabled:
+      (bag as { contextEnabled?: unknown }).contextEnabled !== false,
     jevIq: (bag as { jevIq?: unknown }).jevIq === true,
     jevSmart: (bag as { jevSmart?: unknown }).jevSmart === true,
     jevMbti: (bag as { jevMbti?: unknown }).jevMbti === true,
@@ -67,6 +71,7 @@ export const writeTranscribeConfig = (
       ? { ...(previous as Record<string, unknown>) }
       : {};
   bag.kind = "transcribe";
+  bag.contextEnabled = config.contextEnabled === true;
   bag.jevIq = config.jevIq;
   bag.jevSmart = config.jevSmart;
   bag.jevMbti = config.jevMbti;

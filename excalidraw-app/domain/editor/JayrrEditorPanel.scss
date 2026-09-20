@@ -469,6 +469,54 @@
     background: var(--color-surface-primary-container);
   }
 
+  .jayrr-editor-timeline__drop-slot {
+    position: absolute;
+    left: 0.2rem;
+    right: 0.2rem;
+    border: 1px dashed var(--color-primary);
+    border-radius: var(--border-radius-md);
+    background: color-mix(in srgb, var(--color-primary) 18%, transparent);
+    pointer-events: none;
+    z-index: 2;
+    box-sizing: border-box;
+  }
+
+  .jayrr-editor-timeline__snap-line {
+    position: absolute;
+    left: 0;
+    right: 0;
+    grid-column: 1 / -1;
+    grid-row: 1;
+    height: 0;
+    border-top: 1px dashed var(--color-primary);
+    pointer-events: none;
+    z-index: 2;
+  }
+
+  .jayrr-editor-timeline__snap-line.is-playhead {
+    border-top-color: #facc15;
+  }
+
+  .jayrr-editor-timeline__snap-label {
+    position: absolute;
+    left: 0.15rem;
+    top: -0.55rem;
+    padding: 0.05rem 0.25rem;
+    border-radius: 0.2rem;
+    font-size: 0.55rem;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    line-height: 1.2;
+    color: var(--color-primary-contrast, #fff);
+    background: var(--color-primary);
+    white-space: nowrap;
+  }
+
+  .jayrr-editor-timeline__snap-line.is-playhead .jayrr-editor-timeline__snap-label {
+    color: #1c1917;
+    background: #facc15;
+  }
+
   .jayrr-editor-timeline__playhead {
     --jayrr-editor-playhead: #facc15;
     position: absolute;

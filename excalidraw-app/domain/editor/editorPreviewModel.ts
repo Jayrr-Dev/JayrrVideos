@@ -35,6 +35,7 @@ export const isJayrrEditorPreviewElement = (
 };
 
 const videos = new Map<string, HTMLVideoElement>();
+const layerTargets = new Map<string, EditorPreviewLayers>();
 const videoListeners = new Set<() => void>();
 const audioListeners = new Set<(audio: EditorPreviewAudio) => void>();
 
@@ -45,6 +46,11 @@ const notifyVideoListeners = () => {
 };
 
 export type EditorPreviewAudio = { volume: number; muted: boolean };
+
+export type EditorPreviewLayers = {
+  base: HTMLVideoElement;
+  stacks: readonly HTMLVideoElement[];
+};
 
 const clampVolume = (value: number) => Math.min(1, Math.max(0, value));
 
@@ -88,17 +94,37 @@ const applyAudioToVideo = (
   video.muted = audio.muted;
 };
 
+const eachRegisteredVideo = (visit: (video: HTMLVideoElement) => void) => {
+  const seen = new Set<HTMLVideoElement>();
+  for (const layers of layerTargets.values()) {
+    for (const video of [layers.base, ...layers.stacks]) {
+      if (seen.has(video)) {
+        continue;
+      }
+      seen.add(video);
+      visit(video);
+    }
+  }
+  for (const video of videos.values()) {
+    if (seen.has(video)) {
+      continue;
+    }
+    seen.add(video);
+    visit(video);
+  }
+};
+
 const applyAudioToVideos = (
   audio: EditorPreviewAudio,
   extra?: HTMLVideoElement | null,
 ) => {
   let extraIsRegistered = false;
-  for (const video of videos.values()) {
+  eachRegisteredVideo((video) => {
     applyAudioToVideo(video, audio);
     if (video === extra) {
       extraIsRegistered = true;
     }
-  }
+  });
   if (extra && !extraIsRegistered) {
     applyAudioToVideo(extra, audio);
   }
@@ -156,6 +182,32 @@ export const registerEditorPreviewVideo = (
   };
 };
 
+export const registerEditorPreviewLayers = (
+  elementId: string,
+  layers: EditorPreviewLayers,
+) => {
+  layerTargets.set(elementId, layers);
+  videos.set(elementId, layers.base);
+  const audio = getEditorPreviewAudio();
+  applyAudioToVideo(layers.base, audio);
+  for (const stack of layers.stacks) {
+    applyAudioToVideo(stack, audio);
+  }
+  notifyVideoListeners();
+  return () => {
+    if (layerTargets.get(elementId) === layers) {
+      layerTargets.delete(elementId);
+    }
+    if (videos.get(elementId) === layers.base) {
+      videos.delete(elementId);
+    }
+    notifyVideoListeners();
+  };
+};
+
+export const getEditorPreviewLayers = (elementId: string) =>
+  layerTargets.get(elementId) ?? null;
+
 export const subscribeEditorPreviewVideos = (listener: () => void) => {
   videoListeners.add(listener);
   listener();
@@ -179,4 +231,19 @@ export const findEditorTargetVideo = (
   return doc.querySelector<HTMLVideoElement>(
     `video[data-element-id="${CSS.escape(elementId)}"]`,
   );
+};
+
+export const findEditorPreviewLayers = (
+  elementId: string,
+  doc: Document,
+): EditorPreviewLayers | null => {
+  const registered = getEditorPreviewLayers(elementId);
+  if (registered) {
+    return registered;
+  }
+  const base = findEditorTargetVideo(elementId, doc);
+  if (!base) {
+    return null;
+  }
+  return { base, stacks: [] };
 };

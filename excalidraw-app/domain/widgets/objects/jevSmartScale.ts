@@ -123,8 +123,7 @@ export const averageSmart = (
   if (rows.length === 0) {
     return null;
   }
-  const score =
-    rows.reduce((sum, row) => sum + row.score, 0) / rows.length;
+  const score = rows.reduce((sum, row) => sum + row.score, 0) / rows.length;
   const confidence =
     rows.reduce((sum, row) => sum + row.confidence, 0) / rows.length;
   return resultFromScore(score, confidence);

@@ -42,6 +42,10 @@ import {
   speakerLabel,
   type TranscriptTurn,
 } from "../../transcription/transcriptTurns";
+import {
+  ConversationIndicators,
+  useConversationContext,
+} from "../../transcription/useConversationContext";
 import { LiveWidgetToolbar } from "../ui/LiveWidgetToolbar";
 import { useRegisterWidgetToolbar } from "../widgetToolbarRegistry";
 
@@ -142,7 +146,7 @@ import {
 } from "./transcribeConfig";
 
 const LIVE_TURN_ID = "__live__";
-const LIVE_DEBOUNCE_MS = 500;
+const LIVE_DEBOUNCE_MS = 300;
 const MIN_PHRASE_CHARS = 8;
 const MAX_SCORED_TURNS = 200;
 
@@ -169,6 +173,7 @@ type TurnIq = {
 };
 
 const jevScoringOn = (config: TranscribeConfig) =>
+  !!config.contextEnabled ||
   config.jevIq ||
   config.jevSmart ||
   config.jevMbti ||
@@ -576,12 +581,39 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
   const [config, setConfig] = useState<TranscribeConfig>(DEFAULT_TRANSCRIBE);
   const [scores, setScores] = useState<TurnIq[]>([]);
   const [live, setLive] = useState<TurnIq | null>(null);
+  const conversation = useConversationContext(
+    elementId,
+    !!config.contextEnabled,
+    rootRef,
+  );
+  const evaluateContext = conversation.evaluate;
+  const contextVersionRef = useRef(conversation.version);
+  contextVersionRef.current = conversation.version;
+  const turnsRef = useRef(turns);
+  turnsRef.current = turns;
+  const speakerScores = useMemo(() => {
+    void conversation.version;
+    return config.contextEnabled
+      ? scores.filter(
+          (row) =>
+            conversation.context.results.get(row.turnId)?.topicId ===
+              conversation.topicId && conversation.topicId !== null,
+        )
+      : scores;
+  }, [
+    scores,
+    config.contextEnabled,
+    conversation.context,
+    conversation.topicId,
+    conversation.version,
+  ]);
 
   const configRef = useRef(config);
   configRef.current = config;
   const queueRef = useRef<Job[]>([]);
   const liveJobRef = useRef<Job | null>(null);
   const runningRef = useRef(false);
+  const inFlightRef = useRef<Job | null>(null);
   const generationRef = useRef(0);
   const scoredTextRef = useRef(new Map<string, string>());
 
@@ -625,6 +657,10 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
     setScores([]);
     setLive(null);
   }, []);
+
+  useEffect(() => {
+    resetIq();
+  }, [config, sourceId, conversation.session, resetIq]);
 
   useEffect(() => {
     const element = editor
@@ -811,66 +847,95 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
   };
 
   // One Jev call carries every enabled scale; weights and type letters apply in code.
-  const scoreJob = useCallback(async (job: Job) => {
-    if (!convexClient) {
-      throw new Error("Convex is not connected.");
-    }
-    const scoring = configRef.current;
-    const questions = questionsForConfig(scoring);
-    if (questions.length === 0) {
+  const scoreJob = useCallback(
+    async (job: Job) => {
+      if (!convexClient) {
+        throw new Error("Convex is not connected.");
+      }
+      const scoring = configRef.current;
+      const questions = questionsForConfig(scoring);
+      if (questions.length === 0 && !scoring.contextEnabled) {
+        return {
+          result: null,
+          smart: null,
+          emotion: [],
+          mbti: null,
+          advance: null,
+          ennea: null,
+          hype: null,
+          energy: null,
+          online: null,
+          socion: null,
+          bigFive: null,
+        };
+      }
+      const result = scoring.contextEnabled
+        ? await evaluateContext(job.text, job.turnId, questions)
+        : await convexClient.action(api.canvasAi.jev.ask, {
+            state: buildIqState(job.text, job.previousTurn),
+            questions,
+          });
       return {
-        result: null,
-        smart: null,
-        emotion: [],
-        mbti: null,
-        advance: null,
-        ennea: null,
-        hype: null,
-        energy: null,
-        online: null,
-        socion: null,
-        bigFive: null,
+        result: scoring.jevIq ? compositeFromAnswers(result.answers) : null,
+        smart: scoring.jevSmart ? smartFromAnswers(result.answers) : null,
+        emotion: scoring.jevEmotion ? emotionsFromAnswers(result.answers) : [],
+        mbti: scoring.jevMbti ? mbtiFromAnswers(result.answers) : null,
+        advance: scoring.jevMbtiAdvance
+          ? advanceFromAnswers(result.answers)
+          : null,
+        ennea: scoring.jevEnneagram ? enneaFromAnswers(result.answers) : null,
+        hype: scoring.jevHype ? hypeFromAnswers(result.answers) : null,
+        energy: scoring.jevEnergy ? energyFromAnswers(result.answers) : null,
+        online: scoring.jevOnline ? onlineFromAnswers(result.answers) : null,
+        socion: scoring.jevSocion ? socionFromAnswers(result.answers) : null,
+        bigFive: scoring.jevBigFive ? bigFiveFromAnswers(result.answers) : null,
       };
-    }
-    const result = await convexClient.action(api.canvasAi.jev.ask, {
-      state: buildIqState(job.text, job.previousTurn),
-      questions,
-    });
-    return {
-      result: scoring.jevIq ? compositeFromAnswers(result.answers) : null,
-      smart: scoring.jevSmart ? smartFromAnswers(result.answers) : null,
-      emotion: scoring.jevEmotion ? emotionsFromAnswers(result.answers) : [],
-      mbti: scoring.jevMbti ? mbtiFromAnswers(result.answers) : null,
-      advance: scoring.jevMbtiAdvance
-        ? advanceFromAnswers(result.answers)
-        : null,
-      ennea: scoring.jevEnneagram ? enneaFromAnswers(result.answers) : null,
-      hype: scoring.jevHype ? hypeFromAnswers(result.answers) : null,
-      energy: scoring.jevEnergy ? energyFromAnswers(result.answers) : null,
-      online: scoring.jevOnline ? onlineFromAnswers(result.answers) : null,
-      socion: scoring.jevSocion ? socionFromAnswers(result.answers) : null,
-      bigFive: scoring.jevBigFive ? bigFiveFromAnswers(result.answers) : null,
-    };
-  }, []);
+    },
+    [evaluateContext],
+  );
 
   const pump = useCallback(async () => {
     if (runningRef.current) {
       return;
     }
     runningRef.current = true;
+    let lastWasLive = false;
     try {
       for (;;) {
         const generation = generationRef.current;
-        const job = queueRef.current.shift() ?? liveJobRef.current;
+        const contextVersion = contextVersionRef.current;
+        const job = lastWasLive
+          ? queueRef.current.shift() ?? liveJobRef.current
+          : liveJobRef.current ?? queueRef.current.shift();
         if (!job) {
           break;
         }
+        if (
+          job.turnId !== LIVE_TURN_ID &&
+          scoredTextRef.current.get(job.turnId) ===
+            `${contextVersion}:${job.text}`
+        ) {
+          continue;
+        }
+        inFlightRef.current = job;
+        lastWasLive = job.turnId === LIVE_TURN_ID;
         if (job.turnId === LIVE_TURN_ID) {
           liveJobRef.current = null;
         }
         try {
           const scored = await scoreJob(job);
           if (generation !== generationRef.current) {
+            continue;
+          }
+          const currentTurn =
+            job.turnId === LIVE_TURN_ID
+              ? turnsRef.current.find((turn) => !turn.isFinal)
+              : turnsRef.current.find((turn) => turn.id === job.turnId);
+          if (
+            !currentTurn ||
+            currentTurn.text.trim() !== job.text ||
+            currentTurn.speaker !== job.speaker
+          ) {
             continue;
           }
           const row: TurnIq = {
@@ -892,7 +957,10 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
           if (job.turnId === LIVE_TURN_ID) {
             setLive(row);
           } else {
-            scoredTextRef.current.set(job.turnId, job.text);
+            scoredTextRef.current.set(
+              job.turnId,
+              `${contextVersion}:${job.text}`,
+            );
             setScores((current) =>
               [
                 ...current.filter((item) => item.turnId !== job.turnId),
@@ -901,12 +969,29 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
             );
           }
         } catch (error: unknown) {
+          if (
+            error instanceof Error &&
+            error.message === "Stale conversation result"
+          ) {
+            if (
+              generation === generationRef.current &&
+              job.turnId !== LIVE_TURN_ID &&
+              turnsRef.current.some(
+                (turn) =>
+                  turn.id === job.turnId && turn.text.trim() === job.text,
+              )
+            ) {
+              queueRef.current.push(job);
+            }
+            continue;
+          }
           if (generation !== generationRef.current) {
             continue;
           }
           setStatus(scoreErrorMessage(error));
-          queueRef.current = [];
-          liveJobRef.current = null;
+          // Preserve final speech even when one model request fails.
+        } finally {
+          inFlightRef.current = null;
         }
       }
     } finally {
@@ -917,15 +1002,31 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
   const enqueueFinal = useCallback(
     (turn: ChatTurn, previousTurn: string | null) => {
       const text = turn.text.trim();
-      if (text.length < MIN_PHRASE_CHARS) {
+      if (
+        inFlightRef.current?.turnId === turn.id &&
+        inFlightRef.current.text === text
+      ) {
         return false;
       }
-      if (scoredTextRef.current.get(turn.id) === text) {
+      if (
+        text.length < (configRef.current.contextEnabled ? 1 : MIN_PHRASE_CHARS)
+      ) {
         return false;
       }
-      if (queueRef.current.some((job) => job.turnId === turn.id)) {
+      const previous = scoredTextRef.current.get(turn.id);
+      const recent = turnsRef.current
+        .filter((item) => item.isFinal)
+        .slice(-6)
+        .some((item) => item.id === turn.id);
+      if (
+        previous === `${contextVersionRef.current}:${text}` ||
+        (previous?.endsWith(`:${text}`) && !recent)
+      ) {
         return false;
       }
+      queueRef.current = queueRef.current.filter(
+        (job) => job.turnId !== turn.id,
+      );
       queueRef.current.push({
         turnId: turn.id,
         speaker: turn.speaker,
@@ -950,7 +1051,7 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
     if (added) {
       void pump();
     }
-  }, [config, enqueueFinal, pump, turns]);
+  }, [config, enqueueFinal, pump, turns, conversation.version]);
 
   const liveIndex = turns.findIndex((turn) => !turn.isFinal);
   const liveTurn = liveIndex === -1 ? null : turns[liveIndex] ?? null;
@@ -960,12 +1061,16 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
     if (
       !jevScoringOn(config) ||
       !liveTurn ||
-      livePhrase.length < MIN_PHRASE_CHARS
+      livePhrase.length < (config.contextEnabled ? 1 : MIN_PHRASE_CHARS)
     ) {
       setLive(null);
       return;
     }
-    const handle = window.setTimeout(() => {
+    const ownerWindow = rootRef.current?.ownerDocument.defaultView;
+    if (!ownerWindow) {
+      return;
+    }
+    const handle = ownerWindow.setTimeout(() => {
       liveJobRef.current = {
         turnId: LIVE_TURN_ID,
         speaker: liveTurn.speaker,
@@ -974,7 +1079,7 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
       };
       void pump();
     }, LIVE_DEBOUNCE_MS);
-    return () => window.clearTimeout(handle);
+    return () => ownerWindow.clearTimeout(handle);
   }, [config, liveIndex, livePhrase, liveTurn, pump, turns]);
 
   // One number per utterance. Filler that fails the Noul gate has no badge.
@@ -1018,10 +1123,10 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
       list.push(mbti);
       groups.set(speaker, list);
     };
-    for (const row of scores) {
+    for (const row of speakerScores) {
       add(row.speaker, row.mbti);
     }
-    if (live) {
+    if (live && !config.contextEnabled) {
       add(live.speaker, live.mbti);
     }
     const map = new Map<number, MbtiResult>();
@@ -1032,7 +1137,7 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
       }
     }
     return map;
-  }, [live, scores]);
+  }, [live, speakerScores, config.contextEnabled]);
 
   const advanceByTurn = useMemo(() => {
     const map = new Map<string, MbtiAdvanceResult>();
@@ -1054,10 +1159,10 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
       list.push(advance);
       groups.set(speaker, list);
     };
-    for (const row of scores) {
+    for (const row of speakerScores) {
       add(row.speaker, row.advance);
     }
-    if (live) {
+    if (live && !config.contextEnabled) {
       add(live.speaker, live.advance);
     }
     const map = new Map<number, MbtiAdvanceResult>();
@@ -1068,7 +1173,7 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
       }
     }
     return map;
-  }, [live, scores]);
+  }, [live, speakerScores, config.contextEnabled]);
 
   const enneaByTurn = useMemo(() => {
     const map = new Map<string, EnneaResult>();
@@ -1090,10 +1195,10 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
       list.push(ennea);
       groups.set(speaker, list);
     };
-    for (const row of scores) {
+    for (const row of speakerScores) {
       add(row.speaker, row.ennea);
     }
-    if (live) {
+    if (live && !config.contextEnabled) {
       add(live.speaker, live.ennea);
     }
     const map = new Map<number, EnneaResult>();
@@ -1104,7 +1209,7 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
       }
     }
     return map;
-  }, [live, scores]);
+  }, [live, speakerScores, config.contextEnabled]);
 
   const smartByTurn = useMemo(() => {
     const map = new Map<string, SmartResult>();
@@ -1126,10 +1231,10 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
       list.push(smart);
       groups.set(speaker, list);
     };
-    for (const row of scores) {
+    for (const row of speakerScores) {
       add(row.speaker, row.smart);
     }
-    if (live) {
+    if (live && !config.contextEnabled) {
       add(live.speaker, live.smart);
     }
     const map = new Map<number, SmartResult>();
@@ -1140,7 +1245,7 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
       }
     }
     return map;
-  }, [live, scores]);
+  }, [live, speakerScores, config.contextEnabled]);
 
   const hypeByTurn = useMemo(() => {
     const map = new Map<string, HypeResult>();
@@ -1162,10 +1267,10 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
       list.push(hype);
       groups.set(speaker, list);
     };
-    for (const row of scores) {
+    for (const row of speakerScores) {
       add(row.speaker, row.hype);
     }
-    if (live) {
+    if (live && !config.contextEnabled) {
       add(live.speaker, live.hype);
     }
     const map = new Map<number, HypeResult>();
@@ -1176,7 +1281,7 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
       }
     }
     return map;
-  }, [live, scores]);
+  }, [live, speakerScores, config.contextEnabled]);
 
   const energyByTurn = useMemo(() => {
     const map = new Map<string, EnergyResult>();
@@ -1198,10 +1303,10 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
       list.push(energy);
       groups.set(speaker, list);
     };
-    for (const row of scores) {
+    for (const row of speakerScores) {
       add(row.speaker, row.energy);
     }
-    if (live) {
+    if (live && !config.contextEnabled) {
       add(live.speaker, live.energy);
     }
     const map = new Map<number, EnergyResult>();
@@ -1212,7 +1317,7 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
       }
     }
     return map;
-  }, [live, scores]);
+  }, [live, speakerScores, config.contextEnabled]);
 
   const onlineByTurn = useMemo(() => {
     const map = new Map<string, OnlineResult>();
@@ -1234,10 +1339,10 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
       list.push(online);
       groups.set(speaker, list);
     };
-    for (const row of scores) {
+    for (const row of speakerScores) {
       add(row.speaker, row.online);
     }
-    if (live) {
+    if (live && !config.contextEnabled) {
       add(live.speaker, live.online);
     }
     const map = new Map<number, OnlineResult>();
@@ -1248,7 +1353,7 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
       }
     }
     return map;
-  }, [live, scores]);
+  }, [live, speakerScores, config.contextEnabled]);
 
   const socionByTurn = useMemo(() => {
     const map = new Map<string, SocionResult>();
@@ -1270,10 +1375,10 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
       list.push(socion);
       groups.set(speaker, list);
     };
-    for (const row of scores) {
+    for (const row of speakerScores) {
       add(row.speaker, row.socion);
     }
-    if (live) {
+    if (live && !config.contextEnabled) {
       add(live.speaker, live.socion);
     }
     const map = new Map<number, SocionResult>();
@@ -1284,7 +1389,7 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
       }
     }
     return map;
-  }, [live, scores]);
+  }, [live, speakerScores, config.contextEnabled]);
 
   const bigFiveByTurn = useMemo(() => {
     const map = new Map<string, BigFiveResult>();
@@ -1306,10 +1411,10 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
       list.push(bigFive);
       groups.set(speaker, list);
     };
-    for (const row of scores) {
+    for (const row of speakerScores) {
       add(row.speaker, row.bigFive);
     }
-    if (live) {
+    if (live && !config.contextEnabled) {
       add(live.speaker, live.bigFive);
     }
     const map = new Map<number, BigFiveResult>();
@@ -1320,7 +1425,7 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
       }
     }
     return map;
-  }, [live, scores]);
+  }, [live, speakerScores, config.contextEnabled]);
 
   const start = async () => {
     if (busy) {
@@ -1463,6 +1568,7 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
           void start();
         }}
         onSourceChange={(nextId) => {
+          if (nextId !== sourceId) { clearChat(); }
           setSourceId(nextId);
           applyConfig({ ...config, sourceId: nextId }, true);
           if (isMicSource(nextId)) {
@@ -1503,8 +1609,24 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
       ref={rootRef}
       className="jayrr-called-embed jayrr-called-embed--transcribe"
     >
+      {config.contextEnabled ? (
+        <ConversationIndicators conversation={conversation} />
+      ) : null}
       {configOpen ? (
         <div className="jayrr-called-embed__cards">
+          <label className="jayrr-called-embed__check">
+            <input
+              type="checkbox"
+              checked={!!config.contextEnabled}
+              onChange={(event) =>
+                applyConfig(
+                  { ...config, contextEnabled: event.target.checked },
+                  true,
+                )
+              }
+            />
+            Conversation context (preview)
+          </label>
           <div className="jayrr-called-embed__card">
             <div className="jayrr-called-embed__title jayrr-called-embed__title--row">
               <div className="jayrr-called-embed__label">Jev IQ</div>

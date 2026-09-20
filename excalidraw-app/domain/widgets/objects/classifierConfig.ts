@@ -9,6 +9,7 @@ export type ClassifierClass = {
 };
 
 export type ClassifierConfig = {
+  contextEnabled?: boolean;
   classes: ClassifierClass[];
   sourceId: string;
   instructions: string;
@@ -18,6 +19,7 @@ export type ClassifierConfig = {
 export const OTHER_CLASS_ID = "other";
 
 export const DEFAULT_CLASSIFIER: ClassifierConfig = {
+  contextEnabled: true,
   classes: [
     { id: "yes", name: "Yes", hint: "The answer is yes." },
     { id: "no", name: "No", hint: "The answer is no." },
@@ -165,6 +167,7 @@ export const readClassifierConfig = (
     return DEFAULT_CLASSIFIER;
   }
   const bag = data as {
+    contextEnabled?: unknown;
     classes?: unknown;
     sourceId?: unknown;
     instructions?: unknown;
@@ -181,6 +184,7 @@ export const readClassifierConfig = (
         ? bag.instructions
         : DEFAULT_CLASSIFIER.instructions,
     includeOther: bag.includeOther === true,
+    contextEnabled: bag.contextEnabled !== false,
   };
 };
 
@@ -194,6 +198,7 @@ export const writeClassifierConfig = (
       ? { ...(previous as Record<string, unknown>) }
       : {};
   bag.kind = "classifier";
+  bag.contextEnabled = config.contextEnabled === true;
   bag.classes = config.classes;
   bag.sourceId = config.sourceId;
   bag.instructions = config.instructions;
