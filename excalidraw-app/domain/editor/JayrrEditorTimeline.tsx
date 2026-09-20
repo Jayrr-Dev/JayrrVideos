@@ -26,6 +26,8 @@ import {
   type ReactNode,
 } from "react";
 
+import { PlusIcon } from "@excalidraw/excalidraw/components/icons";
+
 import {
   EDITOR_PX_PER_SECOND,
   formatEditorClock,
@@ -52,6 +54,8 @@ type JayrrEditorTimelineProps = {
 const msToPx = (ms: number, pxPerMs: number) => ms * pxPerMs;
 
 const RULER_TICK_MS = 1000;
+const TRACK_PAD_PX = 10;
+const MAX_STACK_LANES = 8;
 
 export const JayrrEditorTimeline = ({
   timeline,
@@ -69,6 +73,7 @@ export const JayrrEditorTimeline = ({
   const draggingSeekRef = useRef(false);
   const skipClickRef = useRef(false);
   const [bodyHeight, setBodyHeight] = useState(360);
+  const [stackLaneIds, setStackLaneIds] = useState<readonly string[]>([]);
 
   const clipIds = useMemo(
     () => timeline.sequence.map((clip) => clip.id),
@@ -105,11 +110,14 @@ export const JayrrEditorTimeline = ({
       return EDITOR_PX_PER_SECOND / 1000;
     }
     const total = Math.max(timeline.totalMs, 1);
-    return Math.max(0.02, (bodyHeight - 24) / total);
+    return Math.max(0.02, (bodyHeight - TRACK_PAD_PX * 2) / total);
   }, [bodyHeight, timeline.totalMs, zoomMode]);
 
-  const totalHeight = Math.max(80, msToPx(timeline.totalMs, pxPerMs));
-  const playheadTop = msToPx(currentTimeMs, pxPerMs);
+  const totalHeight = Math.max(
+    80,
+    msToPx(timeline.totalMs, pxPerMs) + TRACK_PAD_PX * 2,
+  );
+  const playheadTop = TRACK_PAD_PX + msToPx(currentTimeMs, pxPerMs);
 
   const ticks = useMemo(() => {
     const marks: number[] = [];
@@ -131,7 +139,7 @@ export const JayrrEditorTimeline = ({
         return 0;
       }
       const rect = body.getBoundingClientRect();
-      const y = clientY - rect.top + body.scrollTop;
+      const y = clientY - rect.top + body.scrollTop - TRACK_PAD_PX;
       const ms = y / pxPerMs;
       return Math.max(0, Math.min(timeline.totalMs, ms));
     },
@@ -183,14 +191,53 @@ export const JayrrEditorTimeline = ({
   };
 
   const canReorder = clipIds.length >= 2;
+  const canAddStackLane = stackLaneIds.length < MAX_STACK_LANES;
+  const laneCountStyle = {
+    ["--jayrr-editor-stack-lanes" as string]: String(stackLaneIds.length),
+  } as CSSProperties;
+
+  const addStackLane = () => {
+    if (!canAddStackLane) {
+      return;
+    }
+    setStackLaneIds((current) => [
+      ...current,
+      `stack-${Date.now().toString(36)}-${Math.random()
+        .toString(36)
+        .slice(2, 6)}`,
+    ]);
+  };
 
   return (
-    <div className="jayrr-editor-timeline">
+    <div className="jayrr-editor-timeline" style={laneCountStyle}>
       <div className="jayrr-editor-timeline__head">
         <div className="jayrr-editor-timeline__col-label jayrr-editor-timeline__col-label--ruler">
           Time
         </div>
-        <div className="jayrr-editor-timeline__col-label">Sequence</div>
+        <div className="jayrr-editor-timeline__col-label jayrr-editor-timeline__col-label--sequence">
+          <span>Sequence</span>
+          <button
+            type="button"
+            className="jayrr-editor-timeline__add-lane"
+            aria-label="Add stack column"
+            title="Add stack column"
+            disabled={!canAddStackLane}
+            onClick={(event) => {
+              event.stopPropagation();
+              addStackLane();
+            }}
+          >
+            {PlusIcon}
+          </button>
+        </div>
+        {stackLaneIds.map((laneId, index) => (
+          <div
+            key={laneId}
+            className="jayrr-editor-timeline__col-label jayrr-editor-timeline__col-label--stack"
+          >
+            Stack {index + 1}
+          </div>
+        ))}
       </div>
       <div
         ref={bodyRef}
@@ -209,7 +256,7 @@ export const JayrrEditorTimeline = ({
         tabIndex={disabled ? -1 : 0}
       >
         <div
-          className="jayrr-editor-timeline__tracks jayrr-editor-timeline__tracks--video"
+          className="jayrr-editor-timeline__tracks"
           style={{ height: totalHeight }}
         >
           <div className="jayrr-editor-timeline__ruler">
@@ -217,7 +264,7 @@ export const JayrrEditorTimeline = ({
               <div
                 key={t}
                 className="jayrr-editor-timeline__tick"
-                style={{ top: msToPx(t, pxPerMs) }}
+                style={{ top: TRACK_PAD_PX + msToPx(t, pxPerMs) }}
               >
                 {formatEditorClock(t)}
               </div>
@@ -257,6 +304,12 @@ export const JayrrEditorTimeline = ({
               </div>
             </SortableContext>
           </DndContext>
+          {stackLaneIds.map((laneId) => (
+            <div
+              key={laneId}
+              className="jayrr-editor-timeline__lane jayrr-editor-timeline__lane--stack"
+            />
+          ))}
           <div
             className="jayrr-editor-timeline__playhead"
             style={{ top: playheadTop }}

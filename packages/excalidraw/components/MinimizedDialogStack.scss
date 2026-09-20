@@ -1,0 +1,84 @@
+.excalidraw {
+  .MinimizedDialogStack {
+    pointer-events: none;
+    position: fixed;
+    left: 50%;
+    bottom: 4.5rem;
+    z-index: var(--zIndex-toast);
+    display: none;
+    flex-direction: column-reverse;
+    align-items: center;
+    transform: translateX(-50%);
+    gap: 0.5rem;
+  }
+
+  @media (min-width: 768px) {
+    .MinimizedDialogStack {
+      display: flex;
+    }
+  }
+
+  .MinimizedDialogStack__item {
+    pointer-events: auto;
+    position: relative;
+    display: inline-flex;
+    flex-shrink: 0;
+  }
+
+  .MinimizedDialogStack__pill {
+    pointer-events: auto;
+    display: flex;
+    flex-shrink: 0;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    padding: 0;
+    border: 1px solid var(--dialog-border-color);
+    border-radius: 999px;
+    background: var(--island-bg-color);
+    color: var(--text-primary-color);
+    box-shadow: var(--shadow-island);
+    cursor: pointer;
+    transition: width 0.3s ease-out, box-shadow 0.3s ease-out;
+
+    svg {
+      width: 0.75rem;
+      height: 0.75rem;
+      flex-shrink: 0;
+    }
+
+    &:hover {
+      box-shadow: var(--modal-shadow);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--color-primary);
+      outline-offset: 2px;
+    }
+  }
+
+  .MinimizedDialogStack__pill.is-expanded {
+    justify-content: flex-start;
+    gap: 0.25rem;
+    padding: 0 0.4rem;
+  }
+
+  .MinimizedDialogStack__label {
+    min-width: 0;
+    max-width: 0;
+    overflow: hidden;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    opacity: 0;
+    transition: opacity 0.2s ease, max-width 0.2s ease;
+  }
+
+  .MinimizedDialogStack__pill.is-expanded .MinimizedDialogStack__label {
+    max-width: 8rem;
+    opacity: 1;
+  }
+}

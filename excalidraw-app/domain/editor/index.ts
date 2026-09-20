@@ -16,3 +16,4 @@ export {
   JayrrEditorPanel,
 } from "./JayrrEditorPanel";
 export { JayrrEditorPreviewEmbed } from "./JayrrEditorPreviewEmbed";
+export { JayrrEditorPreviewPopup } from "./JayrrEditorPreviewPopup";

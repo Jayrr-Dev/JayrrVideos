@@ -1,8 +1,12 @@
 .excalidraw {
-  .jayrr-confirm__title {
+  .jayrr-confirm .Dialog__chrome {
     margin-bottom: 1rem;
     padding-bottom: 0;
     border-bottom: none;
+  }
+
+  .jayrr-confirm .Dialog__title {
+    margin-bottom: 0;
   }
 
   .jayrr-confirm__title-row {

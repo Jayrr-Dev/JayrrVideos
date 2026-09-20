@@ -6,6 +6,7 @@ import { getCurrentUser } from "./lib/auth";
 
 const FLAG_VALUES: Record<string, readonly string[]> = {
   cameraCutout: ["off", "mediapipe", "segmo"],
+  sttProvider: ["inworld", "deepgram"],
 };
 
 const flagDoc = v.object({

@@ -6,49 +6,86 @@
     cursor: auto;
   }
 
+  .Dialog__chrome {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    margin: 0 0 1.5rem;
+    border-bottom: 1px solid var(--dialog-border-color);
+    padding: 0 0 0.75rem;
+  }
+
   .Dialog__title {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-width: 0;
+    flex: 1;
     margin: 0;
     text-align: left;
     font-size: 1.25rem;
-    border-bottom: 1px solid var(--dialog-border-color);
-    padding: 0 0 0.75rem;
-    margin-bottom: 1.5rem;
   }
 
-  .Dialog__close {
-    color: var(--color-gray-40);
+  .Dialog__titleContent {
+    min-width: 0;
+  }
+
+  .Dialog__window {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    margin-left: auto;
+    gap: 0;
+  }
+
+  .Dialog__window-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.25rem;
+    height: 1.25rem;
     margin: 0;
-    position: absolute;
-    top: 0.75rem;
-    right: 0.5rem;
+    padding: 0;
     border: 0;
-    background-color: transparent;
+    border-radius: 0.2rem;
+    background: transparent;
+    color: var(--color-gray-40);
     line-height: 0;
     cursor: pointer;
+    opacity: 0.7;
 
     &:hover {
-      color: var(--color-gray-60);
+      opacity: 1;
     }
-    &:active {
-      color: var(--color-gray-40);
+
+    &:disabled {
+      pointer-events: none;
+      opacity: 0.4;
     }
 
     svg {
-      width: 1.5rem;
-      height: 1.5rem;
-    }
-
-    & + .Dialog__content {
-      --offset: 28px;
-      height: calc(100% - var(--offset)) !important;
-      margin-top: var(--offset) !important;
+      width: 1rem;
+      height: 1rem;
     }
   }
 
+  .Dialog__window-btn--min:hover,
+  .Dialog__window-btn--max:hover {
+    color: var(--color-primary);
+  }
+
+  .Dialog__window-btn--close:hover {
+    color: #dc2626;
+  }
+
+  .Dialog--minimized {
+    visibility: hidden !important;
+    pointer-events: none !important;
+  }
+
   .Dialog--fullscreen {
-    .Dialog__close {
-      top: 1.25rem;
-      right: 1.25rem;
+    .Island {
+      height: 100%;
     }
   }
 }

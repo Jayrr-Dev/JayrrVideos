@@ -24,32 +24,19 @@ import { TunnelsContext, useInitializeTunnels } from "../context/tunnels";
 import { UIAppStateContext } from "../context/ui-appState";
 import { useAtom, useAtomValue } from "../editor-jotai";
 
-import { t } from "../i18n";
-import { getScrollToContentState, getSelectedElements } from "../scene";
 import {
   getColorTargetAppStateUpdates,
   resolveColorTarget,
   type ColorDefaultKey,
 } from "../actions/colorTargets";
+import { t } from "../i18n";
+import { getScrollToContentState, getSelectedElements } from "../scene";
 
-import { SelectedShapeActions, CompactShapeActions } from "./Actions";
-import { LoadingMessage } from "./LoadingMessage";
-import { MobileMenu } from "./MobileMenu";
-import { PasteChartDialog } from "./PasteChartDialog";
-import { Section } from "./Section";
-import Stack from "./Stack";
-import { UserList } from "./UserList";
-import { PenModeButton } from "./PenModeButton";
-import Footer from "./footer/Footer";
-import { isSidebarDockedAtom } from "./Sidebar/Sidebar";
-import MainMenu from "./main-menu/MainMenu";
+import { CompactShapeActions, SelectedShapeActions } from "./Actions";
 import { ActiveConfirmDialog } from "./ActiveConfirmDialog";
 import { useAppProps, useEditorInterface, useStylesPanelMode } from "./App";
-import { OverwriteConfirmDialog } from "./OverwriteConfirm/OverwriteConfirm";
-import { sidebarRightIcon } from "./icons";
 import { DefaultSidebar } from "./DefaultSidebar";
-import { TTDDialog } from "./TTDDialog/TTDDialog";
-import { Stats } from "./Stats";
+import { ProvidesMinimizedDialogs } from "./DialogMinimizeRegistry";
 import ElementLinkDialog from "./ElementLinkDialog";
 import { ErrorDialog } from "./ErrorDialog";
 import { EyeDropper, activeEyeDropperAtom } from "./EyeDropper";
@@ -59,12 +46,27 @@ import { ImageExportDialog } from "./ImageExportDialog";
 import { Island } from "./Island";
 import { JSONExportDialog } from "./JSONExportDialog";
 import { LaserPointerButton } from "./LaserPointerButton";
+import { LoadingMessage } from "./LoadingMessage";
+import { MinimizedDialogStack } from "./MinimizedDialogStack";
+import { MobileMenu } from "./MobileMenu";
+import { OverwriteConfirmDialog } from "./OverwriteConfirm/OverwriteConfirm";
+import { PasteChartDialog } from "./PasteChartDialog";
+import { PenModeButton } from "./PenModeButton";
+import { Section } from "./Section";
+import { isSidebarDockedAtom } from "./Sidebar/Sidebar";
+import Stack from "./Stack";
+import { Stats } from "./Stats";
+import { TTDDialog } from "./TTDDialog/TTDDialog";
 import { Toast } from "./Toast";
 import { Toolbar } from "./Toolbar";
+import { UserList } from "./UserList";
 import {
   ViewportStatusBadge,
   ViewportStatusBorder,
 } from "./ViewportStatusFrame/ViewportStatusFrame";
+import Footer from "./footer/Footer";
+import { sidebarRightIcon } from "./icons";
+import MainMenu from "./main-menu/MainMenu";
 
 import "./LayerUI.scss";
 import "./Toolbar.scss";
@@ -73,12 +75,12 @@ import type { ActionManager } from "../actions/manager";
 
 import type { Language } from "../i18n";
 import type {
+  AppClassProperties,
   AppProps,
   AppState,
-  ExcalidrawProps,
   BinaryFiles,
+  ExcalidrawProps,
   UIAppState,
-  AppClassProperties,
 } from "../types";
 
 interface LayerUIProps {
@@ -705,13 +707,16 @@ const LayerUI = ({
   );
 
   return (
-    <UIAppStateContext.Provider value={appState}>
-      <TunnelsJotaiProvider>
-        <TunnelsContext.Provider value={tunnels}>
-          {layerUIJSX}
-        </TunnelsContext.Provider>
-      </TunnelsJotaiProvider>
-    </UIAppStateContext.Provider>
+    <ProvidesMinimizedDialogs>
+      <UIAppStateContext.Provider value={appState}>
+        <TunnelsJotaiProvider>
+          <TunnelsContext.Provider value={tunnels}>
+            {layerUIJSX}
+            <MinimizedDialogStack />
+          </TunnelsContext.Provider>
+        </TunnelsJotaiProvider>
+      </UIAppStateContext.Provider>
+    </ProvidesMinimizedDialogs>
   );
 };
 

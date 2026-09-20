@@ -5,7 +5,7 @@ import {
   settingsIcon,
 } from "@excalidraw/excalidraw/components/icons";
 import { useConvexAuth, useQuery } from "convex/react";
-import { ContextMenu, DropdownMenu, Popover } from "radix-ui";
+import { ContextMenu, Popover } from "radix-ui";
 import {
   useCallback,
   useEffect,
@@ -19,7 +19,6 @@ import type { NonDeletedExcalidrawElement } from "@excalidraw/element/types";
 
 import { FilledButton, Island, Tooltip } from "../../components/ui/editor";
 import { api, isConvexLinked } from "../../convexClient";
-import { formatRecordingClock } from "../recordings/formatRecording";
 
 import "../../components/ui/JayrrLibraryMenu.scss";
 
@@ -34,9 +33,18 @@ import {
   type EditorClip,
   type EditorProjectClip,
 } from "./buildEditorTimeline";
-import { isJayrrEditorPreviewElement } from "./editorPreviewModel";
+import { publishEditorPlayback } from "./editorPlaybackBridge";
+import {
+  findEditorTargetVideo,
+  isJayrrEditorPreviewElement,
+} from "./editorPreviewModel";
 import { insertEditorPreview } from "./insertEditorPreview";
+import {
+  JayrrEditorAddRecordingDialog,
+  type EditorRecordingPick,
+} from "./JayrrEditorAddRecordingDialog";
 import { JayrrEditorTimeline } from "./JayrrEditorTimeline";
+import { JayrrEditorVolumeControl } from "./JayrrEditorVolumeControl";
 import { useEditorPlayback } from "./useEditorPlayback";
 
 import "./JayrrEditorPanel.scss";
@@ -46,7 +54,7 @@ import type { Id } from "../../../convex/_generated/dataModel";
 export const JAYRR_EDITOR_TAB = "jayrrEditor";
 
 const SETTINGS_INFO =
-  "Place a preview box on the canvas, or link a selected embeddable (recording or editor preview). Timeline playback plays into that box.";
+  "Place or link a canvas box for timeline playback. Volume here is the preview loudness.";
 
 const PREVIEW_ID_KEY = "jayrr-editor-preview-element-v1";
 const STORAGE_KEY = "jayrr-editor-recording-clips-v1";
@@ -145,15 +153,6 @@ export const editorTabIcon = (
   </svg>
 );
 
-type RecordingRow = {
-  _id: Id<"presentRecordings">;
-  url: string;
-  posterUrl: string | null;
-  durationMs: number;
-  name: string | null;
-  createdAt: number;
-};
-
 const isLinkablePreviewTarget = (
   element: NonDeletedExcalidrawElement,
 ): boolean => {
@@ -180,6 +179,7 @@ export const JayrrEditorPanel = () => {
   const [zoomMode, setZoomMode] = useState<"fit" | "fixed">("fit");
   const [selectedClipIds, setSelectedClipIds] = useState<string[]>([]);
   const [clips, setClips] = useState<EditorProjectClip[]>([]);
+  const [addRecordingOpen, setAddRecordingOpen] = useState(false);
   const [previewElementId, setPreviewElementId] = useState<string | null>(
     readStoredPreviewId,
   );
@@ -258,6 +258,22 @@ export const JayrrEditorPanel = () => {
       previewElementId,
       ownerDocument,
     });
+
+  useEffect(() => {
+    publishEditorPlayback({
+      playing,
+      currentTimeMs,
+      totalMs: timeline.totalMs,
+      play,
+      pause,
+      stop,
+      seek,
+    });
+  }, [currentTimeMs, pause, play, playing, seek, stop, timeline.totalMs]);
+
+  useEffect(() => {
+    return () => publishEditorPlayback(null);
+  }, []);
 
   const selectedIdSet = useMemo(
     () => new Set(selectedClipIds),
@@ -359,7 +375,7 @@ export const JayrrEditorPanel = () => {
   }, [apiExcal, previewElementId]);
 
   const addRecording = useCallback(
-    (row: RecordingRow) => {
+    (row: EditorRecordingPick) => {
       const next: EditorProjectClip = {
         id: newEditorClipId(),
         recordingId: row._id,
@@ -528,6 +544,7 @@ export const JayrrEditorPanel = () => {
           container={container}
           canLinkSelected={Boolean(selectedLinkable)}
           hasPreview={Boolean(previewElementId)}
+          previewElementId={previewElementId}
           onPlace={placePreview}
           onLinkSelected={linkSelected}
           onClear={clearPreviewLink}
@@ -598,12 +615,13 @@ export const JayrrEditorPanel = () => {
                 onSelectClip={selectClip}
                 onReorderClips={reorderClips}
                 emptyAction={
-                  <EditorAddRecordingButton
-                    container={container}
-                    canQuery={canQuery}
-                    recordings={recordings}
-                    onPick={addRecording}
-                  />
+                  <FilledButton
+                    color="primary"
+                    label="Add recording"
+                    onClick={() => setAddRecordingOpen(true)}
+                  >
+                    Add recording
+                  </FilledButton>
                 }
               />
             </div>
@@ -614,51 +632,12 @@ export const JayrrEditorPanel = () => {
               collisionPadding={8}
               data-prevent-outside-click
             >
-              <ContextMenu.Sub>
-                <ContextMenu.SubTrigger className="jayrr-editor-menu__item">
-                  Add recording
-                </ContextMenu.SubTrigger>
-                <ContextMenu.Portal container={container}>
-                  <ContextMenu.SubContent
-                    className="jayrr-editor-menu jayrr-editor-menu--sub"
-                    collisionPadding={8}
-                    data-prevent-outside-click
-                  >
-                    {!canQuery ? (
-                      <ContextMenu.Item
-                        className="jayrr-editor-menu__item"
-                        disabled
-                      >
-                        Sign in to load recordings
-                      </ContextMenu.Item>
-                    ) : recordings === undefined ? (
-                      <ContextMenu.Item
-                        className="jayrr-editor-menu__item"
-                        disabled
-                      >
-                        Loading recordings…
-                      </ContextMenu.Item>
-                    ) : recordings.length === 0 ? (
-                      <ContextMenu.Item
-                        className="jayrr-editor-menu__item"
-                        disabled
-                      >
-                        No recordings yet
-                      </ContextMenu.Item>
-                    ) : (
-                      recordings.map((row) => (
-                        <ContextMenu.Item
-                          key={row._id}
-                          className="jayrr-editor-menu__item jayrr-editor-menu__item--recording"
-                          onSelect={() => addRecording(row)}
-                        >
-                          <RecordingMenuRow row={row} />
-                        </ContextMenu.Item>
-                      ))
-                    )}
-                  </ContextMenu.SubContent>
-                </ContextMenu.Portal>
-              </ContextMenu.Sub>
+              <ContextMenu.Item
+                className="jayrr-editor-menu__item"
+                onSelect={() => setAddRecordingOpen(true)}
+              >
+                Add recording
+              </ContextMenu.Item>
               {canCut ? (
                 <ContextMenu.Item
                   className="jayrr-editor-menu__item"
@@ -687,83 +666,18 @@ export const JayrrEditorPanel = () => {
           </ContextMenu.Portal>
         </ContextMenu.Root>
       </div>
+      {addRecordingOpen ? (
+        <JayrrEditorAddRecordingDialog
+          canQuery={canQuery}
+          recordings={recordings}
+          onClose={() => setAddRecordingOpen(false)}
+          onPick={(row) => {
+            addRecording(row);
+            setAddRecordingOpen(false);
+          }}
+        />
+      ) : null}
     </div>
-  );
-};
-
-const RecordingMenuRow = ({ row }: { row: RecordingRow }) => {
-  const title = row.name?.trim() || "Recording";
-  const clock = formatRecordingClock(row.durationMs);
-  return (
-    <>
-      {row.posterUrl ? (
-        <img className="jayrr-editor-menu__thumb" src={row.posterUrl} alt="" />
-      ) : (
-        <span className="jayrr-editor-menu__thumb jayrr-editor-menu__thumb--empty" />
-      )}
-      <span className="jayrr-editor-menu__meta">
-        <span className="jayrr-editor-menu__name">{title}</span>
-        <span className="jayrr-editor-menu__clock">{clock}</span>
-      </span>
-    </>
-  );
-};
-
-const EditorAddRecordingButton = ({
-  container,
-  canQuery,
-  recordings,
-  onPick,
-}: {
-  container: HTMLDivElement | null;
-  canQuery: boolean;
-  recordings: RecordingRow[] | undefined;
-  onPick: (row: RecordingRow) => void;
-}) => {
-  const [open, setOpen] = useState(false);
-
-  return (
-    <DropdownMenu.Root open={open} onOpenChange={setOpen} modal={false}>
-      <DropdownMenu.Trigger asChild>
-        <FilledButton color="primary" label="Add recording">
-          Add recording
-        </FilledButton>
-      </DropdownMenu.Trigger>
-      <DropdownMenu.Portal container={container}>
-        <DropdownMenu.Content
-          className="jayrr-editor-menu jayrr-editor-menu--sub"
-          side="bottom"
-          align="center"
-          sideOffset={8}
-          collisionPadding={8}
-          data-prevent-outside-click
-        >
-          {!canQuery ? (
-            <DropdownMenu.Item className="jayrr-editor-menu__item" disabled>
-              Sign in to load recordings
-            </DropdownMenu.Item>
-          ) : recordings === undefined ? (
-            <DropdownMenu.Item className="jayrr-editor-menu__item" disabled>
-              Loading recordings…
-            </DropdownMenu.Item>
-          ) : recordings.length === 0 ? (
-            <DropdownMenu.Item className="jayrr-editor-menu__item" disabled>
-              No recordings yet
-            </DropdownMenu.Item>
-          ) : (
-            recordings.map((row) => (
-              <DropdownMenu.Item
-                key={row._id}
-                className="jayrr-editor-menu__item jayrr-editor-menu__item--recording"
-                onSelect={() => onPick(row)}
-              >
-                <RecordingMenuRow row={row} />
-              </DropdownMenu.Item>
-            ))
-          )}
-        </DropdownMenu.Content>
-      </DropdownMenu.Portal>
-    </DropdownMenu.Root>
   );
 };
 
@@ -771,6 +685,7 @@ const EditorSettingsPopover = ({
   container,
   canLinkSelected,
   hasPreview,
+  previewElementId,
   onPlace,
   onLinkSelected,
   onClear,
@@ -779,12 +694,17 @@ const EditorSettingsPopover = ({
   container: HTMLDivElement | null;
   canLinkSelected: boolean;
   hasPreview: boolean;
+  previewElementId: string | null;
   onPlace: () => void;
   onLinkSelected: () => void;
   onClear: () => void;
   onFocus: () => void;
 }) => {
   const [open, setOpen] = useState(false);
+  const extraVideo =
+    previewElementId && container
+      ? findEditorTargetVideo(previewElementId, container.ownerDocument)
+      : null;
 
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
@@ -818,6 +738,17 @@ const EditorSettingsPopover = ({
               </Tooltip>
             </div>
             <p className="visually-hidden">{SETTINGS_INFO}</p>
+            <div className="jayrr-editor-panel__settings-volume-row">
+              <span className="jayrr-editor-panel__settings-volume-label">
+                Preview volume
+              </span>
+              <JayrrEditorVolumeControl
+                className="jayrr-editor-panel__settings-volume"
+                buttonClassName="jayrr-editor-panel__settings-volume-btn"
+                sliderClassName="jayrr-editor-panel__settings-volume-slider"
+                extraVideo={extraVideo}
+              />
+            </div>
             <div className="jayrr-editor-panel__settings-actions">
               <FilledButton
                 color="primary"

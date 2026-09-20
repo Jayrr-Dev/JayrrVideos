@@ -48,6 +48,75 @@ const readAccessToken = (payload: unknown) => {
   return "";
 };
 
+const providerValidator = v.union(v.literal("inworld"), v.literal("deepgram"));
+
+const mintInworldToken = async () => {
+  const apiKey = process.env.INWORLD_API_KEY?.trim() ?? "";
+  if (!apiKey) {
+    throw new Error("INWORLD_API_KEY is not set on Convex.");
+  }
+  const response = await fetch("https://api.inworld.ai/auth/v1/tokens", {
+    method: "POST",
+    headers: {
+      Authorization: inworldAuth(apiKey),
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      single_use: true,
+      ttl: "300s",
+    }),
+  });
+  if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error("Inworld rejected this API key.");
+    }
+    const detail = await response.text();
+    throw new Error(
+      inworldMessage(detail) ||
+        `Inworld token mint failed (${response.status})`,
+    );
+  }
+  const payload: unknown = await response.json();
+  const accessToken = readAccessToken(payload);
+  if (!accessToken) {
+    throw new Error("Inworld did not return a stream token.");
+  }
+  return accessToken;
+};
+
+const mintDeepgramToken = async () => {
+  const apiKey = process.env.DEEPGRAM_API_KEY?.trim() ?? "";
+  if (!apiKey) {
+    throw new Error("DEEPGRAM_API_KEY is not set on Convex.");
+  }
+  const response = await fetch("https://api.deepgram.com/v1/auth/grant", {
+    method: "POST",
+    headers: {
+      Authorization: `Token ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      ttl_seconds: 300,
+    }),
+  });
+  if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error("Deepgram rejected this API key.");
+    }
+    const detail = await response.text();
+    throw new Error(
+      inworldMessage(detail) ||
+        `Deepgram token mint failed (${response.status})`,
+    );
+  }
+  const payload: unknown = await response.json();
+  const accessToken = readAccessToken(payload);
+  if (!accessToken) {
+    throw new Error("Deepgram did not return a stream token.");
+  }
+  return accessToken;
+};
+
 const inworldMessage = (detail: string) => {
   try {
     const parsed: unknown = JSON.parse(detail);
@@ -67,46 +136,29 @@ const inworldMessage = (detail: string) => {
 };
 
 export const mintStreamToken = action({
-  args: {},
+  args: {
+    provider: v.optional(providerValidator),
+  },
   returns: v.object({
     accessToken: v.string(),
+    provider: providerValidator,
   }),
-  handler: async (ctx) => {
+  handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) {
       throw new Error("Not authenticated");
     }
-    const apiKey = process.env.INWORLD_API_KEY?.trim() ?? "";
-    if (!apiKey) {
-      throw new Error("INWORLD_API_KEY is not set on Convex.");
+    const provider = args.provider ?? "inworld";
+    if (provider === "deepgram") {
+      return {
+        accessToken: await mintDeepgramToken(),
+        provider,
+      };
     }
-    const response = await fetch("https://api.inworld.ai/auth/v1/tokens", {
-      method: "POST",
-      headers: {
-        Authorization: inworldAuth(apiKey),
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        single_use: true,
-        ttl: "300s",
-      }),
-    });
-    if (!response.ok) {
-      if (response.status === 401) {
-        throw new Error("Inworld rejected this API key.");
-      }
-      const detail = await response.text();
-      throw new Error(
-        inworldMessage(detail) ||
-          `Inworld token mint failed (${response.status})`,
-      );
-    }
-    const payload: unknown = await response.json();
-    const accessToken = readAccessToken(payload);
-    if (!accessToken) {
-      throw new Error("Inworld did not return a stream token.");
-    }
-    return { accessToken };
+    return {
+      accessToken: await mintInworldToken(),
+      provider,
+    };
   },
 });
 

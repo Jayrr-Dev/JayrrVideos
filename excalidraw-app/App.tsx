@@ -135,6 +135,8 @@ import { isBrowserStorageStateNewer } from "./data/tabSync";
 import { useSimulatedCollaborators } from "./debugCollaborators";
 import {
   JayrrEditorPreviewEmbed,
+  JayrrEditorPreviewPopup,
+  isJayrrEditorPreviewElement,
   isJayrrEditorPreviewLink,
 } from "./domain/editor";
 import {
@@ -902,7 +904,12 @@ const ExcalidrawWrapper = () => {
 
   const renderHyperlinkPopup = useCallback<
     NonNullable<ExcalidrawProps["renderHyperlinkPopup"]>
-  >((args) => renderJayrrCalledHyperlinkPopup(args), []);
+  >((args) => {
+    if (isJayrrEditorPreviewElement(args.element)) {
+      return <JayrrEditorPreviewPopup elementId={args.element.id} />;
+    }
+    return renderJayrrCalledHyperlinkPopup(args);
+  }, []);
 
   const imageOptions = useMemo(() => {
     if (!googleDriveConnected) {

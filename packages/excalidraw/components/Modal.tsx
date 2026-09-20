@@ -18,8 +18,9 @@ export const Modal: React.FC<{
   labelledBy: string;
   theme?: AppState["theme"];
   closeOnClickOutside?: boolean;
+  closeOnEscape?: boolean;
 }> = (props) => {
-  const { closeOnClickOutside = true } = props;
+  const { closeOnClickOutside = true, closeOnEscape = true } = props;
   const modalRoot = useCreatePortalContainer({
     className: "excalidraw-modal-container",
   });
@@ -37,7 +38,7 @@ export const Modal: React.FC<{
   }
 
   const handleKeydown = (event: React.KeyboardEvent) => {
-    if (event.key === KEYS.ESCAPE) {
+    if (event.key === KEYS.ESCAPE && closeOnEscape) {
       event.preventDefault();
       event.nativeEvent.stopImmediatePropagation();
       event.stopPropagation();

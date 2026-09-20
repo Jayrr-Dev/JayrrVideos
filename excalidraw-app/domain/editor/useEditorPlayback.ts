@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { clipAtTime, type EditorTimeline } from "./buildEditorTimeline";
-import { findEditorTargetVideo } from "./editorPreviewModel";
+import {
+  findEditorTargetVideo,
+  getEditorPreviewAudio,
+} from "./editorPreviewModel";
 
 type UseEditorPlaybackOpts = {
   timeline: EditorTimeline;
@@ -62,6 +65,9 @@ export const useEditorPlayback = ({
       const needsSrc =
         clipIdRef.current !== clip.id || video.getAttribute("src") !== clip.url;
       clipIdRef.current = clip.id;
+      const audio = getEditorPreviewAudio();
+      video.volume = audio.volume;
+      video.muted = audio.muted;
       if (needsSrc) {
         video.src = clip.url;
         video.load();
@@ -76,6 +82,8 @@ export const useEditorPlayback = ({
           }
           video.addEventListener("loadeddata", onReady);
         });
+        video.volume = audio.volume;
+        video.muted = audio.muted;
       }
       try {
         video.currentTime = Math.min(
