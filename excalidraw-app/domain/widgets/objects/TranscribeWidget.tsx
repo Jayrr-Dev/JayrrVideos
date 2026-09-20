@@ -1,6 +1,13 @@
 import { CaptureUpdateAction, newElementWith } from "@excalidraw/element";
 import { useExcalidrawAPI } from "@excalidraw/excalidraw";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 
 import {
   jayrrCameraLabel,
@@ -154,6 +161,11 @@ const hueForSpeaker = (speaker: number | null) => {
   }
   return Math.abs(speaker * 67) % 360;
 };
+
+const speakerHueStyle = (speaker: number | null): CSSProperties =>
+  ({
+    "--jayrr-speaker-h": String(hueForSpeaker(speaker)),
+  } as CSSProperties);
 
 const uniqueSpeakers = (turns: ChatTurn[]) => {
   const seen = new Set<number>();
@@ -791,7 +803,6 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
                     if (!turn) {
                       return null;
                     }
-                    const hue = hueForSpeaker(turn.speaker);
                     const iqScore = speakerAverages.get(
                       speakerKey(turn.speaker),
                     );
@@ -801,12 +812,12 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
                         className={`jayrr-called-embed__msg jayrr-called-embed__msg--${side}${
                           turn.isFinal ? "" : " is-draft"
                         }`}
+                        style={speakerHueStyle(turn.speaker)}
                       >
                         <div className="jayrr-called-embed__who-row">
                           <button
                             type="button"
                             className="jayrr-called-embed__who"
-                            style={{ color: `hsl(${hue} 55% 42%)` }}
                             onClick={() => {
                               if (turn.speaker === null) {
                                 return;
@@ -835,13 +846,13 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
               <div className="jayrr-called-embed__now-label">Speaker</div>
               <div className="jayrr-called-embed__now-list">
                 {speakers.map((speaker) => {
-                  const hue = hueForSpeaker(speaker);
                   const live = liveSpeaker === speaker;
                   if (editingSpeaker === speaker) {
                     return (
                       <input
                         key={speaker}
                         className="jayrr-called-embed__who-input"
+                        style={speakerHueStyle(speaker)}
                         autoFocus
                         defaultValue={speakerLabel(speaker, names)}
                         aria-label="Rename speaker"
@@ -865,7 +876,7 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
                           ? "jayrr-called-embed__now-name is-live"
                           : "jayrr-called-embed__now-name"
                       }
-                      style={{ color: `hsl(${hue} 55% 42%)` }}
+                      style={speakerHueStyle(speaker)}
                       onClick={() => setEditingSpeaker(speaker)}
                     >
                       {speakerLabel(speaker, names)}
