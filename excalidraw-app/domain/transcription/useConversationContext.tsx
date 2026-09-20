@@ -34,7 +34,14 @@ export const useConversationContext = (
           })),
           topics: input.topics.map((topic) => ({
             ...topic,
-            turnIds: [...new Set([...topic.turnIds.slice(-20), ...input.turns.filter((turn) => topic.turnIds.includes(turn.id)).map((turn) => turn.id)])],
+            turnIds: [
+              ...new Set([
+                ...topic.turnIds.slice(-20),
+                ...input.turns
+                  .filter((turn) => topic.turnIds.includes(turn.id))
+                  .map((turn) => turn.id),
+              ]),
+            ],
           })),
         };
         const result = await convexClient.action(
@@ -60,7 +67,13 @@ export const useConversationContext = (
       const request = context.prepare(text, turnId);
       const started = Date.now();
       if (!questions.length && !request.questions.length) {
-        return { ok: true as const, model: "jev-latest", answers: [], metadata: context.accept(request.stamp, []), latencyMs: 0 };
+        return {
+          ok: true as const,
+          model: "jev-latest",
+          answers: [],
+          metadata: context.accept(request.stamp, []),
+          latencyMs: 0,
+        };
       }
       try {
         const response = await convexClient.action(

@@ -15,6 +15,33 @@ export type EditorRecordingSource = {
 export const SEQUENCE_LANE_ID = "sequence";
 export const MAX_STACK_LANES = 8;
 
+export const EDITOR_TRANSITION_KINDS = [
+  "fade",
+  "cut",
+  "fadeBlack",
+  "wipe",
+] as const;
+
+export type EditorTransitionKind = (typeof EDITOR_TRANSITION_KINDS)[number];
+
+export const DEFAULT_OVERLAP_TRANSITION: EditorTransitionKind = "fade";
+
+export const EDITOR_TRANSITION_OPTIONS: ReadonlyArray<{
+  id: EditorTransitionKind;
+  label: string;
+}> = [
+  { id: "fade", label: "Fade" },
+  { id: "cut", label: "Cut" },
+  { id: "fadeBlack", label: "Fade black" },
+  { id: "wipe", label: "Wipe" },
+];
+
+export const isEditorTransitionKind = (
+  value: unknown,
+): value is EditorTransitionKind =>
+  typeof value === "string" &&
+  (EDITOR_TRANSITION_KINDS as readonly string[]).includes(value);
+
 /** User-ordered clip on the timeline (before layout). */
 export type EditorProjectClip = EditorRecordingSource & {
   id: string;
@@ -22,6 +49,8 @@ export type EditorProjectClip = EditorRecordingSource & {
   laneId?: string;
   /** Start time on the clip's lane. Sequence and stacks both keep this. */
   laneStartMs?: number;
+  /** How this clip blends over the column to its left while they overlap. */
+  transitionKind?: EditorTransitionKind;
 };
 
 export type EditorClip = EditorProjectClip & {
@@ -240,6 +269,125 @@ export const moveEditorClip = ({
   return frozen.map((clip) => (clip.id === clipId ? updated : clip));
 };
 
+export const setClipTransition = (
+  clips: readonly EditorProjectClip[],
+  clipId: string,
+  transitionKind: EditorTransitionKind,
+): EditorProjectClip[] | null => {
+  const frozen = withFrozenStarts(clips);
+  if (!frozen.some((clip) => clip.id === clipId)) {
+    return null;
+  }
+  return frozen.map((clip) =>
+    clip.id === clipId ? { ...clip, transitionKind } : clip,
+  );
+};
+
+export type LaneOverlap = {
+  id: string;
+  leftClipId: string;
+  rightClipId: string;
+  leftLaneId: string;
+  rightLaneId: string;
+  startMs: number;
+  endMs: number;
+  transitionKind: EditorTransitionKind;
+};
+
+const clipEndMs = (clip: { startMs: number; durationMs: number }) =>
+  clip.startMs + clip.durationMs;
+
+export const collectLaneOverlaps = (
+  lanes: ReadonlyArray<{
+    laneId: string;
+    clips: readonly EditorClip[];
+  }>,
+): LaneOverlap[] => {
+  const out: LaneOverlap[] = [];
+  for (let index = 0; index < lanes.length - 1; index++) {
+    const left = lanes[index];
+    const right = lanes[index + 1];
+    if (!left || !right) {
+      continue;
+    }
+    for (const a of left.clips) {
+      for (const b of right.clips) {
+        const startMs = Math.max(a.startMs, b.startMs);
+        const endMs = Math.min(clipEndMs(a), clipEndMs(b));
+        if (endMs - startMs < 1) {
+          continue;
+        }
+        out.push({
+          id: `${a.id}:${b.id}`,
+          leftClipId: a.id,
+          rightClipId: b.id,
+          leftLaneId: left.laneId,
+          rightLaneId: right.laneId,
+          startMs,
+          endMs,
+          transitionKind: b.transitionKind ?? DEFAULT_OVERLAP_TRANSITION,
+        });
+      }
+    }
+  }
+  return out;
+};
+
+export const overlapAtTime = (
+  overlaps: readonly LaneOverlap[],
+  clipId: string,
+  timeMs: number,
+): LaneOverlap | null =>
+  overlaps.find(
+    (item) =>
+      item.rightClipId === clipId &&
+      timeMs >= item.startMs &&
+      timeMs < item.endMs,
+  ) ?? null;
+
+export type LayerBlend = {
+  opacity: number;
+  clipPath: string | null;
+};
+
+export const stackBlendAtTime = (
+  clip: EditorClip,
+  timeMs: number,
+  overlap: LaneOverlap | null,
+  coveringBase: boolean,
+): LayerBlend => {
+  if (!coveringBase || !overlap) {
+    return { opacity: 1, clipPath: null };
+  }
+  const span = Math.max(1, overlap.endMs - overlap.startMs);
+  const t = Math.min(1, Math.max(0, (timeMs - overlap.startMs) / span));
+  if (overlap.transitionKind === "cut") {
+    return { opacity: 1, clipPath: null };
+  }
+  if (overlap.transitionKind === "wipe") {
+    return {
+      opacity: 1,
+      clipPath: `inset(0 ${Math.round((1 - t) * 100)}% 0 0)`,
+    };
+  }
+  if (overlap.transitionKind === "fadeBlack") {
+    return { opacity: t < 0.5 ? 0 : (t - 0.5) * 2, clipPath: null };
+  }
+  return { opacity: t, clipPath: null };
+};
+
+export const baseBlendAtTime = (
+  timeMs: number,
+  overlap: LaneOverlap | null,
+): LayerBlend => {
+  if (!overlap || overlap.transitionKind !== "fadeBlack") {
+    return { opacity: 1, clipPath: null };
+  }
+  const span = Math.max(1, overlap.endMs - overlap.startMs);
+  const t = Math.min(1, Math.max(0, (timeMs - overlap.startMs) / span));
+  return { opacity: t < 0.5 ? 1 - t * 2 : 0, clipPath: null };
+};
+
 export const clipAtTime = (
   clips: readonly EditorClip[],
   timeMs: number,
@@ -372,5 +520,6 @@ export const mergeProjectClips = (
     durationMs,
     laneId: first.laneId,
     laneStartMs: first.laneStartMs ?? 0,
+    ...(first.transitionKind ? { transitionKind: first.transitionKind } : {}),
   };
 };

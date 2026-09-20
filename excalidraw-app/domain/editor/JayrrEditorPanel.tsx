@@ -23,8 +23,10 @@ import {
   mergeProjectClips,
   moveEditorClip,
   newEditorClipId,
+  setClipTransition,
   type EditorClip,
   type EditorProjectClip,
+  type EditorTransitionKind,
 } from "./buildEditorTimeline";
 import { findEditorTargetVideo } from "./editorPreviewModel";
 import { JayrrEditorAddRecordingDialog } from "./JayrrEditorAddRecordingDialog";
@@ -243,6 +245,17 @@ export const JayrrEditorPanel = () => {
     [clips, persist],
   );
 
+  const setTransition = useCallback(
+    (clipId: string, kind: EditorTransitionKind) => {
+      const next = setClipTransition(clips, clipId, kind);
+      if (!next) {
+        return;
+      }
+      persist(next);
+    },
+    [clips, persist],
+  );
+
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (disabled) {
       return;
@@ -341,7 +354,9 @@ export const JayrrEditorPanel = () => {
                 onSeek={seek}
                 onSelectClip={selectClip}
                 onMoveClip={moveClip}
+                onSetTransition={setTransition}
                 onAddStackLane={addStackLane}
+                menuContainer={container}
                 emptyAction={
                   <FilledButton
                     color="primary"

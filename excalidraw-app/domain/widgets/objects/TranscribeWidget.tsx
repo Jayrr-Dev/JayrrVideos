@@ -904,7 +904,7 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
       for (;;) {
         const generation = generationRef.current;
         const contextVersion = contextVersionRef.current;
-        const job = lastWasLive
+        const job: Job | null | undefined = lastWasLive
           ? queueRef.current.shift() ?? liveJobRef.current
           : liveJobRef.current ?? queueRef.current.shift();
         if (!job) {
@@ -1568,7 +1568,9 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
           void start();
         }}
         onSourceChange={(nextId) => {
-          if (nextId !== sourceId) { clearChat(); }
+          if (nextId !== sourceId) {
+            clearChat();
+          }
           setSourceId(nextId);
           applyConfig({ ...config, sourceId: nextId }, true);
           if (isMicSource(nextId)) {

@@ -19,6 +19,7 @@ import { api, isConvexLinked } from "../../convexClient";
 import {
   buildEditorTimeline,
   clipLaneId,
+  isEditorTransitionKind,
   MAX_STACK_LANES,
   newEditorClipId,
   newEditorLaneId,
@@ -46,6 +47,7 @@ type StoredClip = {
   sourceOffsetMs?: number;
   laneId?: string;
   laneStartMs?: number;
+  transitionKind?: EditorProjectClip["transitionKind"];
 };
 
 const readStoredClips = (): StoredClip[] => {
@@ -70,6 +72,7 @@ const readStoredClips = (): StoredClip[] => {
         const offsetRaw = Reflect.get(item, "sourceOffsetMs");
         const laneRaw = Reflect.get(item, "laneId");
         const laneStartRaw = Reflect.get(item, "laneStartMs");
+        const transitionRaw = Reflect.get(item, "transitionKind");
         out.push({
           id: Reflect.get(item, "id") as string,
           recordingId: Reflect.get(item, "recordingId") as string,
@@ -84,6 +87,9 @@ const readStoredClips = (): StoredClip[] => {
             : {}),
           ...(typeof laneStartRaw === "number" && Number.isFinite(laneStartRaw)
             ? { laneStartMs: Math.max(0, Math.round(laneStartRaw)) }
+            : {}),
+          ...(isEditorTransitionKind(transitionRaw)
+            ? { transitionKind: transitionRaw }
             : {}),
         });
       }
@@ -104,6 +110,7 @@ const writeStoredClips = (clips: readonly EditorProjectClip[]) => {
     ...(typeof clip.laneStartMs === "number"
       ? { laneStartMs: clip.laneStartMs }
       : {}),
+    ...(clip.transitionKind ? { transitionKind: clip.transitionKind } : {}),
   }));
   localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
 };
@@ -299,6 +306,9 @@ export const JayrrEditorSession = ({ children }: { children: ReactNode }) => {
         ...(item.laneId ? { laneId: item.laneId } : {}),
         ...(typeof item.laneStartMs === "number"
           ? { laneStartMs: item.laneStartMs }
+          : {}),
+        ...(item.transitionKind
+          ? { transitionKind: item.transitionKind }
           : {}),
       });
     }

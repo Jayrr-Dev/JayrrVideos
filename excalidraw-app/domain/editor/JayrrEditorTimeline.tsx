@@ -26,18 +26,22 @@ import {
   type ReactNode,
 } from "react";
 
-import { PlusIcon } from "@excalidraw/excalidraw/components/icons";
+import { Popover } from "radix-ui";
 
 import {
   clipLaneId,
   collectSnapPointsMs,
   EDITOR_PX_PER_SECOND,
+  EDITOR_TRANSITION_OPTIONS,
   formatEditorClock,
   MAX_STACK_LANES,
   SEQUENCE_LANE_ID,
   snapClipStart,
+  collectLaneOverlaps,
   type EditorClip,
   type EditorTimeline,
+  type EditorTransitionKind,
+  type LaneOverlap,
 } from "./buildEditorTimeline";
 import { filmstripSliceCount, getClipFilmstrip } from "./captureClipFilmstrip";
 
@@ -76,7 +80,9 @@ type JayrrEditorTimelineProps = {
     toLaneId: string;
     startMs: number;
   }) => void;
+  onSetTransition: (clipId: string, kind: EditorTransitionKind) => void;
   onAddStackLane: () => void;
+  menuContainer?: HTMLElement | null;
 };
 
 const msToPx = (ms: number, pxPerMs: number) => ms * pxPerMs;
@@ -111,7 +117,9 @@ export const JayrrEditorTimeline = ({
   onSeek,
   onSelectClip,
   onMoveClip,
+  onSetTransition,
   onAddStackLane,
+  menuContainer,
 }: JayrrEditorTimelineProps) => {
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const draggingSeekRef = useRef(false);
@@ -149,6 +157,31 @@ export const JayrrEditorTimeline = ({
     }
     return map;
   }, [stackLaneIds, timeline.overlays]);
+
+  const laneOverlaps = useMemo(
+    () =>
+      collectLaneOverlaps([
+        { laneId: SEQUENCE_LANE_ID, clips: timeline.sequence },
+        ...stackLaneIds.map((laneId) => ({
+          laneId,
+          clips: overlaysByLane.get(laneId) ?? [],
+        })),
+      ]),
+    [overlaysByLane, stackLaneIds, timeline.sequence],
+  );
+
+  const overlapsByLeftLane = useMemo(() => {
+    const map = new Map<string, LaneOverlap[]>();
+    for (const overlap of laneOverlaps) {
+      const list = map.get(overlap.leftLaneId);
+      if (list) {
+        list.push(overlap);
+        continue;
+      }
+      map.set(overlap.leftLaneId, [overlap]);
+    }
+    return map;
+  }, [laneOverlaps]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -588,6 +621,19 @@ export const JayrrEditorTimeline = ({
                   }}
                 />
               ))}
+              {(overlapsByLeftLane.get(SEQUENCE_LANE_ID) ?? []).map(
+                (overlap) => (
+                  <OverlapHandle
+                    key={overlap.id}
+                    overlap={overlap}
+                    pxPerMs={pxPerMs}
+                    container={menuContainer}
+                    onPick={(kind) =>
+                      onSetTransition(overlap.rightClipId, kind)
+                    }
+                  />
+                ),
+              )}
             </TrackLane>
             {stackLaneIds.map((laneId) => (
               <TrackLane
@@ -619,6 +665,17 @@ export const JayrrEditorTimeline = ({
                         onSeek(clip.startMs);
                       }
                     }}
+                  />
+                ))}
+                {(overlapsByLeftLane.get(laneId) ?? []).map((overlap) => (
+                  <OverlapHandle
+                    key={overlap.id}
+                    overlap={overlap}
+                    pxPerMs={pxPerMs}
+                    container={menuContainer}
+                    onPick={(kind) =>
+                      onSetTransition(overlap.rightClipId, kind)
+                    }
                   />
                 ))}
               </TrackLane>
@@ -726,6 +783,58 @@ const DropSlot = ({ top, height }: { top: number; height: number }) => (
     aria-hidden
   />
 );
+
+const OverlapHandle = ({
+  overlap,
+  pxPerMs,
+  container,
+  onPick,
+}: {
+  overlap: LaneOverlap;
+  pxPerMs: number;
+  container?: HTMLElement | null;
+  onPick: (kind: EditorTransitionKind) => void;
+}) => {
+  const top = TRACK_PAD_PX + msToPx(overlap.startMs, pxPerMs);
+  const height = Math.max(10, msToPx(overlap.endMs - overlap.startMs, pxPerMs));
+  return (
+    <Popover.Root>
+      <Popover.Trigger asChild>
+        <button
+          type="button"
+          className="jayrr-editor-timeline__overlap"
+          style={{ top, height }}
+          aria-label="Choose overlap transition"
+          title="Transition"
+          onPointerDown={(event) => event.stopPropagation()}
+        />
+      </Popover.Trigger>
+      <Popover.Portal container={container ?? undefined}>
+        <Popover.Content
+          side="right"
+          align="start"
+          sideOffset={6}
+          collisionPadding={8}
+          className="jayrr-editor-timeline__overlap-menu"
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          {EDITOR_TRANSITION_OPTIONS.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              className={`jayrr-editor-timeline__overlap-item${
+                overlap.transitionKind === option.id ? " is-active" : ""
+              }`}
+              onClick={() => onPick(option.id)}
+            >
+              {option.label}
+            </button>
+          ))}
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
+  );
+};
 
 const TrackLane = ({
   laneId,

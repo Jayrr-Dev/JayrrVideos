@@ -48,7 +48,10 @@ const notifyVideoListeners = () => {
 export type EditorPreviewAudio = { volume: number; muted: boolean };
 
 export type EditorPreviewLayers = {
+  /** Currently preferred / primary base element (always present). */
   base: HTMLVideoElement;
+  /** Second base used to cross-cut without clearing the visible frame. */
+  baseAlt?: HTMLVideoElement | null;
   stacks: readonly HTMLVideoElement[];
 };
 
@@ -97,8 +100,9 @@ const applyAudioToVideo = (
 const eachRegisteredVideo = (visit: (video: HTMLVideoElement) => void) => {
   const seen = new Set<HTMLVideoElement>();
   for (const layers of layerTargets.values()) {
-    for (const video of [layers.base, ...layers.stacks]) {
-      if (seen.has(video)) {
+    const pair = [layers.base, layers.baseAlt, ...layers.stacks];
+    for (const video of pair) {
+      if (!video || seen.has(video)) {
         continue;
       }
       seen.add(video);
@@ -190,6 +194,9 @@ export const registerEditorPreviewLayers = (
   videos.set(elementId, layers.base);
   const audio = getEditorPreviewAudio();
   applyAudioToVideo(layers.base, audio);
+  if (layers.baseAlt) {
+    applyAudioToVideo(layers.baseAlt, audio);
+  }
   for (const stack of layers.stacks) {
     applyAudioToVideo(stack, audio);
   }

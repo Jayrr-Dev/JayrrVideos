@@ -1,7 +1,5 @@
 import { describe, expect, it } from "vitest";
 
-import type { Id } from "../../../convex/_generated/dataModel";
-
 import {
   buildEditorTimeline,
   collectSnapPointsMs,
@@ -10,6 +8,8 @@ import {
   snapClipStart,
   type EditorProjectClip,
 } from "./buildEditorTimeline";
+
+import type { Id } from "../../../convex/_generated/dataModel";
 
 const recordingId = "rec1" as Id<"presentRecordings">;
 

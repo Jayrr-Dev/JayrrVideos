@@ -16,19 +16,25 @@ export const JayrrEditorPreviewEmbed = ({
   elementId: string;
 }) => {
   const baseRef = useRef<HTMLVideoElement | null>(null);
+  const baseAltRef = useRef<HTMLVideoElement | null>(null);
   const stackRefs = useRef<(HTMLVideoElement | null)[]>(
     Array.from({ length: MAX_STACK_LANES }, () => null),
   );
 
   useLayoutEffect(() => {
     const base = baseRef.current;
+    const baseAlt = baseAltRef.current;
     if (!base) {
       return;
     }
     const stacks = stackRefs.current.filter(
       (video): video is HTMLVideoElement => Boolean(video),
     );
-    return registerEditorPreviewLayers(elementId, { base, stacks });
+    return registerEditorPreviewLayers(elementId, {
+      base,
+      baseAlt,
+      stacks,
+    });
   }, [elementId]);
 
   return (
@@ -39,7 +45,15 @@ export const JayrrEditorPreviewEmbed = ({
         data-element-id={elementId}
         data-editor-layer="base"
         playsInline
-        preload="metadata"
+        preload="auto"
+      />
+      <video
+        ref={baseAltRef}
+        className="jayrr-editor-preview-embed__video"
+        data-element-id={elementId}
+        data-editor-layer="base-alt"
+        playsInline
+        preload="auto"
       />
       {STACK_INDEXES.map((index) => (
         <video
@@ -51,6 +65,7 @@ export const JayrrEditorPreviewEmbed = ({
           data-element-id={elementId}
           data-editor-layer="stack"
           data-stack-index={index}
+          style={{ zIndex: 2 + index }}
           playsInline
           preload="metadata"
         />

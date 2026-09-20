@@ -382,7 +382,7 @@ export const ClassifierWidget = ({ elementId }: { elementId: string }) => {
       for (;;) {
         const generation = generationRef.current;
         const contextVersion = contextVersionRef.current;
-        const job = lastWasLive
+        const job: Job | null | undefined = lastWasLive
           ? queueRef.current.shift() ?? liveJobRef.current
           : liveJobRef.current ?? queueRef.current.shift();
         if (!job) {
