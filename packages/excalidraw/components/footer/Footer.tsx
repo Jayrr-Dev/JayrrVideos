@@ -5,6 +5,7 @@ import { useTunnels } from "../../context/tunnels";
 import { ExitZenModeButton, UndoRedoActions, ZoomActions } from "../Actions";
 import { useApp } from "../App";
 import { HelpButton } from "../HelpButton";
+import { MinimizedDialogStack } from "../MinimizedDialogStack";
 import { Section } from "../Section";
 import Stack from "../Stack";
 
@@ -63,7 +64,18 @@ const Footer = ({
           </Stack.Col>
         </div>
       )}
-      <FooterCenterTunnel.Out />
+      <div
+        className={clsx(
+          "layer-ui__wrapper__footer-center zen-mode-transition",
+          {
+            "layer-ui__wrapper__footer-left--transition-bottom":
+              appState.zenModeEnabled,
+          },
+        )}
+      >
+        <FooterCenterTunnel.Out />
+        <MinimizedDialogStack />
+      </div>
       {(defaultUIEnabled || renderWelcomeScreen) && (
         <div
           className={clsx(

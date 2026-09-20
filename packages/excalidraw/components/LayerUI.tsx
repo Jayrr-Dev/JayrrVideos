@@ -47,7 +47,6 @@ import { Island } from "./Island";
 import { JSONExportDialog } from "./JSONExportDialog";
 import { LaserPointerButton } from "./LaserPointerButton";
 import { LoadingMessage } from "./LoadingMessage";
-import { MinimizedDialogStack } from "./MinimizedDialogStack";
 import { MobileMenu } from "./MobileMenu";
 import { OverwriteConfirmDialog } from "./OverwriteConfirm/OverwriteConfirm";
 import { PasteChartDialog } from "./PasteChartDialog";
@@ -712,7 +711,6 @@ const LayerUI = ({
         <TunnelsJotaiProvider>
           <TunnelsContext.Provider value={tunnels}>
             {layerUIJSX}
-            <MinimizedDialogStack />
           </TunnelsContext.Provider>
         </TunnelsJotaiProvider>
       </UIAppStateContext.Provider>

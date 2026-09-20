@@ -1,19 +1,17 @@
 import {
   DndContext,
+  DragOverlay,
   PointerSensor,
-  closestCenter,
+  pointerWithin,
+  rectIntersection,
+  useDraggable,
+  useDroppable,
   useSensor,
   useSensors,
+  type CollisionDetection,
   type DragEndEvent,
+  type DragStartEvent,
 } from "@dnd-kit/core";
-import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
-import {
-  SortableContext,
-  arrayMove,
-  useSortable,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 import {
   useCallback,
   useEffect,
@@ -29,8 +27,11 @@ import {
 import { PlusIcon } from "@excalidraw/excalidraw/components/icons";
 
 import {
+  clipLaneId,
   EDITOR_PX_PER_SECOND,
   formatEditorClock,
+  MAX_STACK_LANES,
+  SEQUENCE_LANE_ID,
   type EditorClip,
   type EditorTimeline,
 } from "./buildEditorTimeline";
@@ -38,24 +39,51 @@ import { filmstripSliceCount, getClipFilmstrip } from "./captureClipFilmstrip";
 
 type ZoomMode = "fit" | "fixed";
 
+const LANE_PREFIX = "lane:";
+
+const laneDroppableId = (laneId: string) => `${LANE_PREFIX}${laneId}`;
+
+const parseLaneDroppable = (id: string) =>
+  id.startsWith(LANE_PREFIX) ? id.slice(LANE_PREFIX.length) : null;
+
 type JayrrEditorTimelineProps = {
   timeline: EditorTimeline;
   currentTimeMs: number;
   selectedClipIds: ReadonlySet<string>;
   playheadClipId: string | null;
   zoomMode: ZoomMode;
+  stackLaneIds: readonly string[];
   disabled?: boolean;
   emptyAction?: ReactNode;
   onSeek: (timeMs: number) => void;
   onSelectClip: (clip: EditorClip, opts?: { toggle?: boolean }) => void;
-  onReorderClips: (orderedIds: readonly string[]) => void;
+  onMoveClip: (args: {
+    clipId: string;
+    toLaneId: string;
+    timeMs: number;
+    overClipId?: string | null;
+  }) => void;
+  onAddStackLane: () => void;
 };
 
 const msToPx = (ms: number, pxPerMs: number) => ms * pxPerMs;
 
 const RULER_TICK_MS = 1000;
 const TRACK_PAD_PX = 10;
-const MAX_STACK_LANES = 8;
+
+const collideLanes: CollisionDetection = (args) => {
+  const pointerHits = pointerWithin(args);
+  const onClips = pointerHits.filter(
+    (hit) => !String(hit.id).startsWith(LANE_PREFIX),
+  );
+  if (onClips.length > 0) {
+    return onClips;
+  }
+  if (pointerHits.length > 0) {
+    return pointerHits;
+  }
+  return rectIntersection(args);
+};
 
 export const JayrrEditorTimeline = ({
   timeline,
@@ -63,22 +91,47 @@ export const JayrrEditorTimeline = ({
   selectedClipIds,
   playheadClipId,
   zoomMode,
+  stackLaneIds,
   disabled,
   emptyAction,
   onSeek,
   onSelectClip,
-  onReorderClips,
+  onMoveClip,
+  onAddStackLane,
 }: JayrrEditorTimelineProps) => {
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const draggingSeekRef = useRef(false);
   const skipClickRef = useRef(false);
   const [bodyHeight, setBodyHeight] = useState(360);
-  const [stackLaneIds, setStackLaneIds] = useState<readonly string[]>([]);
+  const [activeClipId, setActiveClipId] = useState<string | null>(null);
 
-  const clipIds = useMemo(
-    () => timeline.sequence.map((clip) => clip.id),
-    [timeline.sequence],
-  );
+  const clipsById = useMemo(() => {
+    const map = new Map<string, EditorClip>();
+    for (const clip of timeline.sequence) {
+      map.set(clip.id, clip);
+    }
+    for (const clip of timeline.overlays) {
+      map.set(clip.id, clip);
+    }
+    return map;
+  }, [timeline.overlays, timeline.sequence]);
+
+  const overlaysByLane = useMemo(() => {
+    const map = new Map<string, EditorClip[]>();
+    for (const laneId of stackLaneIds) {
+      map.set(laneId, []);
+    }
+    for (const clip of timeline.overlays) {
+      const laneId = clipLaneId(clip);
+      const list = map.get(laneId);
+      if (list) {
+        list.push(clip);
+        continue;
+      }
+      map.set(laneId, [clip]);
+    }
+    return map;
+  }, [stackLaneIds, timeline.overlays]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -141,7 +194,7 @@ export const JayrrEditorTimeline = ({
       const rect = body.getBoundingClientRect();
       const y = clientY - rect.top + body.scrollTop - TRACK_PAD_PX;
       const ms = y / pxPerMs;
-      return Math.max(0, Math.min(timeline.totalMs, ms));
+      return Math.max(0, Math.min(Math.max(timeline.totalMs, 1), ms));
     },
     [pxPerMs, timeline.totalMs],
   );
@@ -176,37 +229,54 @@ export const JayrrEditorTimeline = ({
     }
   };
 
+  const onDragStart = (event: DragStartEvent) => {
+    setActiveClipId(String(event.active.id));
+  };
+
   const onDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
-    if (!over || active.id === over.id) {
+    setActiveClipId(null);
+    if (!over) {
       return;
     }
-    const oldIndex = clipIds.indexOf(String(active.id));
-    const newIndex = clipIds.indexOf(String(over.id));
-    if (oldIndex < 0 || newIndex < 0) {
+    const clipId = String(active.id);
+    const overId = String(over.id);
+    if (clipId === overId) {
       return;
     }
+    const laneFromDrop = parseLaneDroppable(overId);
+    const overClip = clipsById.get(overId);
+    const toLaneId = laneFromDrop ?? (overClip ? clipLaneId(overClip) : null);
+    if (!toLaneId) {
+      return;
+    }
+    const activator = event.activatorEvent as { clientY?: number };
+    const clientY =
+      typeof activator.clientY === "number"
+        ? activator.clientY + event.delta.y
+        : event.active.rect.current.translated?.top;
+    const timeMs =
+      typeof clientY === "number"
+        ? timeFromClientY(clientY)
+        : overClip?.startMs ?? 0;
     skipClickRef.current = true;
-    onReorderClips(arrayMove(clipIds, oldIndex, newIndex));
+    onMoveClip({
+      clipId,
+      toLaneId,
+      timeMs,
+      overClipId:
+        overClip && clipLaneId(overClip) === SEQUENCE_LANE_ID
+          ? overClip.id
+          : null,
+    });
   };
 
-  const canReorder = clipIds.length >= 2;
   const canAddStackLane = stackLaneIds.length < MAX_STACK_LANES;
   const laneCountStyle = {
-    ["--jayrr-editor-stack-lanes" as string]: String(stackLaneIds.length),
+    ["--jayrr-editor-lanes" as string]: String(1 + stackLaneIds.length),
   } as CSSProperties;
-
-  const addStackLane = () => {
-    if (!canAddStackLane) {
-      return;
-    }
-    setStackLaneIds((current) => [
-      ...current,
-      `stack-${Date.now().toString(36)}-${Math.random()
-        .toString(36)
-        .slice(2, 6)}`,
-    ]);
-  };
+  const activeClip = activeClipId ? clipsById.get(activeClipId) : null;
+  const hasClips = timeline.sequence.length + timeline.overlays.length > 0;
 
   return (
     <div className="jayrr-editor-timeline" style={laneCountStyle}>
@@ -214,29 +284,13 @@ export const JayrrEditorTimeline = ({
         <div className="jayrr-editor-timeline__col-label jayrr-editor-timeline__col-label--ruler">
           Time
         </div>
-        <div className="jayrr-editor-timeline__col-label jayrr-editor-timeline__col-label--sequence">
-          <span>Sequence</span>
-          <button
-            type="button"
-            className="jayrr-editor-timeline__add-lane"
-            aria-label="Add stack column"
-            title="Add stack column"
-            disabled={!canAddStackLane}
-            onClick={(event) => {
-              event.stopPropagation();
-              addStackLane();
-            }}
-          >
-            {PlusIcon}
-          </button>
-        </div>
+        <LaneHeader
+          label="Sequence"
+          addDisabled={!canAddStackLane}
+          onAdd={onAddStackLane}
+        />
         {stackLaneIds.map((laneId, index) => (
-          <div
-            key={laneId}
-            className="jayrr-editor-timeline__col-label jayrr-editor-timeline__col-label--stack"
-          >
-            Stack {index + 1}
-          </div>
+          <LaneHeader key={laneId} label={`Stack ${index + 1}`} />
         ))}
       </div>
       <div
@@ -255,40 +309,51 @@ export const JayrrEditorTimeline = ({
         aria-disabled={disabled || undefined}
         tabIndex={disabled ? -1 : 0}
       >
-        <div
-          className="jayrr-editor-timeline__tracks"
-          style={{ height: totalHeight }}
+        <DndContext
+          sensors={sensors}
+          collisionDetection={collideLanes}
+          onDragStart={onDragStart}
+          onDragEnd={onDragEnd}
+          onDragCancel={() => setActiveClipId(null)}
         >
-          <div className="jayrr-editor-timeline__ruler">
-            {ticks.map((t) => (
-              <div
-                key={t}
-                className="jayrr-editor-timeline__tick"
-                style={{ top: TRACK_PAD_PX + msToPx(t, pxPerMs) }}
-              >
-                {formatEditorClock(t)}
-              </div>
-            ))}
-          </div>
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            modifiers={[restrictToVerticalAxis]}
-            onDragEnd={onDragEnd}
+          <div
+            className="jayrr-editor-timeline__tracks"
+            style={{ height: totalHeight }}
           >
-            <SortableContext
-              items={clipIds}
-              strategy={verticalListSortingStrategy}
-            >
-              <div className="jayrr-editor-timeline__lane jayrr-editor-timeline__lane--sequence">
-                {timeline.sequence.map((clip) => (
-                  <SequenceClip
+            <TimelineRuler ticks={ticks} pxPerMs={pxPerMs} />
+            <TrackLane laneId={SEQUENCE_LANE_ID} packed>
+              {timeline.sequence.map((clip) => (
+                <TimelineClip
+                  key={clip.id}
+                  clip={clip}
+                  pxPerMs={pxPerMs}
+                  selected={selectedClipIds.has(clip.id)}
+                  playhead={playheadClipId === clip.id}
+                  packed
+                  hidden={activeClipId === clip.id}
+                  onSelect={(toggle) => {
+                    if (skipClickRef.current) {
+                      skipClickRef.current = false;
+                      return;
+                    }
+                    onSelectClip(clip, { toggle });
+                    if (!toggle) {
+                      onSeek(clip.startMs);
+                    }
+                  }}
+                />
+              ))}
+            </TrackLane>
+            {stackLaneIds.map((laneId) => (
+              <TrackLane key={laneId} laneId={laneId}>
+                {(overlaysByLane.get(laneId) ?? []).map((clip) => (
+                  <TimelineClip
                     key={clip.id}
                     clip={clip}
                     pxPerMs={pxPerMs}
                     selected={selectedClipIds.has(clip.id)}
                     playhead={playheadClipId === clip.id}
-                    reorderDisabled={!canReorder}
+                    hidden={activeClipId === clip.id}
                     onSelect={(toggle) => {
                       if (skipClickRef.current) {
                         skipClickRef.current = false;
@@ -301,22 +366,30 @@ export const JayrrEditorTimeline = ({
                     }}
                   />
                 ))}
-              </div>
-            </SortableContext>
-          </DndContext>
-          {stackLaneIds.map((laneId) => (
+              </TrackLane>
+            ))}
             <div
-              key={laneId}
-              className="jayrr-editor-timeline__lane jayrr-editor-timeline__lane--stack"
+              className="jayrr-editor-timeline__playhead"
+              style={{ top: playheadTop }}
+              aria-hidden
             />
-          ))}
-          <div
-            className="jayrr-editor-timeline__playhead"
-            style={{ top: playheadTop }}
-            aria-hidden
-          />
-        </div>
-        {timeline.sequence.length === 0 && emptyAction ? (
+          </div>
+          <DragOverlay dropAnimation={null}>
+            {activeClip ? (
+              <div className="jayrr-editor-timeline__drag-ghost">
+                <ClipFace
+                  clip={activeClip}
+                  pxPerMs={pxPerMs}
+                  selected={selectedClipIds.has(activeClip.id)}
+                  playhead={playheadClipId === activeClip.id}
+                  packed
+                  dragging
+                />
+              </div>
+            ) : null}
+          </DragOverlay>
+        </DndContext>
+        {!hasClips && emptyAction ? (
           <div
             className="jayrr-editor-timeline__empty"
             onPointerDown={(event) => event.stopPropagation()}
@@ -325,6 +398,81 @@ export const JayrrEditorTimeline = ({
           </div>
         ) : null}
       </div>
+    </div>
+  );
+};
+
+const LaneHeader = ({
+  label,
+  addDisabled,
+  onAdd,
+}: {
+  label: string;
+  addDisabled?: boolean;
+  onAdd?: () => void;
+}) => (
+  <div className="jayrr-editor-timeline__col-label jayrr-editor-timeline__col-label--sequence">
+    <span>{label}</span>
+    {onAdd ? (
+      <button
+        type="button"
+        className="jayrr-editor-timeline__add-lane"
+        aria-label="Add stack column"
+        title="Add stack column"
+        disabled={addDisabled}
+        onClick={(event) => {
+          event.stopPropagation();
+          onAdd();
+        }}
+      >
+        {PlusIcon}
+      </button>
+    ) : null}
+  </div>
+);
+
+const TimelineRuler = ({
+  ticks,
+  pxPerMs,
+}: {
+  ticks: readonly number[];
+  pxPerMs: number;
+}) => (
+  <div className="jayrr-editor-timeline__ruler">
+    {ticks.map((t) => (
+      <div
+        key={t}
+        className="jayrr-editor-timeline__tick"
+        style={{ top: TRACK_PAD_PX + msToPx(t, pxPerMs) }}
+      >
+        {formatEditorClock(t)}
+      </div>
+    ))}
+  </div>
+);
+
+const TrackLane = ({
+  laneId,
+  packed,
+  children,
+}: {
+  laneId: string;
+  packed?: boolean;
+  children: ReactNode;
+}) => {
+  const { setNodeRef, isOver } = useDroppable({
+    id: laneDroppableId(laneId),
+  });
+  return (
+    <div
+      ref={setNodeRef}
+      className={`jayrr-editor-timeline__lane${
+        packed
+          ? " jayrr-editor-timeline__lane--sequence"
+          : " jayrr-editor-timeline__lane--stack"
+      }${isOver ? " is-drop-target" : ""}`}
+    >
+      {children}
     </div>
   );
 };
@@ -391,53 +539,53 @@ const filmstripSources = (
   return Array.from({ length: sliceCount }, () => posterUrl);
 };
 
-const SequenceClip = ({
+const ClipFace = ({
   clip,
   pxPerMs,
   selected,
   playhead,
-  reorderDisabled,
+  dragging,
+  hidden,
+  packed,
+  style,
+  buttonRef,
+  draggableProps,
   onSelect,
 }: {
   clip: EditorClip;
   pxPerMs: number;
   selected: boolean;
   playhead: boolean;
-  reorderDisabled?: boolean;
-  onSelect: (toggle: boolean) => void;
+  dragging?: boolean;
+  hidden?: boolean;
+  packed?: boolean;
+  style?: CSSProperties;
+  buttonRef?: (node: HTMLButtonElement | null) => void;
+  draggableProps?: Record<string, unknown>;
+  onSelect?: (toggle: boolean) => void;
 }) => {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: clip.id, disabled: reorderDisabled });
-
-  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const innerRef = useRef<HTMLButtonElement | null>(null);
   const setRefs = useCallback(
     (node: HTMLButtonElement | null) => {
-      buttonRef.current = node;
-      setNodeRef(node);
+      innerRef.current = node;
+      buttonRef?.(node);
     },
-    [setNodeRef],
+    [buttonRef],
   );
-
   const heightPx = Math.max(18, msToPx(clip.durationMs, pxPerMs));
   const sliceCount = filmstripSliceCount(heightPx);
   const [ownerDocument, setOwnerDocument] = useState<Document | null>(null);
   useLayoutEffect(() => {
-    setOwnerDocument(buttonRef.current?.ownerDocument ?? null);
+    setOwnerDocument(innerRef.current?.ownerDocument ?? null);
   }, []);
   const frames = useClipFilmstripFrames(clip, sliceCount, ownerDocument);
   const slices = filmstripSources(sliceCount, frames, clip.posterUrl);
-
-  const style: CSSProperties = {
+  const top = packed ? undefined : TRACK_PAD_PX + msToPx(clip.startMs, pxPerMs);
+  const mergedStyle: CSSProperties = {
     height: heightPx,
-    transform: CSS.Transform.toString(transform),
-    transition,
+    ...(top === undefined ? {} : { top }),
     ["--jayrr-editor-slice-count" as string]: String(Math.max(1, sliceCount)),
+    ...style,
   };
 
   return (
@@ -445,17 +593,18 @@ const SequenceClip = ({
       ref={setRefs}
       type="button"
       className={`jayrr-editor-clip jayrr-editor-clip--recording${
-        selected ? " is-selected" : ""
-      }${playhead ? " is-playhead" : ""}${isDragging ? " is-dragging" : ""}`}
-      style={style}
+        packed ? "" : " jayrr-editor-clip--overlay"
+      }${selected ? " is-selected" : ""}${playhead ? " is-playhead" : ""}${
+        dragging ? " is-dragging" : ""
+      }${hidden ? " is-hidden" : ""}`}
+      style={mergedStyle}
       title={clip.label}
-      {...attributes}
-      {...listeners}
+      {...draggableProps}
       aria-pressed={selected}
       onClick={(event) => {
         event.stopPropagation();
         const toggle = event.ctrlKey || event.metaKey;
-        onSelect(toggle);
+        onSelect?.(toggle);
       }}
     >
       <span className="jayrr-editor-clip__filmstrip" aria-hidden>
@@ -472,5 +621,41 @@ const SequenceClip = ({
       </span>
       <span className="jayrr-editor-clip__label">{clip.label}</span>
     </button>
+  );
+};
+
+const TimelineClip = ({
+  clip,
+  pxPerMs,
+  selected,
+  playhead,
+  packed,
+  hidden,
+  onSelect,
+}: {
+  clip: EditorClip;
+  pxPerMs: number;
+  selected: boolean;
+  playhead: boolean;
+  packed?: boolean;
+  hidden?: boolean;
+  onSelect: (toggle: boolean) => void;
+}) => {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: clip.id,
+  });
+
+  return (
+    <ClipFace
+      clip={clip}
+      pxPerMs={pxPerMs}
+      selected={selected}
+      playhead={playhead}
+      packed={packed}
+      hidden={hidden || isDragging}
+      buttonRef={setNodeRef}
+      draggableProps={{ ...attributes, ...listeners }}
+      onSelect={onSelect}
+    />
   );
 };

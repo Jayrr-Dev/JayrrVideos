@@ -329,9 +329,9 @@
 
   .jayrr-editor-timeline__head {
     display: grid;
-    grid-template-columns: 2.75rem minmax(4.5rem, 1fr) repeat(
-        var(--jayrr-editor-stack-lanes, 0),
-        3.25rem
+    grid-template-columns: 2.75rem repeat(
+        var(--jayrr-editor-lanes, 1),
+        minmax(4.5rem, 1fr)
       );
     gap: 0;
     border-bottom: 1px solid var(--default-border-color);
@@ -359,13 +359,6 @@
     align-items: center;
     justify-content: space-between;
     gap: 0.15rem;
-  }
-
-  .jayrr-editor-timeline__col-label--stack {
-    border-left: 1px solid var(--default-border-color);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
 
   .jayrr-editor-timeline__add-lane {
@@ -430,9 +423,9 @@
   .jayrr-editor-timeline__tracks {
     position: relative;
     display: grid;
-    grid-template-columns: 2.75rem minmax(4.5rem, 1fr) repeat(
-        var(--jayrr-editor-stack-lanes, 0),
-        3.25rem
+    grid-template-columns: 2.75rem repeat(
+        var(--jayrr-editor-lanes, 1),
+        minmax(4.5rem, 1fr)
       );
     min-width: 100%;
   }
@@ -462,15 +455,18 @@
   .jayrr-editor-timeline__lane--sequence {
     display: flex;
     flex-direction: column;
-    border-right: none;
     padding: 10px 0.2rem;
     box-sizing: border-box;
   }
 
   .jayrr-editor-timeline__lane--stack {
-    border-right: none;
-    border-left: 1px solid var(--default-border-color);
+    position: relative;
+    min-width: 0;
     background: var(--color-surface-low);
+  }
+
+  .jayrr-editor-timeline__lane.is-drop-target {
+    background: var(--color-surface-primary-container);
   }
 
   .jayrr-editor-timeline__playhead {
@@ -478,6 +474,8 @@
     position: absolute;
     left: 0;
     right: 0;
+    grid-column: 1 / -1;
+    grid-row: 1;
     height: 2px;
     background: var(--jayrr-editor-playhead);
     box-shadow: 0 0 0 1px rgb(0 0 0 / 18%);
@@ -524,6 +522,23 @@
     z-index: 4;
     opacity: 0.92;
     box-shadow: 0 4px 14px rgb(0 0 0 / 22%);
+  }
+
+  .jayrr-editor-clip.is-hidden {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .jayrr-editor-clip--overlay {
+    position: absolute;
+    left: 0.2rem;
+    right: 0.2rem;
+    width: auto;
+  }
+
+  .jayrr-editor-timeline__drag-ghost {
+    width: 5.5rem;
+    pointer-events: none;
   }
 
   .jayrr-editor-clip__filmstrip {

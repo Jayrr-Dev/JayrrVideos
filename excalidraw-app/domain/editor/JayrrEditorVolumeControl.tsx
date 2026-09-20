@@ -1,6 +1,6 @@
-import type { ReactNode } from "react";
-
 import { useEditorPreviewAudio } from "./editorPreviewModel";
+
+import type { ReactNode } from "react";
 
 const VolumeGlyph = (
   <svg

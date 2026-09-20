@@ -374,6 +374,14 @@
     grid-template-columns: repeat(8, minmax(0, 1fr));
   }
 
+  .jayrr-called-embed__bands--socion {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .jayrr-called-embed__bands--big5 {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
   .jayrr-called-embed__bands .jayrr-called-embed__emo {
     width: 100%;
     max-width: none;
@@ -635,6 +643,59 @@
     border-color: #86efac;
   }
 
+  .jayrr-called-embed__smart {
+    min-width: 0;
+    padding: 0.12rem 0.18rem;
+    font-size: 0.58rem;
+    line-height: 1.15;
+    text-align: center;
+    border: 1px solid transparent;
+    border-radius: 0.35rem;
+    font-weight: 700;
+  }
+
+  .jayrr-called-embed__smart--clueless {
+    background: #f4f4f5;
+    color: #71717a;
+    border-color: #d4d4d8;
+  }
+
+  .jayrr-called-embed__smart--dumb {
+    background: #e4e4e7;
+    color: #52525b;
+    border-color: #a1a1aa;
+  }
+
+  .jayrr-called-embed__smart--basic {
+    background: #e0f2fe;
+    color: #0369a1;
+    border-color: #7dd3fc;
+  }
+
+  .jayrr-called-embed__smart--normal {
+    background: #dbeafe;
+    color: #1d4ed8;
+    border-color: #93c5fd;
+  }
+
+  .jayrr-called-embed__smart--smart {
+    background: #fef3c7;
+    color: #b45309;
+    border-color: #fcd34d;
+  }
+
+  .jayrr-called-embed__smart--brilliant {
+    background: #ffedd5;
+    color: #c2410c;
+    border-color: #fdba74;
+  }
+
+  .jayrr-called-embed__smart--genius {
+    background: #fee2e2;
+    color: #b91c1c;
+    border-color: #fca5a5;
+  }
+
   .jayrr-called-embed__hype {
     min-width: 0;
     padding: 0.12rem 0.18rem;
@@ -830,6 +891,86 @@
     border-color: #f9a8d4;
   }
 
+  .jayrr-called-embed__socion {
+    min-width: 0;
+    padding: 0.12rem 0.14rem;
+    font-size: 0.55rem;
+    line-height: 1.15;
+    text-align: center;
+    border: 1px solid transparent;
+    border-radius: 0.35rem;
+    font-weight: 700;
+  }
+
+  .jayrr-called-embed__socion--alpha {
+    background: #e0f2fe;
+    color: #075985;
+    border-color: #7dd3fc;
+  }
+
+  .jayrr-called-embed__socion--beta {
+    background: #fee2e2;
+    color: #991b1b;
+    border-color: #fca5a5;
+  }
+
+  .jayrr-called-embed__socion--gamma {
+    background: #ffedd5;
+    color: #9a3412;
+    border-color: #fdba74;
+  }
+
+  .jayrr-called-embed__socion--delta {
+    background: #dcfce7;
+    color: #166534;
+    border-color: #86efac;
+  }
+
+  .jayrr-called-embed__big5 {
+    min-width: 0;
+    padding: 0.12rem 0.18rem;
+    font-size: 0.52rem;
+    line-height: 1.15;
+    text-align: center;
+    border: 1px solid transparent;
+    border-radius: 0.35rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    background: #eef2ff;
+    color: #3730a3;
+    border-color: #c7d2fe;
+  }
+
+  .jayrr-called-embed__big5--o {
+    background: #f5f3ff;
+    color: #6d28d9;
+    border-color: #c4b5fd;
+  }
+
+  .jayrr-called-embed__big5--c {
+    background: #e0f2fe;
+    color: #075985;
+    border-color: #7dd3fc;
+  }
+
+  .jayrr-called-embed__big5--e {
+    background: #fef3c7;
+    color: #b45309;
+    border-color: #fcd34d;
+  }
+
+  .jayrr-called-embed__big5--a {
+    background: #dcfce7;
+    color: #166534;
+    border-color: #86efac;
+  }
+
+  .jayrr-called-embed__big5--n {
+    background: #fee2e2;
+    color: #991b1b;
+    border-color: #fca5a5;
+  }
+
   .jayrr-called-embed__switch {
     position: relative;
     box-sizing: border-box;
@@ -950,12 +1091,15 @@
     min-width: 0;
   }
 
+  .jayrr-called-embed__now-row .jayrr-called-embed__smart,
   .jayrr-called-embed__now-row .jayrr-called-embed__mbti,
   .jayrr-called-embed__now-row .jayrr-called-embed__fn,
   .jayrr-called-embed__now-row .jayrr-called-embed__ennea,
   .jayrr-called-embed__now-row .jayrr-called-embed__hype,
   .jayrr-called-embed__now-row .jayrr-called-embed__energy,
-  .jayrr-called-embed__now-row .jayrr-called-embed__online {
+  .jayrr-called-embed__now-row .jayrr-called-embed__online,
+  .jayrr-called-embed__now-row .jayrr-called-embed__socion,
+  .jayrr-called-embed__now-row .jayrr-called-embed__big5 {
     flex: 0 0 auto;
     font-size: 0.62rem;
   }

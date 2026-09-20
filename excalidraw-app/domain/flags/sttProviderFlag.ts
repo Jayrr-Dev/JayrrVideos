@@ -7,7 +7,7 @@ export const STT_PROVIDER_OPTIONS = [
   { id: "deepgram", label: "Deepgram" },
 ] as const;
 
-export type SttProvider = (typeof STT_PROVIDER_OPTIONS)[number]["id"];
+export type SttProvider = typeof STT_PROVIDER_OPTIONS[number]["id"];
 
 export const isSttProvider = (value: string): value is SttProvider =>
   STT_PROVIDER_OPTIONS.some((option) => option.id === value);

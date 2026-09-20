@@ -99,22 +99,24 @@ const mintDeepgramToken = async () => {
       ttl_seconds: 300,
     }),
   });
-  if (!response.ok) {
-    if (response.status === 401) {
-      throw new Error("Deepgram rejected this API key.");
+  if (response.ok) {
+    const payload: unknown = await response.json();
+    const accessToken = readAccessToken(payload);
+    if (!accessToken) {
+      throw new Error("Deepgram did not return a stream token.");
     }
-    const detail = await response.text();
-    throw new Error(
-      inworldMessage(detail) ||
-        `Deepgram token mint failed (${response.status})`,
-    );
+    return accessToken;
   }
-  const payload: unknown = await response.json();
-  const accessToken = readAccessToken(payload);
-  if (!accessToken) {
-    throw new Error("Deepgram did not return a stream token.");
+  if (response.status === 401) {
+    throw new Error("Deepgram rejected this API key.");
   }
-  return accessToken;
+  if (response.status === 403) {
+    return apiKey;
+  }
+  const detail = await response.text();
+  throw new Error(
+    inworldMessage(detail) || `Deepgram token mint failed (${response.status})`,
+  );
 };
 
 const inworldMessage = (detail: string) => {

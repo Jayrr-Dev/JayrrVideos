@@ -21,6 +21,7 @@ import { TopErrorBoundary } from "../components/TopErrorBoundary";
 import {
   JAYRR_EDITOR_TAB,
   JayrrEditorPanel,
+  JayrrEditorSession,
   editorTabIcon,
 } from "../domain/editor";
 import {
@@ -339,78 +340,84 @@ export const JayrrPresentHost = ({
         )
       ) : (
         <>
-          <JayrrPresentTranslationOverlay deck={deck} />
-          <DefaultSidebar docked onDock={false}>
-            <DefaultSidebar.TabTriggers>
-              <Sidebar.TabTrigger
-                tab={JAYRR_PRESENT_TAB}
-                title="Present"
-                aria-label="Present"
-              >
-                {presentationIcon}
-              </Sidebar.TabTrigger>
-              <Sidebar.TabTrigger
-                tab={JAYRR_RECORDINGS_TAB}
-                title="Recordings"
-                aria-label="Recordings"
-              >
-                {recordingsTabIcon}
-              </Sidebar.TabTrigger>
-              <Sidebar.TabTrigger
-                tab={JAYRR_EDITOR_TAB}
-                title="Video editor"
-                aria-label="Video editor"
-              >
-                {editorTabIcon}
-              </Sidebar.TabTrigger>
-            </DefaultSidebar.TabTriggers>
-            <DefaultSidebar.TrailingTabTriggers>
-              <Sidebar.TabTrigger
-                tab={JAYRR_CALLED_OBJECTS_TAB}
-                title="Widgets"
-                aria-label="Widgets"
-              >
-                {EmbedIcon}
-              </Sidebar.TabTrigger>
-              <Sidebar.TabTrigger tab={JAYRR_AI_TAB} title="AI" aria-label="AI">
-                {aiIcon}
-              </Sidebar.TabTrigger>
-            </DefaultSidebar.TrailingTabTriggers>
-            <Sidebar.Tab tab={JAYRR_EDITOR_TAB}>
-              <TopErrorBoundary compact>
-                <JayrrEditorPanel />
-              </TopErrorBoundary>
-            </Sidebar.Tab>
-            <Sidebar.Tab tab={JAYRR_CALLED_OBJECTS_TAB}>
-              <TopErrorBoundary compact>
-                <JayrrCalledObjectsPanel />
-              </TopErrorBoundary>
-            </Sidebar.Tab>
-            <Sidebar.Tab tab={JAYRR_PRESENT_TAB}>
-              <TopErrorBoundary compact>
-                <JayrrPresentPanel
-                  deck={deck}
-                  presenting={presenting}
-                  uploading={uploading}
-                  stepIndex={stepIndex}
-                  selectedElementIds={selectedElementIds}
-                  startPresent={startPresent}
-                  startRecordPresent={startRecordPresent}
-                  stopPresent={stopPresent}
-                />
-              </TopErrorBoundary>
-            </Sidebar.Tab>
-            <Sidebar.Tab tab={JAYRR_RECORDINGS_TAB}>
-              <TopErrorBoundary compact>
-                <JayrrPresentRecordingsPanel uploading={uploading} />
-              </TopErrorBoundary>
-            </Sidebar.Tab>
-            <Sidebar.Tab tab={JAYRR_AI_TAB}>
-              <TopErrorBoundary compact>
-                <JayrrAiChat />
-              </TopErrorBoundary>
-            </Sidebar.Tab>
-          </DefaultSidebar>
+          <JayrrEditorSession>
+            <JayrrPresentTranslationOverlay deck={deck} />
+            <DefaultSidebar docked onDock={false}>
+              <DefaultSidebar.TabTriggers>
+                <Sidebar.TabTrigger
+                  tab={JAYRR_PRESENT_TAB}
+                  title="Present"
+                  aria-label="Present"
+                >
+                  {presentationIcon}
+                </Sidebar.TabTrigger>
+                <Sidebar.TabTrigger
+                  tab={JAYRR_RECORDINGS_TAB}
+                  title="Recordings"
+                  aria-label="Recordings"
+                >
+                  {recordingsTabIcon}
+                </Sidebar.TabTrigger>
+                <Sidebar.TabTrigger
+                  tab={JAYRR_EDITOR_TAB}
+                  title="Video editor"
+                  aria-label="Video editor"
+                >
+                  {editorTabIcon}
+                </Sidebar.TabTrigger>
+              </DefaultSidebar.TabTriggers>
+              <DefaultSidebar.TrailingTabTriggers>
+                <Sidebar.TabTrigger
+                  tab={JAYRR_CALLED_OBJECTS_TAB}
+                  title="Widgets"
+                  aria-label="Widgets"
+                >
+                  {EmbedIcon}
+                </Sidebar.TabTrigger>
+                <Sidebar.TabTrigger
+                  tab={JAYRR_AI_TAB}
+                  title="AI"
+                  aria-label="AI"
+                >
+                  {aiIcon}
+                </Sidebar.TabTrigger>
+              </DefaultSidebar.TrailingTabTriggers>
+              <Sidebar.Tab tab={JAYRR_EDITOR_TAB} forceMount>
+                <TopErrorBoundary compact>
+                  <JayrrEditorPanel />
+                </TopErrorBoundary>
+              </Sidebar.Tab>
+              <Sidebar.Tab tab={JAYRR_CALLED_OBJECTS_TAB}>
+                <TopErrorBoundary compact>
+                  <JayrrCalledObjectsPanel />
+                </TopErrorBoundary>
+              </Sidebar.Tab>
+              <Sidebar.Tab tab={JAYRR_PRESENT_TAB}>
+                <TopErrorBoundary compact>
+                  <JayrrPresentPanel
+                    deck={deck}
+                    presenting={presenting}
+                    uploading={uploading}
+                    stepIndex={stepIndex}
+                    selectedElementIds={selectedElementIds}
+                    startPresent={startPresent}
+                    startRecordPresent={startRecordPresent}
+                    stopPresent={stopPresent}
+                  />
+                </TopErrorBoundary>
+              </Sidebar.Tab>
+              <Sidebar.Tab tab={JAYRR_RECORDINGS_TAB}>
+                <TopErrorBoundary compact>
+                  <JayrrPresentRecordingsPanel uploading={uploading} />
+                </TopErrorBoundary>
+              </Sidebar.Tab>
+              <Sidebar.Tab tab={JAYRR_AI_TAB}>
+                <TopErrorBoundary compact>
+                  <JayrrAiChat />
+                </TopErrorBoundary>
+              </Sidebar.Tab>
+            </DefaultSidebar>
+          </JayrrEditorSession>
         </>
       )}
     </>

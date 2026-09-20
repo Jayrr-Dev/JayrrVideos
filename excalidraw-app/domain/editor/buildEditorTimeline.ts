@@ -12,9 +12,16 @@ export type EditorRecordingSource = {
   sourceOffsetMs?: number;
 };
 
+export const SEQUENCE_LANE_ID = "sequence";
+export const MAX_STACK_LANES = 8;
+
 /** User-ordered clip on the timeline (before layout). */
 export type EditorProjectClip = EditorRecordingSource & {
   id: string;
+  /** Sequence is the main packed track; any other id is a stack overlay. */
+  laneId?: string;
+  /** Start time on a stack lane. Ignored for sequence clips. */
+  laneStartMs?: number;
 };
 
 export type EditorClip = EditorProjectClip & {
@@ -25,26 +32,131 @@ export type EditorClip = EditorProjectClip & {
 export type EditorTimeline = {
   totalMs: number;
   sequence: EditorClip[];
+  overlays: EditorClip[];
 };
 
-/** Lay recording clips end-to-end on the vertical timeline. */
+export const clipLaneId = (clip: { laneId?: string }) => {
+  if (!clip.laneId || clip.laneId === SEQUENCE_LANE_ID) {
+    return SEQUENCE_LANE_ID;
+  }
+  return clip.laneId;
+};
+
+export const isSequenceClip = (clip: { laneId?: string }) =>
+  clipLaneId(clip) === SEQUENCE_LANE_ID;
+
+const toLaidClip = (clip: EditorProjectClip, startMs: number): EditorClip => {
+  const durationMs = Math.max(1, Math.round(clip.durationMs));
+  return {
+    ...clip,
+    kind: "recording",
+    startMs: Math.max(0, Math.round(startMs)),
+    durationMs,
+    sourceOffsetMs: clip.sourceOffsetMs ?? 0,
+    laneId: clipLaneId(clip),
+  };
+};
+
+/** Sequence clips pack end-to-end; stack clips keep their own start times. */
 export const buildEditorTimeline = (
   clips: readonly EditorProjectClip[],
 ): EditorTimeline => {
   const sequence: EditorClip[] = [];
+  const overlays: EditorClip[] = [];
   let cursor = 0;
   for (const clip of clips) {
-    const durationMs = Math.max(1, Math.round(clip.durationMs));
-    sequence.push({
-      ...clip,
-      kind: "recording",
-      startMs: cursor,
-      durationMs,
-      sourceOffsetMs: clip.sourceOffsetMs ?? 0,
-    });
-    cursor += durationMs;
+    if (isSequenceClip(clip)) {
+      const laid = toLaidClip(clip, cursor);
+      sequence.push(laid);
+      cursor += laid.durationMs;
+      continue;
+    }
+    overlays.push(toLaidClip(clip, clip.laneStartMs ?? 0));
   }
-  return { totalMs: cursor, sequence };
+  let totalMs = cursor;
+  for (const clip of overlays) {
+    totalMs = Math.max(totalMs, clip.startMs + clip.durationMs);
+  }
+  return { totalMs, sequence, overlays };
+};
+
+export const newEditorLaneId = () =>
+  `stack-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+
+export const moveEditorClip = ({
+  clips,
+  clipId,
+  toLaneId,
+  timeMs,
+  overClipId,
+}: {
+  clips: readonly EditorProjectClip[];
+  clipId: string;
+  toLaneId: string;
+  timeMs: number;
+  overClipId?: string | null;
+}): EditorProjectClip[] | null => {
+  const moving = clips.find((clip) => clip.id === clipId);
+  if (!moving) {
+    return null;
+  }
+  const destLane = toLaneId || SEQUENCE_LANE_ID;
+  const others = clips.filter((clip) => clip.id !== clipId);
+  const sequence = others.filter(isSequenceClip);
+  const overlays = others.filter((clip) => !isSequenceClip(clip));
+  const droppedMs = Math.max(0, Math.round(timeMs));
+
+  if (destLane === SEQUENCE_LANE_ID) {
+    const updated: EditorProjectClip = {
+      ...moving,
+      laneId: SEQUENCE_LANE_ID,
+      laneStartMs: undefined,
+    };
+    let insertAt = sequence.length;
+    if (overClipId) {
+      const overIdx = sequence.findIndex((clip) => clip.id === overClipId);
+      if (overIdx >= 0) {
+        let cursor = 0;
+        for (let i = 0; i < overIdx; i++) {
+          const earlier = sequence[i];
+          cursor += earlier ? Math.max(1, Math.round(earlier.durationMs)) : 0;
+        }
+        const overClip = sequence[overIdx];
+        const overDur = overClip
+          ? Math.max(1, Math.round(overClip.durationMs))
+          : 0;
+        insertAt = droppedMs >= cursor + overDur / 2 ? overIdx + 1 : overIdx;
+      }
+    } else {
+      let cursor = 0;
+      insertAt = sequence.length;
+      for (let i = 0; i < sequence.length; i++) {
+        const clip = sequence[i];
+        if (!clip) {
+          continue;
+        }
+        const dur = Math.max(1, Math.round(clip.durationMs));
+        if (droppedMs < cursor + dur / 2) {
+          insertAt = i;
+          break;
+        }
+        cursor += dur;
+      }
+    }
+    return [
+      ...sequence.slice(0, insertAt),
+      updated,
+      ...sequence.slice(insertAt),
+      ...overlays,
+    ];
+  }
+
+  const updated: EditorProjectClip = {
+    ...moving,
+    laneId: destLane,
+    laneStartMs: droppedMs,
+  };
+  return [...sequence, ...overlays, updated];
 };
 
 export const clipAtTime = (
@@ -101,9 +213,10 @@ export const getMergeableClips = (
   if (selectedIds.size < 2) {
     return null;
   }
+  const sequence = clips.filter(isSequenceClip);
   const indices: number[] = [];
-  for (let i = 0; i < clips.length; i++) {
-    const clip = clips[i];
+  for (let i = 0; i < sequence.length; i++) {
+    const clip = sequence[i];
     if (clip && selectedIds.has(clip.id)) {
       indices.push(i);
     }
@@ -117,7 +230,7 @@ export const getMergeableClips = (
     }
   }
   const group = indices
-    .map((index) => clips[index])
+    .map((index) => sequence[index])
     .filter((clip): clip is EditorProjectClip => Boolean(clip));
   if (group.length < 2) {
     return null;

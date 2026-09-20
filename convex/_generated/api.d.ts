@@ -18,6 +18,7 @@ import type * as canvasAi_jevClient from "../canvasAi/jevClient.js";
 import type * as canvasAi_prompt from "../canvasAi/prompt.js";
 import type * as canvasAi_schemas from "../canvasAi/schemas.js";
 import type * as canvasAi_skeletons from "../canvasAi/skeletons.js";
+import type * as canvasAi_topicSummary from "../canvasAi/topicSummary.js";
 import type * as embedProxy from "../embedProxy.js";
 import type * as featureFlags from "../featureFlags.js";
 import type * as health from "../health.js";
@@ -53,6 +54,7 @@ declare const fullApi: ApiFromModules<{
   "canvasAi/prompt": typeof canvasAi_prompt;
   "canvasAi/schemas": typeof canvasAi_schemas;
   "canvasAi/skeletons": typeof canvasAi_skeletons;
+  "canvasAi/topicSummary": typeof canvasAi_topicSummary;
   embedProxy: typeof embedProxy;
   featureFlags: typeof featureFlags;
   health: typeof health;

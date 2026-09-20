@@ -1,4 +1,10 @@
+import { appJotaiStore } from "../../app-jotai";
 import { api, convexClient } from "../../convexClient";
+import {
+  isSttProvider,
+  sttProviderAtom,
+  type SttProvider,
+} from "../flags/sttProviderFlag";
 
 import { turnsFromTranscript } from "./transcriptTurns";
 
@@ -21,6 +27,20 @@ type AudioWindow = Window &
   };
 
 type StreamMessage = {
+  type?: unknown;
+  event?: unknown;
+  transcript?: unknown;
+  words?: unknown;
+  description?: unknown;
+  message?: unknown;
+  is_final?: unknown;
+  speech_final?: unknown;
+  channel?: {
+    alternatives?: Array<{
+      transcript?: unknown;
+      words?: unknown;
+    }>;
+  };
   error?: { message?: unknown };
   transcription?: {
     transcript?: unknown;
@@ -160,7 +180,25 @@ const samplePeak = (samples: Float32Array) => {
 };
 
 const isFatalTokenError = (message: string) =>
-  /not authenticated|INWORLD_API_KEY|rejected this API key/i.test(message);
+  /not authenticated|INWORLD_API_KEY|DEEPGRAM_API_KEY|rejected this API key/i.test(
+    message,
+  );
+
+const readSttProvider = (): SttProvider => {
+  const value = appJotaiStore.get(sttProviderAtom);
+  if (isSttProvider(value)) {
+    return value;
+  }
+  return "inworld";
+};
+
+const novaAlternative = (payload: StreamMessage) => {
+  const alternatives = payload.channel?.alternatives;
+  if (!Array.isArray(alternatives) || alternatives.length === 0) {
+    return null;
+  }
+  return alternatives[0] ?? null;
+};
 
 const payloadKeys = (payload: unknown) => {
   if (!payload || typeof payload !== "object") {
@@ -242,6 +280,7 @@ export const listenStreamTranscript = (
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   const pending: ArrayBuffer[] = [];
   const speakerIds = new Map<number, number>();
+  let provider: SttProvider = readSttProvider();
 
   const mapSpeaker = (speaker: number | null) => {
     if (speaker === null) {
@@ -312,6 +351,17 @@ export const listenStreamTranscript = (
       return;
     }
     chunksSent += 1;
+    sendPcm(pcm);
+  };
+
+  const sendPcm = (pcm: ArrayBuffer) => {
+    if (!socket || socket.readyState !== view.WebSocket.OPEN) {
+      return;
+    }
+    if (provider === "deepgram") {
+      socket.send(pcm);
+      return;
+    }
     sendJson({ audioChunk: { content: bytesToBase64(pcm, view) } });
   };
 
@@ -324,7 +374,7 @@ export const listenStreamTranscript = (
       if (!chunk) {
         continue;
       }
-      sendJson({ audioChunk: { content: bytesToBase64(chunk, view) } });
+      sendPcm(chunk);
     }
   };
 
@@ -357,13 +407,52 @@ export const listenStreamTranscript = (
     lastMessageAt = view.performance.now();
     reconnectAttempts = 0;
     debug("stt", payloadKeys(payload));
-    if (payload.error) {
+    if (payload.error || payload.type === "FatalError") {
       const message =
-        typeof payload.error.message === "string"
+        typeof payload.error?.message === "string"
           ? payload.error.message
+          : typeof payload.description === "string"
+          ? payload.description
+          : typeof payload.message === "string"
+          ? payload.message
           : "Transcription failed.";
       debug("stt", `error ${message}`);
       report(message);
+      return;
+    }
+    if (
+      payload.type === "Connected" ||
+      payload.type === "ConfigureSuccess" ||
+      payload.type === "Metadata" ||
+      payload.type === "UtteranceEnd" ||
+      payload.type === "SpeechStarted"
+    ) {
+      return;
+    }
+    if (payload.type === "Results") {
+      const alternative = novaAlternative(payload);
+      if (!alternative) {
+        debug("stt", "no nova alternative");
+        return;
+      }
+      const transcript =
+        typeof alternative.transcript === "string"
+          ? alternative.transcript
+          : "";
+      const turns = turnsFromTranscript(
+        transcript,
+        readWordStamps(alternative.words),
+      ).map((turn) => ({
+        ...turn,
+        speaker: mapSpeaker(turn.speaker),
+      }));
+      if (turns.length === 0) {
+        debug("stt", "empty transcript");
+        return;
+      }
+      const isFinal = payload.is_final === true;
+      debug("turns", `${turns.length} ${isFinal ? "final" : "draft"}`);
+      onTurns(turns, isFinal);
       return;
     }
     const transcription =
@@ -483,13 +572,15 @@ export const listenStreamTranscript = (
       return;
     }
     debug("token", "minting");
+    provider = readSttProvider();
     void client
-      .action(api.transcription.mintStreamToken, {})
-      .then(({ accessToken }) => {
+      .action(api.transcription.mintStreamToken, { provider })
+      .then(({ accessToken, provider: minted }) => {
         if (stopped) {
           return;
         }
-        debug("token", `ok ${accessToken.length} chars`);
+        provider = minted;
+        debug("token", `ok ${minted} ${accessToken.length} chars`);
         const url = streamUrl(view);
         debug("socket", url);
         const next = new view.WebSocket(url);
@@ -501,17 +592,24 @@ export const listenStreamTranscript = (
           }
           debug("socket", "open");
           onStatus?.("Listening…");
-          sendJson({ accessToken });
+          const sampleRateHertz =
+            Math.round(context.sampleRate) || STREAM_SAMPLE_RATE;
           sendJson({
-            transcribeConfig: {
-              modelId: STREAM_MODEL,
-              audioEncoding: "LINEAR16",
-              language: "en",
-              sampleRateHertz:
-                Math.round(context.sampleRate) || STREAM_SAMPLE_RATE,
-              numberOfChannels: 1,
-            },
+            accessToken,
+            provider: minted,
+            sampleRateHertz,
           });
+          if (minted === "inworld") {
+            sendJson({
+              transcribeConfig: {
+                modelId: STREAM_MODEL,
+                audioEncoding: "LINEAR16",
+                language: "en",
+                sampleRateHertz,
+                numberOfChannels: 1,
+              },
+            });
+          }
           view.setTimeout(() => {
             if (stopped || socket !== next) {
               return;
@@ -574,7 +672,11 @@ export const listenStreamTranscript = (
         reconnectTimer = null;
       }
       pending.length = 0;
-      sendJson({ closeStream: {} });
+      if (provider === "deepgram") {
+        sendJson({ type: "CloseStream" });
+      } else {
+        sendJson({ closeStream: {} });
+      }
       socket?.close();
       socket = null;
       closeAudio();

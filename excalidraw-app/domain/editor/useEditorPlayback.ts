@@ -4,6 +4,7 @@ import { clipAtTime, type EditorTimeline } from "./buildEditorTimeline";
 import {
   findEditorTargetVideo,
   getEditorPreviewAudio,
+  subscribeEditorPreviewVideos,
 } from "./editorPreviewModel";
 
 type UseEditorPlaybackOpts = {
@@ -51,7 +52,7 @@ export const useEditorPlayback = ({
       const video = resolveVideo();
       const clip = clipAtTime(timelineRef.current.sequence, timeMs);
       if (!video || !clip) {
-        if (shouldPlay && !video) {
+        if (shouldPlay && !clip) {
           playingRef.current = false;
           setPlaying(false);
         }
@@ -218,12 +219,21 @@ export const useEditorPlayback = ({
 
   useEffect(() => {
     clipIdRef.current = null;
-    if (playingRef.current && previewElementId) {
-      void applyClipToVideo(timeRef.current, true);
-    } else {
+    if (!previewElementId) {
       pause();
+      return;
     }
+    void applyClipToVideo(timeRef.current, playingRef.current);
   }, [applyClipToVideo, pause, previewElementId]);
+
+  useEffect(() => {
+    return subscribeEditorPreviewVideos(() => {
+      if (!previewIdRef.current) {
+        return;
+      }
+      void applyClipToVideo(timeRef.current, playingRef.current);
+    });
+  }, [applyClipToVideo]);
 
   useEffect(() => {
     return () => {

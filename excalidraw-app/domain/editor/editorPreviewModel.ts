@@ -35,7 +35,14 @@ export const isJayrrEditorPreviewElement = (
 };
 
 const videos = new Map<string, HTMLVideoElement>();
+const videoListeners = new Set<() => void>();
 const audioListeners = new Set<(audio: EditorPreviewAudio) => void>();
+
+const notifyVideoListeners = () => {
+  for (const listener of videoListeners) {
+    listener();
+  }
+};
 
 export type EditorPreviewAudio = { volume: number; muted: boolean };
 
@@ -140,10 +147,20 @@ export const registerEditorPreviewVideo = (
 ) => {
   videos.set(elementId, video);
   applyAudioToVideo(video, getEditorPreviewAudio());
+  notifyVideoListeners();
   return () => {
     if (videos.get(elementId) === video) {
       videos.delete(elementId);
+      notifyVideoListeners();
     }
+  };
+};
+
+export const subscribeEditorPreviewVideos = (listener: () => void) => {
+  videoListeners.add(listener);
+  listener();
+  return () => {
+    videoListeners.delete(listener);
   };
 };
 

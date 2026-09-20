@@ -271,9 +271,9 @@ function retryDelayMs(response: Response, attempt: number) {
   return base / 2 + Math.random() * (base / 2);
 }
 
-async function postSystemOne(apiKey: string, body: string) {
+async function postSystemOne(apiKey: string, body: string, timeoutMs = REQUEST_TIMEOUT_MS) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     return await fetch(TYPESAFE_URL, {
       method: "POST",
@@ -294,7 +294,7 @@ async function postSystemOne(apiKey: string, body: string) {
   }
 }
 
-export async function callTypeSafeSystemOne(args: JevEvaluateArgs) {
+export async function callTypeSafeSystemOne(args: JevEvaluateArgs, live = false) {
   const apiKey = process.env.TYPESAFE_API_KEY?.trim();
   if (!apiKey) {
     throw new Error("TypeSafe is not configured on the server.");
@@ -307,11 +307,12 @@ export async function callTypeSafeSystemOne(args: JevEvaluateArgs) {
   });
 
   let lastError = "Jev request failed.";
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
-    const response = await postSystemOne(apiKey, body);
+  for (let attempt = 1; attempt <= (live ? 1 : MAX_ATTEMPTS); attempt += 1) {
+    const response = await postSystemOne(apiKey, body, live ? 2000 : REQUEST_TIMEOUT_MS);
 
     if (response.status === 429 || response.status === 529) {
       lastError = `Jev is busy (${response.status}).`;
+      if (live) { throw new Error(lastError); }
       await sleep(retryDelayMs(response, attempt));
       continue;
     }

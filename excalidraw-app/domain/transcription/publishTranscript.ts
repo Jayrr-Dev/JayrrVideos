@@ -23,11 +23,14 @@ const notify = () => {
 };
 
 export const publishTranscript = (feed: TranscriptFeed) => {
+  if (!feed.turns.length && feeds.get(feed.sourceId)?.turns.length) { resetConversation(feed.sourceId); }
+  conversationFor(feed.sourceId).ingest(feed.turns);
   feeds.set(feed.sourceId, feed);
   notify();
 };
 
 export const clearTranscript = (sourceId: string) => {
+  resetConversation(sourceId);
   if (!feeds.has(sourceId)) {
     return;
   }
@@ -45,3 +48,4 @@ export const subscribeTranscripts = (onChange: () => void) => {
     listeners.delete(onChange);
   };
 };
+import { conversationFor, resetConversation } from "./conversationContext";

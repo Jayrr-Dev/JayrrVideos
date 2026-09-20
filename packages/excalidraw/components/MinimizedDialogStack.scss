@@ -1,21 +1,11 @@
 .excalidraw {
   .MinimizedDialogStack {
-    pointer-events: none;
-    position: fixed;
-    left: 50%;
-    bottom: 4.5rem;
-    z-index: var(--zIndex-toast);
-    display: none;
-    flex-direction: column-reverse;
+    pointer-events: auto;
+    display: flex;
+    flex-direction: row;
     align-items: center;
-    transform: translateX(-50%);
+    justify-content: center;
     gap: 0.5rem;
-  }
-
-  @media (min-width: 768px) {
-    .MinimizedDialogStack {
-      display: flex;
-    }
   }
 
   .MinimizedDialogStack__item {

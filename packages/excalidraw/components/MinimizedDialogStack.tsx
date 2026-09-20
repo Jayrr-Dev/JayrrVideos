@@ -7,7 +7,7 @@ import "./MinimizedDialogStack.scss";
 
 import type { MinimizedDialogEntry } from "./DialogMinimizeRegistry";
 
-const FAB_COLLAPSED_PX = 32;
+const FAB_COLLAPSED_PX = 36;
 const FAB_EXPANDED_BASE_PX = 88;
 const FAB_EXPANDED_EXTRA_PER_CHAR_PX = 5;
 const FAB_EXPANDED_MAX_PX = 176;

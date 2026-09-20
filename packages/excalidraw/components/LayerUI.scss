@@ -106,7 +106,17 @@
       }
     }
 
+    .layer-ui__wrapper__footer-center {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 0;
+      pointer-events: none;
+    }
+
     .layer-ui__wrapper__footer-left,
+    .layer-ui__wrapper__footer-center,
     .footer-center,
     .layer-ui__wrapper__footer-right {
       & > * {
