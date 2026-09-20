@@ -366,8 +366,12 @@
     grid-template-columns: repeat(8, minmax(0, 1fr));
   }
 
-  .jayrr-called-embed__bands--emotion {
+  .jayrr-called-embed__bands--hype {
     grid-template-columns: repeat(7, minmax(0, 1fr));
+  }
+
+  .jayrr-called-embed__bands--energy {
+    grid-template-columns: repeat(8, minmax(0, 1fr));
   }
 
   .jayrr-called-embed__bands .jayrr-called-embed__emo {
@@ -521,6 +525,311 @@
     border-color: #86efac;
   }
 
+  .jayrr-called-embed__fn {
+    letter-spacing: 0.03em;
+  }
+
+  .jayrr-called-embed__fn--se {
+    background: #ffedd5;
+    color: #9a3412;
+    border-color: #fdba74;
+  }
+
+  .jayrr-called-embed__fn--si {
+    background: #f5e6d3;
+    color: #7c4a1e;
+    border-color: #e0c3a0;
+  }
+
+  .jayrr-called-embed__fn--ne {
+    background: #ede9fe;
+    color: #5b21b6;
+    border-color: #c4b5fd;
+  }
+
+  .jayrr-called-embed__fn--ni {
+    background: #ddd6fe;
+    color: #4c1d95;
+    border-color: #a78bfa;
+  }
+
+  .jayrr-called-embed__fn--te {
+    background: #dbeafe;
+    color: #1e3a8a;
+    border-color: #93c5fd;
+  }
+
+  .jayrr-called-embed__fn--ti {
+    background: #e0f2fe;
+    color: #075985;
+    border-color: #7dd3fc;
+  }
+
+  .jayrr-called-embed__fn--fe {
+    background: #fce7f3;
+    color: #9d174d;
+    border-color: #f9a8d4;
+  }
+
+  .jayrr-called-embed__fn--fi {
+    background: #fbcfe8;
+    color: #831843;
+    border-color: #f472b6;
+  }
+
+  .jayrr-called-embed__ennea {
+    letter-spacing: 0.02em;
+  }
+
+  .jayrr-called-embed__ennea--1 {
+    background: #fee2e2;
+    color: #991b1b;
+    border-color: #fca5a5;
+  }
+
+  .jayrr-called-embed__ennea--2 {
+    background: #fce7f3;
+    color: #9d174d;
+    border-color: #f9a8d4;
+  }
+
+  .jayrr-called-embed__ennea--3 {
+    background: #fef3c7;
+    color: #92400e;
+    border-color: #fcd34d;
+  }
+
+  .jayrr-called-embed__ennea--4 {
+    background: #ede9fe;
+    color: #5b21b6;
+    border-color: #c4b5fd;
+  }
+
+  .jayrr-called-embed__ennea--5 {
+    background: #e0f2fe;
+    color: #075985;
+    border-color: #7dd3fc;
+  }
+
+  .jayrr-called-embed__ennea--6 {
+    background: #e2e8f0;
+    color: #334155;
+    border-color: #94a3b8;
+  }
+
+  .jayrr-called-embed__ennea--7 {
+    background: #fef9c3;
+    color: #854d0e;
+    border-color: #fde047;
+  }
+
+  .jayrr-called-embed__ennea--8 {
+    background: #fecaca;
+    color: #7f1d1d;
+    border-color: #f87171;
+  }
+
+  .jayrr-called-embed__ennea--9 {
+    background: #dcfce7;
+    color: #166534;
+    border-color: #86efac;
+  }
+
+  .jayrr-called-embed__hype {
+    min-width: 0;
+    padding: 0.12rem 0.18rem;
+    font-size: 0.58rem;
+    line-height: 1.15;
+    text-align: center;
+    border: 1px solid transparent;
+    border-radius: 0.35rem;
+    font-weight: 700;
+  }
+
+  .jayrr-called-embed__hype--dull {
+    background: #f4f4f5;
+    color: #71717a;
+    border-color: #d4d4d8;
+  }
+
+  .jayrr-called-embed__hype--boring {
+    background: #e4e4e7;
+    color: #52525b;
+    border-color: #a1a1aa;
+  }
+
+  .jayrr-called-embed__hype--mild {
+    background: #e0f2fe;
+    color: #0369a1;
+    border-color: #7dd3fc;
+  }
+
+  .jayrr-called-embed__hype--normal {
+    background: #dbeafe;
+    color: #1d4ed8;
+    border-color: #93c5fd;
+  }
+
+  .jayrr-called-embed__hype--interesting {
+    background: #fef3c7;
+    color: #b45309;
+    border-color: #fcd34d;
+  }
+
+  .jayrr-called-embed__hype--exciting {
+    background: #ffedd5;
+    color: #c2410c;
+    border-color: #fdba74;
+  }
+
+  .jayrr-called-embed__hype--hype {
+    background: #fee2e2;
+    color: #b91c1c;
+    border-color: #fca5a5;
+  }
+
+  .jayrr-called-embed__energy {
+    min-width: 0;
+    padding: 0.12rem 0.14rem;
+    font-size: 0.52rem;
+    line-height: 1.15;
+    text-align: center;
+    border: 1px solid transparent;
+    border-radius: 0.35rem;
+    font-weight: 700;
+  }
+
+  .jayrr-called-embed__energy--30,
+  .jayrr-called-embed__energy--50 {
+    background: #27272a;
+    color: #fafafa;
+    border-color: #52525b;
+  }
+
+  .jayrr-called-embed__energy--80,
+  .jayrr-called-embed__energy--100 {
+    background: #3f3f46;
+    color: #f4f4f5;
+    border-color: #71717a;
+  }
+
+  .jayrr-called-embed__energy--120,
+  .jayrr-called-embed__energy--160 {
+    background: #7f1d1d;
+    color: #fee2e2;
+    border-color: #f87171;
+  }
+
+  .jayrr-called-embed__energy--180,
+  .jayrr-called-embed__energy--190 {
+    background: #9a3412;
+    color: #ffedd5;
+    border-color: #fdba74;
+  }
+
+  .jayrr-called-embed__energy--200,
+  .jayrr-called-embed__energy--275 {
+    background: #e0f2fe;
+    color: #075985;
+    border-color: #7dd3fc;
+  }
+
+  .jayrr-called-embed__energy--320,
+  .jayrr-called-embed__energy--400 {
+    background: #dcfce7;
+    color: #166534;
+    border-color: #86efac;
+  }
+
+  .jayrr-called-embed__energy--450,
+  .jayrr-called-embed__energy--475 {
+    background: #dbeafe;
+    color: #1d4ed8;
+    border-color: #93c5fd;
+  }
+
+  .jayrr-called-embed__energy--505,
+  .jayrr-called-embed__energy--510 {
+    background: #fef3c7;
+    color: #b45309;
+    border-color: #fcd34d;
+  }
+
+  .jayrr-called-embed__energy--530,
+  .jayrr-called-embed__energy--540,
+  .jayrr-called-embed__energy--550 {
+    background: #fce7f3;
+    color: #9d174d;
+    border-color: #f9a8d4;
+  }
+
+  .jayrr-called-embed__energy--570,
+  .jayrr-called-embed__energy--600 {
+    background: #f5f3ff;
+    color: #6d28d9;
+    border-color: #c4b5fd;
+  }
+
+  .jayrr-called-embed__energy--700,
+  .jayrr-called-embed__energy--1000 {
+    background: #fffbeb;
+    color: #a16207;
+    border-color: #fde68a;
+  }
+
+  .jayrr-called-embed__online {
+    min-width: 0;
+    padding: 0.12rem 0.14rem;
+    font-size: 0.52rem;
+    line-height: 1.15;
+    text-align: center;
+    border: 1px solid transparent;
+    border-radius: 0.35rem;
+    font-weight: 700;
+  }
+
+  .jayrr-called-embed__online--troll {
+    background: #27272a;
+    color: #fafafa;
+    border-color: #52525b;
+  }
+
+  .jayrr-called-embed__online--toxic {
+    background: #7f1d1d;
+    color: #fee2e2;
+    border-color: #f87171;
+  }
+
+  .jayrr-called-embed__online--rude {
+    background: #9a3412;
+    color: #ffedd5;
+    border-color: #fdba74;
+  }
+
+  .jayrr-called-embed__online--normal {
+    background: #e4e4e7;
+    color: #3f3f46;
+    border-color: #a1a1aa;
+  }
+
+  .jayrr-called-embed__online--friendly {
+    background: #e0f2fe;
+    color: #075985;
+    border-color: #7dd3fc;
+  }
+
+  .jayrr-called-embed__online--helpful {
+    background: #dcfce7;
+    color: #166534;
+    border-color: #86efac;
+  }
+
+  .jayrr-called-embed__online--wholesome {
+    background: #fce7f3;
+    color: #9d174d;
+    border-color: #f9a8d4;
+  }
+
   .jayrr-called-embed__switch {
     position: relative;
     box-sizing: border-box;
@@ -622,9 +931,9 @@
   }
 
   .jayrr-called-embed__now--mbti {
-    flex-basis: 13.5rem;
-    width: 13.5rem;
-    min-width: 13.5rem;
+    flex-basis: 16.5rem;
+    width: 16.5rem;
+    min-width: 16.5rem;
   }
 
   .jayrr-called-embed__now-row {
@@ -641,9 +950,14 @@
     min-width: 0;
   }
 
-  .jayrr-called-embed__now-row .jayrr-called-embed__mbti {
+  .jayrr-called-embed__now-row .jayrr-called-embed__mbti,
+  .jayrr-called-embed__now-row .jayrr-called-embed__fn,
+  .jayrr-called-embed__now-row .jayrr-called-embed__ennea,
+  .jayrr-called-embed__now-row .jayrr-called-embed__hype,
+  .jayrr-called-embed__now-row .jayrr-called-embed__energy,
+  .jayrr-called-embed__now-row .jayrr-called-embed__online {
     flex: 0 0 auto;
-    font-size: 0.68rem;
+    font-size: 0.62rem;
   }
 
   .jayrr-called-embed__now-label {

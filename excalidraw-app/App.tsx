@@ -134,6 +134,10 @@ import {
 import { isBrowserStorageStateNewer } from "./data/tabSync";
 import { useSimulatedCollaborators } from "./debugCollaborators";
 import {
+  JayrrEditorPreviewEmbed,
+  isJayrrEditorPreviewLink,
+} from "./domain/editor";
+import {
   JayrrCalledObjectEmbed,
   collectSceneFileIds,
   isJayrrCalledObjectLink,
@@ -190,7 +194,7 @@ const DIRECT_VIDEO_LINK = /^https?:\/\/\S+\.(?:mp4|webm|ogg)(?:\?.*)?$/i;
 
 /** Any http(s) link except this app. Paste turns it into an embed. */
 const canEmbedPastedLink = (link: string): boolean => {
-  if (isJayrrCalledObjectLink(link)) {
+  if (isJayrrCalledObjectLink(link) || isJayrrEditorPreviewLink(link)) {
     return true;
   }
   let url: URL;
@@ -843,6 +847,9 @@ const ExcalidrawWrapper = () => {
         return (
           <JayrrCalledObjectEmbed kind={calledKind} elementId={element.id} />
         );
+      }
+      if (isJayrrEditorPreviewLink(element.link)) {
+        return <JayrrEditorPreviewEmbed elementId={element.id} />;
       }
       if (element.link && DIRECT_VIDEO_LINK.test(element.link)) {
         return (

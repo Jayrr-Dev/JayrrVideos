@@ -16,6 +16,72 @@
     }
   }
 
+  .jayrr-editor-panel__settings {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--icon-fill-color);
+    cursor: pointer;
+    border-radius: var(--border-radius-md);
+    flex-shrink: 0;
+  }
+
+  .jayrr-editor-panel__settings:hover {
+    color: var(--color-primary);
+    background: var(--color-surface-mid);
+  }
+
+  .jayrr-editor-panel__settings svg {
+    width: 1.125rem;
+    height: 1.125rem;
+  }
+
+  .jayrr-editor-panel__settings[aria-expanded="true"] {
+    color: var(--color-primary);
+    background: var(--color-surface-mid);
+  }
+
+  .jayrr-editor-panel__settings-popover {
+    z-index: var(--zIndex-popup);
+    outline: none;
+  }
+
+  .jayrr-editor-panel__settings-head {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    margin: 0 0 0.65rem;
+  }
+
+  .jayrr-editor-panel__settings-title {
+    margin: 0;
+    font-size: 0.9rem;
+    font-weight: 600;
+  }
+
+  .jayrr-editor-panel__settings-info {
+    display: inline-flex;
+    color: var(--icon-fill-color);
+    cursor: help;
+
+    svg {
+      width: 0.95rem;
+      height: 0.95rem;
+    }
+  }
+
+  .jayrr-editor-panel__settings-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
   .jayrr-editor-panel__body {
     display: flex;
     flex-direction: column;
@@ -61,9 +127,105 @@
     background: var(--color-surface-mid);
   }
 
-  .jayrr-editor-panel__empty {
-    margin: 0.5rem 0 0;
-    font-size: 0.85rem;
+  .jayrr-editor-panel__timeline-wrap {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+  }
+
+  .jayrr-editor-menu {
+    z-index: var(--zIndex-popup);
+    display: flex;
+    flex-direction: column;
+    gap: 0.12rem;
+    min-width: 11rem;
+    max-width: 18rem;
+    max-height: min(22rem, 70vh);
+    overflow: auto;
+    padding: 0.3rem;
+    background: var(--popup-bg-color);
+    border-radius: var(--border-radius-lg);
+    box-shadow: var(--shadow-island);
+  }
+
+  .jayrr-editor-menu--sub {
+    min-width: 14rem;
+  }
+
+  .jayrr-editor-menu__item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    margin: 0;
+    padding: 0.32rem 0.45rem;
+    border: none;
+    border-radius: var(--border-radius-md);
+    background: transparent;
+    color: var(--text-primary-color);
+    font-size: 0.8rem;
+    text-align: left;
+    cursor: pointer;
+    outline: none;
+    user-select: none;
+
+    &[data-highlighted],
+    &:hover {
+      background: var(--button-hover-bg);
+    }
+
+    &[data-disabled] {
+      opacity: 0.45;
+      cursor: default;
+      pointer-events: none;
+    }
+
+    &[data-state="open"] {
+      background: var(--button-hover-bg);
+    }
+  }
+
+  .jayrr-editor-menu__item--danger[data-highlighted],
+  .jayrr-editor-menu__item--danger:hover {
+    color: var(--color-danger);
+  }
+
+  .jayrr-editor-menu__item--recording {
+    align-items: center;
+  }
+
+  .jayrr-editor-menu__thumb {
+    width: 2.75rem;
+    height: 1.55rem;
+    object-fit: cover;
+    border-radius: 0.25rem;
+    background: #1e293b;
+    flex-shrink: 0;
+  }
+
+  .jayrr-editor-menu__thumb--empty {
+    display: inline-block;
+  }
+
+  .jayrr-editor-menu__meta {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    gap: 0.05rem;
+  }
+
+  .jayrr-editor-menu__name {
+    font-size: 0.78rem;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .jayrr-editor-menu__clock {
+    font-size: 0.68rem;
+    font-variant-numeric: tabular-nums;
     color: var(--color-gray-60);
   }
 
@@ -80,7 +242,7 @@
 
   .jayrr-editor-timeline__head {
     display: grid;
-    grid-template-columns: 2.75rem 1fr 3.25rem;
+    grid-template-columns: 2.75rem 1fr;
     gap: 0;
     border-bottom: 1px solid var(--default-border-color);
     background: var(--color-surface-mid);
@@ -102,11 +264,25 @@
 
   .jayrr-editor-timeline__body {
     flex: 1;
-    min-height: 12rem;
+    min-height: 10rem;
     overflow: auto;
     position: relative;
     cursor: ns-resize;
     outline: none;
+  }
+
+  .jayrr-editor-timeline__empty {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    z-index: 4;
+
+    > * {
+      pointer-events: auto;
+    }
   }
 
   .jayrr-editor-timeline__body:focus-visible {
@@ -118,6 +294,10 @@
     display: grid;
     grid-template-columns: 2.75rem 1fr 3.25rem;
     min-width: 100%;
+  }
+
+  .jayrr-editor-timeline__tracks--video {
+    grid-template-columns: 2.75rem 1fr;
   }
 
   .jayrr-editor-timeline__ruler {
@@ -142,8 +322,12 @@
     border-right: 1px solid var(--default-border-color);
   }
 
-  .jayrr-editor-timeline__lane--audio {
+  .jayrr-editor-timeline__lane--sequence {
+    display: flex;
+    flex-direction: column;
     border-right: none;
+    padding: 0 0.2rem;
+    box-sizing: border-box;
   }
 
   .jayrr-editor-timeline__playhead {
@@ -170,100 +354,95 @@
   }
 
   .jayrr-editor-clip {
-    position: absolute;
-    left: 0.2rem;
-    right: 0.2rem;
+    position: relative;
     display: flex;
     align-items: flex-start;
+    width: 100%;
     margin: 0;
-    padding: 0.2rem 0.35rem;
+    padding: 0;
     border: 1px solid transparent;
     border-radius: var(--border-radius-md);
     text-align: left;
-    cursor: pointer;
+    cursor: grab;
     overflow: hidden;
     z-index: 1;
+    flex-shrink: 0;
+    touch-action: none;
   }
 
-  .jayrr-editor-clip:disabled {
-    cursor: default;
-    opacity: 0.7;
+  .jayrr-editor-clip:active {
+    cursor: grabbing;
+  }
+
+  .jayrr-editor-clip.is-dragging {
+    z-index: 4;
+    opacity: 0.92;
+    box-shadow: 0 4px 14px rgb(0 0 0 / 22%);
+  }
+
+  .jayrr-editor-clip__filmstrip {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    grid-template-rows: repeat(var(--jayrr-editor-slice-count, 1), 1fr);
+    pointer-events: none;
+    background: #0f172a;
+  }
+
+  .jayrr-editor-clip__cell {
+    min-height: 0;
+    overflow: hidden;
+    box-shadow: inset 0 -1px 0 rgb(255 255 255 / 14%);
+  }
+
+  .jayrr-editor-clip__cell:last-child {
+    box-shadow: none;
+  }
+
+  .jayrr-editor-clip__slice {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+    border: 0;
   }
 
   .jayrr-editor-clip__label {
+    position: relative;
+    z-index: 1;
+    margin: 0.15rem 0.3rem;
+    padding: 0.05rem 0.25rem;
+    border-radius: 0.2rem;
     font-size: 0.65rem;
     line-height: 1.2;
     font-weight: 600;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    max-width: 100%;
+    max-width: calc(100% - 0.6rem);
+    pointer-events: none;
+    color: #f8fafc;
+    background: rgb(15 23 42 / 62%);
+    text-shadow: 0 1px 1px rgb(0 0 0 / 55%);
   }
 
-  .jayrr-editor-clip--showFrame {
-    background: #dbeafe;
-    border-color: #93c5fd;
-    color: #1e3a8a;
+  .jayrr-editor-clip--recording {
+    background: #1e3a5f;
+    border-color: #3b82f6;
+    color: #e2e8f0;
   }
 
-  .jayrr-editor-clip--reveal {
-    background: #e0e7ff;
-    border-color: #a5b4fc;
-    color: #312e81;
-  }
-
-  .jayrr-editor-clip--move {
-    background: #fce7f3;
-    border-color: #f9a8d4;
-    color: #9d174d;
-  }
-
-  .jayrr-editor-clip--flushExits {
-    background: #f3f4f6;
-    border-color: #d1d5db;
-    color: #374151;
-  }
-
-  .jayrr-editor-clip--sound {
-    background: #d1fae5;
-    border-color: #6ee7b7;
-    color: #065f46;
-  }
-
-  .jayrr-editor-clip.is-active {
+  .jayrr-editor-clip.is-selected {
     box-shadow: 0 0 0 2px var(--color-primary);
     z-index: 2;
   }
 
-  .theme--dark {
-    .jayrr-editor-clip--showFrame {
-      background: #1e3a5f;
-      border-color: #3b82f6;
-      color: #bfdbfe;
-    }
+  .jayrr-editor-clip.is-playhead:not(.is-selected) {
+    box-shadow: inset 0 0 0 1px rgb(147 197 253 / 70%);
+  }
 
-    .jayrr-editor-clip--reveal {
-      background: #2e2a5a;
-      border-color: #818cf8;
-      color: #c7d2fe;
-    }
-
-    .jayrr-editor-clip--move {
-      background: #4a1d36;
-      border-color: #ec4899;
-      color: #fbcfe8;
-    }
-
-    .jayrr-editor-clip--flushExits {
-      background: #374151;
-      border-color: #6b7280;
-      color: #e5e7eb;
-    }
-
-    .jayrr-editor-clip--sound {
-      background: #064e3b;
-      border-color: #34d399;
-      color: #a7f3d0;
-    }
+  .jayrr-editor-clip.is-selected.is-dragging {
+    z-index: 4;
   }
 }

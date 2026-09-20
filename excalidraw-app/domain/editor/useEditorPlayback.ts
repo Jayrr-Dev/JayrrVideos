@@ -1,21 +1,19 @@
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type RefObject,
-} from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { clipAtTime, type EditorTimeline } from "./buildEditorTimeline";
+import { findEditorTargetVideo } from "./editorPreviewModel";
 
 type UseEditorPlaybackOpts = {
   timeline: EditorTimeline;
-  videoRef: RefObject<HTMLVideoElement | null>;
+  /** Linked canvas element that hosts the video. */
+  previewElementId: string | null;
+  ownerDocument: Document;
 };
 
 export const useEditorPlayback = ({
   timeline,
-  videoRef,
+  previewElementId,
+  ownerDocument,
 }: UseEditorPlaybackOpts) => {
   const [currentTimeMs, setCurrentTimeMs] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -25,6 +23,18 @@ export const useEditorPlayback = ({
   const rafRef = useRef(0);
   const timelineRef = useRef(timeline);
   timelineRef.current = timeline;
+  const previewIdRef = useRef(previewElementId);
+  previewIdRef.current = previewElementId;
+  const docRef = useRef(ownerDocument);
+  docRef.current = ownerDocument;
+
+  const resolveVideo = useCallback((): HTMLVideoElement | null => {
+    const id = previewIdRef.current;
+    if (!id) {
+      return null;
+    }
+    return findEditorTargetVideo(id, docRef.current);
+  }, []);
 
   const stopRaf = useCallback(() => {
     if (rafRef.current) {
@@ -35,15 +45,24 @@ export const useEditorPlayback = ({
 
   const applyClipToVideo = useCallback(
     async (timeMs: number, shouldPlay: boolean) => {
-      const video = videoRef.current;
+      const video = resolveVideo();
       const clip = clipAtTime(timelineRef.current.sequence, timeMs);
       if (!video || !clip) {
+        if (shouldPlay && !video) {
+          playingRef.current = false;
+          setPlaying(false);
+        }
         return;
       }
-      const offsetSec = Math.max(0, (timeMs - clip.startMs) / 1000);
-      const switched = clipIdRef.current !== clip.id;
-      if (switched) {
-        clipIdRef.current = clip.id;
+      const sourceOffsetMs = clip.sourceOffsetMs ?? 0;
+      const offsetSec = Math.max(
+        0,
+        (sourceOffsetMs + (timeMs - clip.startMs)) / 1000,
+      );
+      const needsSrc =
+        clipIdRef.current !== clip.id || video.getAttribute("src") !== clip.url;
+      clipIdRef.current = clip.id;
+      if (needsSrc) {
         video.src = clip.url;
         video.load();
         await new Promise<void>((resolve) => {
@@ -77,16 +96,17 @@ export const useEditorPlayback = ({
         video.pause();
       }
     },
-    [videoRef],
+    [resolveVideo],
   );
 
   const syncFromVideo = useCallback(() => {
-    const video = videoRef.current;
+    const video = resolveVideo();
     const clip = clipAtTime(timelineRef.current.sequence, timeRef.current);
     if (!video || !clip || clipIdRef.current !== clip.id) {
       return;
     }
-    const withinMs = Math.max(0, video.currentTime * 1000);
+    const sourceOffsetMs = clip.sourceOffsetMs ?? 0;
+    const withinMs = Math.max(0, video.currentTime * 1000 - sourceOffsetMs);
     const projectMs = Math.min(
       clip.startMs + clip.durationMs,
       clip.startMs + withinMs,
@@ -111,7 +131,7 @@ export const useEditorPlayback = ({
         stopRaf();
       }
     }
-  }, [applyClipToVideo, stopRaf, videoRef]);
+  }, [applyClipToVideo, resolveVideo, stopRaf]);
 
   const tick = useCallback(() => {
     if (!playingRef.current) {
@@ -136,24 +156,23 @@ export const useEditorPlayback = ({
     playingRef.current = false;
     setPlaying(false);
     stopRaf();
-    videoRef.current?.pause();
-  }, [stopRaf, videoRef]);
+    resolveVideo()?.pause();
+  }, [resolveVideo, stopRaf]);
 
   const stop = useCallback(() => {
     pause();
     timeRef.current = 0;
     setCurrentTimeMs(0);
     clipIdRef.current = null;
-    const video = videoRef.current;
+    const video = resolveVideo();
     if (video) {
       video.pause();
-      video.removeAttribute("src");
-      video.load();
+      // Keep src on dedicated preview; clear only if we own the element via registry.
     }
-  }, [pause, videoRef]);
+  }, [pause, resolveVideo]);
 
   const play = useCallback(() => {
-    if (timelineRef.current.sequence.length === 0) {
+    if (timelineRef.current.sequence.length === 0 || !previewIdRef.current) {
       return;
     }
     if (timeRef.current >= timelineRef.current.totalMs) {
@@ -190,12 +209,20 @@ export const useEditorPlayback = ({
   }, [pause, timeline.sequence.length, timeline.totalMs]);
 
   useEffect(() => {
-    const video = videoRef.current;
+    clipIdRef.current = null;
+    if (playingRef.current && previewElementId) {
+      void applyClipToVideo(timeRef.current, true);
+    } else {
+      pause();
+    }
+  }, [applyClipToVideo, pause, previewElementId]);
+
+  useEffect(() => {
     return () => {
       stopRaf();
-      video?.pause();
+      resolveVideo()?.pause();
     };
-  }, [stopRaf, videoRef]);
+  }, [resolveVideo, stopRaf]);
 
   return {
     currentTimeMs,

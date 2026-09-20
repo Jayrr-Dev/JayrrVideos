@@ -1,0 +1,32 @@
+.excalidraw {
+  .jayrr-editor-preview-embed {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    background: #0f172a;
+    overflow: hidden;
+  }
+
+  .jayrr-editor-preview-embed__video {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    background: #0f172a;
+  }
+
+  .jayrr-editor-preview-embed__label {
+    position: absolute;
+    top: 0.4rem;
+    left: 0.4rem;
+    padding: 0.15rem 0.4rem;
+    border-radius: 0.25rem;
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: #e2e8f0;
+    background: rgb(15 23 42 / 72%);
+    pointer-events: none;
+  }
+}

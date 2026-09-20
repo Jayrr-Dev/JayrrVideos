@@ -1,4 +1,4 @@
-import type { CameraCutout } from "../domain/flags";
+import type { CameraCutout } from "../domain/flags/cameraCutoutFlag";
 
 const cutouts = new Map<string, HTMLCanvasElement>();
 
@@ -20,13 +20,16 @@ const MEDIAPIPE_WASM =
   "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.32/wasm";
 const MEDIAPIPE_MODEL =
   "https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/latest/selfie_segmenter.tflite";
+
 type StopCutout = () => void;
 
 const waitVideo = (video: HTMLVideoElement) =>
   new Promise<void>((resolve) => {
-    if (video.readyState >= 2 && video.videoWidth > 1) {
-      resolve();
-      return;
+    if (video.readyState >= 2) {
+      if (video.videoWidth > 1) {
+        resolve();
+        return;
+      }
     }
     const onReady = () => {
       video.removeEventListener("loadeddata", onReady);
@@ -74,9 +77,145 @@ const punchChroma = (
       pixels[i + 3] = 0;
     } else if (greenLead > 40 && g > 110) {
       pixels[i + 3] = Math.min(pixels[i + 3] ?? 0, 90);
+      pixels[i + 1] = Math.min(g, Math.max(r, b));
     }
   }
   context.putImageData(frame, 0, 0);
+};
+
+const CHROMA_VERT = `#version 300 es
+in vec2 a_pos;
+out vec2 v_uv;
+void main() {
+  v_uv = vec2(a_pos.x * 0.5 + 0.5, 1.0 - (a_pos.y * 0.5 + 0.5));
+  gl_Position = vec4(a_pos, 0.0, 1.0);
+}`;
+
+const CHROMA_FRAG = `#version 300 es
+precision highp float;
+uniform sampler2D u_image;
+in vec2 v_uv;
+out vec4 outColor;
+void main() {
+  vec4 c = texture(u_image, v_uv);
+  float key = c.g - max(c.r, c.b);
+  float alpha = 1.0 - smoothstep(0.12, 0.42, key);
+  float spill = clamp(key * 2.4, 0.0, 1.0);
+  vec3 rgb = vec3(c.r, mix(c.g, (c.r + c.b) * 0.5, spill), c.b);
+  outColor = vec4(rgb * alpha, alpha);
+}`;
+
+const compileShader = (
+  gl: WebGL2RenderingContext,
+  type: number,
+  source: string,
+) => {
+  const shader = gl.createShader(type);
+  if (!shader) {
+    return null;
+  }
+  gl.shaderSource(shader, source);
+  gl.compileShader(shader);
+  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+    gl.deleteShader(shader);
+    return null;
+  }
+  return shader;
+};
+
+type ChromaKey = {
+  canvas: HTMLCanvasElement;
+  apply: (source: TexImageSource, width: number, height: number) => boolean;
+  destroy: () => void;
+};
+
+const createChromaKey = (): ChromaKey | null => {
+  const canvas = document.createElement("canvas");
+  const gl = canvas.getContext("webgl2", {
+    alpha: true,
+    antialias: false,
+    depth: false,
+    stencil: false,
+    premultipliedAlpha: true,
+    preserveDrawingBuffer: true,
+  });
+  if (!gl) {
+    return null;
+  }
+  const vert = compileShader(gl, gl.VERTEX_SHADER, CHROMA_VERT);
+  const frag = compileShader(gl, gl.FRAGMENT_SHADER, CHROMA_FRAG);
+  if (!vert || !frag) {
+    return null;
+  }
+  const program = gl.createProgram();
+  if (!program) {
+    return null;
+  }
+  gl.attachShader(program, vert);
+  gl.attachShader(program, frag);
+  gl.linkProgram(program);
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    return null;
+  }
+  const buffer = gl.createBuffer();
+  const texture = gl.createTexture();
+  if (!buffer || !texture) {
+    return null;
+  }
+  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+  gl.bufferData(
+    gl.ARRAY_BUFFER,
+    new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
+    gl.STATIC_DRAW,
+  );
+  const loc = gl.getAttribLocation(program, "a_pos");
+  gl.enableVertexAttribArray(loc);
+  gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+  gl.useProgram(program);
+  gl.uniform1i(gl.getUniformLocation(program, "u_image"), 0);
+  gl.bindTexture(gl.TEXTURE_2D, texture);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+  gl.clearColor(0, 0, 0, 0);
+  gl.disable(gl.DEPTH_TEST);
+  gl.disable(gl.BLEND);
+
+  return {
+    canvas,
+    apply: (source, width, height) => {
+      if (canvas.width !== width || canvas.height !== height) {
+        canvas.width = width;
+        canvas.height = height;
+      }
+      gl.viewport(0, 0, width, height);
+      gl.useProgram(program);
+      gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+      gl.enableVertexAttribArray(loc);
+      gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      gl.texImage2D(
+        gl.TEXTURE_2D,
+        0,
+        gl.RGBA,
+        gl.RGBA,
+        gl.UNSIGNED_BYTE,
+        source,
+      );
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      return true;
+    },
+    destroy: () => {
+      gl.deleteTexture(texture);
+      gl.deleteBuffer(buffer);
+      gl.deleteProgram(program);
+      gl.deleteShader(vert);
+      gl.deleteShader(frag);
+    },
+  };
 };
 
 const loopVideo = (
@@ -107,6 +246,7 @@ const loopVideo = (
 };
 
 const startMediaPipe = async (
+  elementId: string,
   video: HTMLVideoElement,
   canvas: HTMLCanvasElement,
   cancelled: () => boolean,
@@ -115,7 +255,9 @@ const startMediaPipe = async (
   if (cancelled()) {
     return () => undefined;
   }
-  const fileset = await visionMod.FilesetResolver.forVisionTasks(MEDIAPIPE_WASM);
+  const fileset = await visionMod.FilesetResolver.forVisionTasks(
+    MEDIAPIPE_WASM,
+  );
   let segmenter: Awaited<
     ReturnType<typeof visionMod.ImageSegmenter.createFromOptions>
   >;
@@ -152,6 +294,7 @@ const startMediaPipe = async (
   }
 
   let lastTs = -1;
+  let published = false;
   const stopLoop = loopVideo(video, cancelled, () => {
     const width = video.videoWidth;
     const height = video.videoHeight;
@@ -176,7 +319,11 @@ const startMediaPipe = async (
         context.clearRect(0, 0, width, height);
         context.drawImage(video, 0, 0, width, height);
         applyPersonMask(context, width, height, mask);
-        mask.close();
+        result.close();
+        if (!published) {
+          published = true;
+          setJayrrCameraCutout(elementId, canvas);
+        }
       });
     } catch {
       // Keep the last good frame if a tick fails.
@@ -190,18 +337,11 @@ const startMediaPipe = async (
 };
 
 const startSegmo = async (
+  elementId: string,
   video: HTMLVideoElement,
   canvas: HTMLCanvasElement,
   cancelled: () => boolean,
 ): Promise<StopCutout> => {
-  const stream = video.srcObject;
-  if (!(stream instanceof MediaStream)) {
-    return () => undefined;
-  }
-  const track = stream.getVideoTracks()[0];
-  if (!track) {
-    return () => undefined;
-  }
   const { SegmentationProcessor } = await import("segmo");
   if (cancelled()) {
     return () => undefined;
@@ -210,49 +350,65 @@ const startSegmo = async (
   if (!caps.supported) {
     return () => undefined;
   }
+  const width = video.videoWidth || 640;
+  const height = video.videoHeight || 360;
   const processor = new SegmentationProcessor({
     backgroundMode: "color",
     backgroundColor: "#00FF00",
     quality: "high",
-    adaptive: false,
+    adaptive: true,
     useWorker: true,
     outputFps: 30,
   });
-  const processedTrack = await processor.createProcessedTrack(track);
+  await processor.init(width, height);
   if (cancelled()) {
-    processedTrack.stop();
     processor.destroy();
     return () => undefined;
   }
-  const processedVideo = document.createElement("video");
-  processedVideo.muted = true;
-  processedVideo.playsInline = true;
-  processedVideo.autoplay = true;
-  processedVideo.srcObject = new MediaStream([processedTrack]);
-  await processedVideo.play().catch(() => undefined);
+  const chroma = createChromaKey();
   const context = canvas.getContext("2d", { willReadFrequently: true });
-  if (!context) {
-    processedTrack.stop();
+  if (!chroma && !context) {
     processor.destroy();
     return () => undefined;
   }
-  const stopLoop = loopVideo(processedVideo, cancelled, () => {
-    const width = processedVideo.videoWidth || video.videoWidth;
-    const height = processedVideo.videoHeight || video.videoHeight;
-    if (width < 2 || height < 2) {
+
+  let published = false;
+  const publish = (target: HTMLCanvasElement) => {
+    if (published) {
       return;
     }
-    if (canvas.width !== width || canvas.height !== height) {
-      canvas.width = width;
-      canvas.height = height;
+    published = true;
+    setJayrrCameraCutout(elementId, target);
+  };
+
+  const stopLoop = loopVideo(video, cancelled, () => {
+    if (video.videoWidth < 2 || video.videoHeight < 2) {
+      return;
     }
-    context.drawImage(processedVideo, 0, 0, width, height);
-    punchChroma(context, width, height);
+    const output = processor.processFrame(video, performance.now());
+    if (!output) {
+      return;
+    }
+    if (chroma) {
+      chroma.apply(output, output.width, output.height);
+      publish(chroma.canvas);
+      return;
+    }
+    if (!context) {
+      return;
+    }
+    if (canvas.width !== output.width || canvas.height !== output.height) {
+      canvas.width = output.width;
+      canvas.height = output.height;
+    }
+    context.clearRect(0, 0, output.width, output.height);
+    context.drawImage(output, 0, 0, output.width, output.height);
+    punchChroma(context, output.width, output.height);
+    publish(canvas);
   });
   return () => {
     stopLoop();
-    processedVideo.srcObject = null;
-    processedTrack.stop();
+    chroma?.destroy();
     processor.destroy();
   };
 };
@@ -269,16 +425,15 @@ export const startJayrrCameraCutout = (
   }
   let cancelled = false;
   let stopEngine: StopCutout = () => undefined;
-  setJayrrCameraCutout(elementId, canvas);
   void waitVideo(video)
     .then(() => {
       if (cancelled) {
         return;
       }
       if (engine === "mediapipe") {
-        return startMediaPipe(video, canvas, () => cancelled);
+        return startMediaPipe(elementId, video, canvas, () => cancelled);
       }
-      return startSegmo(video, canvas, () => cancelled);
+      return startSegmo(elementId, video, canvas, () => cancelled);
     })
     .then((stop) => {
       if (!stop) {
@@ -298,4 +453,3 @@ export const startJayrrCameraCutout = (
     setJayrrCameraCutout(elementId, null);
   };
 };
-

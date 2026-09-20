@@ -52,6 +52,27 @@ import {
   type EmotionPick,
 } from "./jevEmotionScale";
 import {
+  ENERGY_BANDS,
+  ENERGY_QUESTION,
+  averageEnergy,
+  energyFromAnswers,
+  type EnergyResult,
+} from "./jevEnergyScale";
+import {
+  ENNEA_BANDS,
+  ENNEA_QUESTION,
+  averageEnnea,
+  enneaFromAnswers,
+  type EnneaResult,
+} from "./jevEnneagramScale";
+import {
+  HYPE_BANDS,
+  HYPE_QUESTION,
+  averageHype,
+  hypeFromAnswers,
+  type HypeResult,
+} from "./jevHypeScale";
+import {
   IQ_BANDS,
   IQ_QUESTIONS,
   buildIqState,
@@ -62,12 +83,27 @@ import {
   type IqShade,
 } from "./jevIqScale";
 import {
+  COG_BANDS,
+  COG_QUESTION,
+  advanceFromAnswers,
+  advanceStackLabel,
+  averageAdvance,
+  type MbtiAdvanceResult,
+} from "./jevMbtiAdvanceScale";
+import {
   MBTI_BANDS,
   MBTI_QUESTIONS,
   averageMbti,
   mbtiFromAnswers,
   type MbtiResult,
 } from "./jevMbtiScale";
+import {
+  ONLINE_BANDS,
+  ONLINE_QUESTION,
+  averageOnline,
+  onlineFromAnswers,
+  type OnlineResult,
+} from "./jevOnlineScale";
 import {
   EMBED_PREFIX,
   MIC_SOURCE,
@@ -101,16 +137,33 @@ type TurnIq = {
   result: IqResult | null;
   emotion: EmotionPick[];
   mbti: MbtiResult | null;
+  advance: MbtiAdvanceResult | null;
+  ennea: EnneaResult | null;
+  hype: HypeResult | null;
+  energy: EnergyResult | null;
+  online: OnlineResult | null;
 };
 
 const jevScoringOn = (config: TranscribeConfig) =>
-  config.jevIq || config.jevMbti || config.jevEmotion;
+  config.jevIq ||
+  config.jevMbti ||
+  config.jevMbtiAdvance ||
+  config.jevEnneagram ||
+  config.jevHype ||
+  config.jevEnergy ||
+  config.jevOnline ||
+  config.jevEmotion;
 
 const questionsForConfig = (config: TranscribeConfig) => {
   const questions: Array<
     | typeof IQ_QUESTIONS[number]
     | typeof EMOTION_QUESTION
     | typeof MBTI_QUESTIONS[number]
+    | typeof COG_QUESTION
+    | typeof ENNEA_QUESTION
+    | typeof HYPE_QUESTION
+    | typeof ENERGY_QUESTION
+    | typeof ONLINE_QUESTION
   > = [];
   if (config.jevIq) {
     questions.push(...IQ_QUESTIONS);
@@ -120,6 +173,21 @@ const questionsForConfig = (config: TranscribeConfig) => {
   }
   if (config.jevMbti) {
     questions.push(...MBTI_QUESTIONS);
+  }
+  if (config.jevMbtiAdvance) {
+    questions.push(COG_QUESTION);
+  }
+  if (config.jevEnneagram) {
+    questions.push(ENNEA_QUESTION);
+  }
+  if (config.jevHype) {
+    questions.push(HYPE_QUESTION);
+  }
+  if (config.jevEnergy) {
+    questions.push(ENERGY_QUESTION);
+  }
+  if (config.jevOnline) {
+    questions.push(ONLINE_QUESTION);
   }
   return questions;
 };
@@ -347,6 +415,68 @@ const MbtiBadge = ({ mbti }: { mbti: MbtiResult }) => (
     {mbti.type}
   </span>
 );
+
+const AdvanceBadge = ({ advance }: { advance: MbtiAdvanceResult }) => (
+  <span
+    className={`jayrr-called-embed__iq jayrr-called-embed__fn jayrr-called-embed__fn--${advance.dominant.toLowerCase()}`}
+    title={`${advance.type} · ${advance.stack.join(" ")}`}
+  >
+    {advanceStackLabel(advance)}
+  </span>
+);
+
+const EnneaBadge = ({ ennea }: { ennea: EnneaResult }) => (
+  <span
+    className={`jayrr-called-embed__iq jayrr-called-embed__ennea jayrr-called-embed__ennea--${ennea.id}`}
+    title={`Type ${ennea.id} · The ${ennea.name}`}
+  >
+    {ennea.label}
+  </span>
+);
+
+const HypeBadge = ({ hype }: { hype: HypeResult }) => {
+  const band = HYPE_BANDS.find((row) => row.id === hype.id);
+  return (
+    <span
+      className={`jayrr-called-embed__iq jayrr-called-embed__hype jayrr-called-embed__hype--${hype.id}`}
+      title={band ? `${band.label}. ${band.what}` : hype.label}
+    >
+      {hype.label}
+    </span>
+  );
+};
+
+const EnergyBadge = ({ energy }: { energy: EnergyResult }) => {
+  const band = ENERGY_BANDS.find((row) => row.id === energy.id);
+  return (
+    <span
+      className={`jayrr-called-embed__iq jayrr-called-embed__energy jayrr-called-embed__energy--${energy.zone} jayrr-called-embed__energy--${energy.id}`}
+      title={
+        band
+          ? `${band.level} ${band.name}. ${band.what}`
+          : `${energy.label} ${energy.name}`
+      }
+    >
+      {energy.label}
+    </span>
+  );
+};
+
+const OnlineBadge = ({ online }: { online: OnlineResult }) => {
+  const band = ONLINE_BANDS.find((row) => row.id === online.id);
+  return (
+    <span
+      className={`jayrr-called-embed__iq jayrr-called-embed__online jayrr-called-embed__online--${online.id}`}
+      title={
+        band
+          ? `${band.label}. ${band.what} Example: ${band.example}`
+          : online.label
+      }
+    >
+      {online.label}
+    </span>
+  );
+};
 
 export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
   const editor = useExcalidrawAPI();
@@ -614,7 +744,16 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
     const scoring = configRef.current;
     const questions = questionsForConfig(scoring);
     if (questions.length === 0) {
-      return { result: null, emotion: [], mbti: null };
+      return {
+        result: null,
+        emotion: [],
+        mbti: null,
+        advance: null,
+        ennea: null,
+        hype: null,
+        energy: null,
+        online: null,
+      };
     }
     const result = await convexClient.action(api.canvasAi.jev.ask, {
       state: buildIqState(job.text, job.previousTurn),
@@ -624,6 +763,13 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
       result: scoring.jevIq ? compositeFromAnswers(result.answers) : null,
       emotion: scoring.jevEmotion ? emotionsFromAnswers(result.answers) : [],
       mbti: scoring.jevMbti ? mbtiFromAnswers(result.answers) : null,
+      advance: scoring.jevMbtiAdvance
+        ? advanceFromAnswers(result.answers)
+        : null,
+      ennea: scoring.jevEnneagram ? enneaFromAnswers(result.answers) : null,
+      hype: scoring.jevHype ? hypeFromAnswers(result.answers) : null,
+      energy: scoring.jevEnergy ? energyFromAnswers(result.answers) : null,
+      online: scoring.jevOnline ? onlineFromAnswers(result.answers) : null,
     };
   }, []);
 
@@ -654,6 +800,11 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
             result: scored.result,
             emotion: scored.emotion,
             mbti: scored.mbti,
+            advance: scored.advance,
+            ennea: scored.ennea,
+            hype: scored.hype,
+            energy: scored.energy,
+            online: scored.online,
           };
           if (job.turnId === LIVE_TURN_ID) {
             setLive(row);
@@ -793,6 +944,186 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
     const map = new Map<number, MbtiResult>();
     for (const [speaker, rows] of groups) {
       const average = averageMbti(rows);
+      if (average) {
+        map.set(speaker, average);
+      }
+    }
+    return map;
+  }, [live, scores]);
+
+  const advanceByTurn = useMemo(() => {
+    const map = new Map<string, MbtiAdvanceResult>();
+    for (const row of scores) {
+      if (row.advance) {
+        map.set(row.turnId, row.advance);
+      }
+    }
+    return map;
+  }, [scores]);
+
+  const advanceBySpeaker = useMemo(() => {
+    const groups = new Map<number, MbtiAdvanceResult[]>();
+    const add = (speaker: number | null, advance: MbtiAdvanceResult | null) => {
+      if (speaker === null || !advance) {
+        return;
+      }
+      const list = groups.get(speaker) ?? [];
+      list.push(advance);
+      groups.set(speaker, list);
+    };
+    for (const row of scores) {
+      add(row.speaker, row.advance);
+    }
+    if (live) {
+      add(live.speaker, live.advance);
+    }
+    const map = new Map<number, MbtiAdvanceResult>();
+    for (const [speaker, rows] of groups) {
+      const average = averageAdvance(rows);
+      if (average) {
+        map.set(speaker, average);
+      }
+    }
+    return map;
+  }, [live, scores]);
+
+  const enneaByTurn = useMemo(() => {
+    const map = new Map<string, EnneaResult>();
+    for (const row of scores) {
+      if (row.ennea) {
+        map.set(row.turnId, row.ennea);
+      }
+    }
+    return map;
+  }, [scores]);
+
+  const enneaBySpeaker = useMemo(() => {
+    const groups = new Map<number, EnneaResult[]>();
+    const add = (speaker: number | null, ennea: EnneaResult | null) => {
+      if (speaker === null || !ennea) {
+        return;
+      }
+      const list = groups.get(speaker) ?? [];
+      list.push(ennea);
+      groups.set(speaker, list);
+    };
+    for (const row of scores) {
+      add(row.speaker, row.ennea);
+    }
+    if (live) {
+      add(live.speaker, live.ennea);
+    }
+    const map = new Map<number, EnneaResult>();
+    for (const [speaker, rows] of groups) {
+      const average = averageEnnea(rows);
+      if (average) {
+        map.set(speaker, average);
+      }
+    }
+    return map;
+  }, [live, scores]);
+
+  const hypeByTurn = useMemo(() => {
+    const map = new Map<string, HypeResult>();
+    for (const row of scores) {
+      if (row.hype) {
+        map.set(row.turnId, row.hype);
+      }
+    }
+    return map;
+  }, [scores]);
+
+  const hypeBySpeaker = useMemo(() => {
+    const groups = new Map<number, HypeResult[]>();
+    const add = (speaker: number | null, hype: HypeResult | null) => {
+      if (speaker === null || !hype) {
+        return;
+      }
+      const list = groups.get(speaker) ?? [];
+      list.push(hype);
+      groups.set(speaker, list);
+    };
+    for (const row of scores) {
+      add(row.speaker, row.hype);
+    }
+    if (live) {
+      add(live.speaker, live.hype);
+    }
+    const map = new Map<number, HypeResult>();
+    for (const [speaker, rows] of groups) {
+      const average = averageHype(rows);
+      if (average) {
+        map.set(speaker, average);
+      }
+    }
+    return map;
+  }, [live, scores]);
+
+  const energyByTurn = useMemo(() => {
+    const map = new Map<string, EnergyResult>();
+    for (const row of scores) {
+      if (row.energy) {
+        map.set(row.turnId, row.energy);
+      }
+    }
+    return map;
+  }, [scores]);
+
+  const energyBySpeaker = useMemo(() => {
+    const groups = new Map<number, EnergyResult[]>();
+    const add = (speaker: number | null, energy: EnergyResult | null) => {
+      if (speaker === null || !energy) {
+        return;
+      }
+      const list = groups.get(speaker) ?? [];
+      list.push(energy);
+      groups.set(speaker, list);
+    };
+    for (const row of scores) {
+      add(row.speaker, row.energy);
+    }
+    if (live) {
+      add(live.speaker, live.energy);
+    }
+    const map = new Map<number, EnergyResult>();
+    for (const [speaker, rows] of groups) {
+      const average = averageEnergy(rows);
+      if (average) {
+        map.set(speaker, average);
+      }
+    }
+    return map;
+  }, [live, scores]);
+
+  const onlineByTurn = useMemo(() => {
+    const map = new Map<string, OnlineResult>();
+    for (const row of scores) {
+      if (row.online) {
+        map.set(row.turnId, row.online);
+      }
+    }
+    return map;
+  }, [scores]);
+
+  const onlineBySpeaker = useMemo(() => {
+    const groups = new Map<number, OnlineResult[]>();
+    const add = (speaker: number | null, online: OnlineResult | null) => {
+      if (speaker === null || !online) {
+        return;
+      }
+      const list = groups.get(speaker) ?? [];
+      list.push(online);
+      groups.set(speaker, list);
+    };
+    for (const row of scores) {
+      add(row.speaker, row.online);
+    }
+    if (live) {
+      add(live.speaker, live.online);
+    }
+    const map = new Map<number, OnlineResult>();
+    for (const [speaker, rows] of groups) {
+      const average = averageOnline(rows);
       if (average) {
         map.set(speaker, average);
       }
@@ -1017,6 +1348,105 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
           </div>
           <div className="jayrr-called-embed__card">
             <div className="jayrr-called-embed__title jayrr-called-embed__title--row">
+              <div className="jayrr-called-embed__label">Jev Hype</div>
+              <button
+                type="button"
+                className={
+                  config.jevHype
+                    ? "jayrr-called-embed__switch is-on"
+                    : "jayrr-called-embed__switch"
+                }
+                aria-pressed={config.jevHype}
+                aria-label="Score speech with the hype meter"
+                onClick={() => {
+                  const next = { ...config, jevHype: !config.jevHype };
+                  resetIq();
+                  applyConfig(next, true);
+                }}
+              >
+                <span className="jayrr-called-embed__knob" />
+              </button>
+            </div>
+            <div className="jayrr-called-embed__bands jayrr-called-embed__bands--hype">
+              {HYPE_BANDS.map((band) => (
+                <span
+                  key={band.id}
+                  className={`jayrr-called-embed__iq jayrr-called-embed__hype jayrr-called-embed__hype--${band.id}`}
+                  title={band.what}
+                >
+                  {band.label}
+                </span>
+              ))}
+            </div>
+          </div>
+          <div className="jayrr-called-embed__card">
+            <div className="jayrr-called-embed__title jayrr-called-embed__title--row">
+              <div className="jayrr-called-embed__label">Jev Energy</div>
+              <button
+                type="button"
+                className={
+                  config.jevEnergy
+                    ? "jayrr-called-embed__switch is-on"
+                    : "jayrr-called-embed__switch"
+                }
+                aria-pressed={config.jevEnergy}
+                aria-label="Score speech with Dodson energy levels"
+                onClick={() => {
+                  const next = { ...config, jevEnergy: !config.jevEnergy };
+                  resetIq();
+                  applyConfig(next, true);
+                }}
+              >
+                <span className="jayrr-called-embed__knob" />
+              </button>
+            </div>
+            <div className="jayrr-called-embed__bands jayrr-called-embed__bands--energy">
+              {ENERGY_BANDS.map((band) => (
+                <span
+                  key={band.id}
+                  className={`jayrr-called-embed__iq jayrr-called-embed__energy jayrr-called-embed__energy--${band.zone} jayrr-called-embed__energy--${band.id}`}
+                  title={`${band.level} ${band.name}. ${band.what}`}
+                >
+                  {String(band.level)}
+                </span>
+              ))}
+            </div>
+          </div>
+          <div className="jayrr-called-embed__card">
+            <div className="jayrr-called-embed__title jayrr-called-embed__title--row">
+              <div className="jayrr-called-embed__label">Jev Online</div>
+              <button
+                type="button"
+                className={
+                  config.jevOnline
+                    ? "jayrr-called-embed__switch is-on"
+                    : "jayrr-called-embed__switch"
+                }
+                aria-pressed={config.jevOnline}
+                aria-label="Score speech with online behaviour levels"
+                onClick={() => {
+                  const next = { ...config, jevOnline: !config.jevOnline };
+                  resetIq();
+                  applyConfig(next, true);
+                }}
+              >
+                <span className="jayrr-called-embed__knob" />
+              </button>
+            </div>
+            <div className="jayrr-called-embed__bands jayrr-called-embed__bands--hype">
+              {ONLINE_BANDS.map((band) => (
+                <span
+                  key={band.id}
+                  className={`jayrr-called-embed__iq jayrr-called-embed__online jayrr-called-embed__online--${band.id}`}
+                  title={`${band.label}. ${band.what} Example: ${band.example}`}
+                >
+                  {band.label}
+                </span>
+              ))}
+            </div>
+          </div>
+          <div className="jayrr-called-embed__card">
+            <div className="jayrr-called-embed__title jayrr-called-embed__title--row">
               <div className="jayrr-called-embed__label">Jev MBTI</div>
               <button
                 type="button"
@@ -1043,6 +1473,77 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
                   className={`jayrr-called-embed__iq jayrr-called-embed__mbti jayrr-called-embed__mbti--${band.letter.toLowerCase()}`}
                 >
                   {band.letter}
+                </span>
+              ))}
+            </div>
+          </div>
+          <div className="jayrr-called-embed__card">
+            <div className="jayrr-called-embed__title jayrr-called-embed__title--row">
+              <div className="jayrr-called-embed__label">Jev Advance</div>
+              <button
+                type="button"
+                className={
+                  config.jevMbtiAdvance
+                    ? "jayrr-called-embed__switch is-on"
+                    : "jayrr-called-embed__switch"
+                }
+                aria-pressed={config.jevMbtiAdvance}
+                aria-label="Score speech with advanced MBTI cognitive functions"
+                onClick={() => {
+                  const next = {
+                    ...config,
+                    jevMbtiAdvance: !config.jevMbtiAdvance,
+                  };
+                  resetIq();
+                  applyConfig(next, true);
+                }}
+              >
+                <span className="jayrr-called-embed__knob" />
+              </button>
+            </div>
+            <div className="jayrr-called-embed__bands jayrr-called-embed__bands--pairs">
+              {COG_BANDS.map((fn) => (
+                <span
+                  key={fn}
+                  className={`jayrr-called-embed__iq jayrr-called-embed__fn jayrr-called-embed__fn--${fn.toLowerCase()}`}
+                >
+                  {fn}
+                </span>
+              ))}
+            </div>
+          </div>
+          <div className="jayrr-called-embed__card">
+            <div className="jayrr-called-embed__title jayrr-called-embed__title--row">
+              <div className="jayrr-called-embed__label">Jev Enneagram</div>
+              <button
+                type="button"
+                className={
+                  config.jevEnneagram
+                    ? "jayrr-called-embed__switch is-on"
+                    : "jayrr-called-embed__switch"
+                }
+                aria-pressed={config.jevEnneagram}
+                aria-label="Score speech with Enneagram types"
+                onClick={() => {
+                  const next = {
+                    ...config,
+                    jevEnneagram: !config.jevEnneagram,
+                  };
+                  resetIq();
+                  applyConfig(next, true);
+                }}
+              >
+                <span className="jayrr-called-embed__knob" />
+              </button>
+            </div>
+            <div className="jayrr-called-embed__bands jayrr-called-embed__bands--ennea">
+              {ENNEA_BANDS.map((band) => (
+                <span
+                  key={band.id}
+                  className={`jayrr-called-embed__iq jayrr-called-embed__ennea jayrr-called-embed__ennea--${band.id}`}
+                  title={`Type ${band.id} · The ${band.name}`}
+                >
+                  {band.id}
                 </span>
               ))}
             </div>
@@ -1113,6 +1614,21 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
                     const mbti = turn.isFinal
                       ? mbtiByTurn.get(turn.id)
                       : live?.mbti ?? undefined;
+                    const advance = turn.isFinal
+                      ? advanceByTurn.get(turn.id)
+                      : live?.advance ?? undefined;
+                    const ennea = turn.isFinal
+                      ? enneaByTurn.get(turn.id)
+                      : live?.ennea ?? undefined;
+                    const hype = turn.isFinal
+                      ? hypeByTurn.get(turn.id)
+                      : live?.hype ?? undefined;
+                    const energy = turn.isFinal
+                      ? energyByTurn.get(turn.id)
+                      : live?.energy ?? undefined;
+                    const online = turn.isFinal
+                      ? onlineByTurn.get(turn.id)
+                      : live?.online ?? undefined;
                     const prev = turns[index - 1];
                     const follow =
                       prev !== undefined && prev.speaker === turn.speaker;
@@ -1153,9 +1669,34 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
                                     <IqBadge composite={iqScore} />
                                   )
                                 ) : null}
+                                {config.jevHype ? (
+                                  hype ? (
+                                    <HypeBadge hype={hype} />
+                                  ) : null
+                                ) : null}
+                                {config.jevEnergy ? (
+                                  energy ? (
+                                    <EnergyBadge energy={energy} />
+                                  ) : null
+                                ) : null}
+                                {config.jevOnline ? (
+                                  online ? (
+                                    <OnlineBadge online={online} />
+                                  ) : null
+                                ) : null}
                                 {config.jevMbti ? (
                                   mbti ? (
                                     <MbtiBadge mbti={mbti} />
+                                  ) : null
+                                ) : null}
+                                {config.jevMbtiAdvance ? (
+                                  advance ? (
+                                    <AdvanceBadge advance={advance} />
+                                  ) : null
+                                ) : null}
+                                {config.jevEnneagram ? (
+                                  ennea ? (
+                                    <EnneaBadge ennea={ennea} />
                                   ) : null
                                 ) : null}
                               </div>
@@ -1173,7 +1714,12 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
             </div>
             <aside
               className={
-                config.jevMbti
+                config.jevMbti ||
+                config.jevMbtiAdvance ||
+                config.jevEnneagram ||
+                config.jevHype ||
+                config.jevEnergy ||
+                config.jevOnline
                   ? "jayrr-called-embed__now jayrr-called-embed__now--mbti"
                   : "jayrr-called-embed__now"
               }
@@ -1184,6 +1730,21 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
                   const liveNow = liveSpeaker === speaker;
                   const speakerMbti = config.jevMbti
                     ? mbtiBySpeaker.get(speaker)
+                    : undefined;
+                  const speakerAdvance = config.jevMbtiAdvance
+                    ? advanceBySpeaker.get(speaker)
+                    : undefined;
+                  const speakerEnnea = config.jevEnneagram
+                    ? enneaBySpeaker.get(speaker)
+                    : undefined;
+                  const speakerHype = config.jevHype
+                    ? hypeBySpeaker.get(speaker)
+                    : undefined;
+                  const speakerEnergy = config.jevEnergy
+                    ? energyBySpeaker.get(speaker)
+                    : undefined;
+                  const speakerOnline = config.jevOnline
+                    ? onlineBySpeaker.get(speaker)
                     : undefined;
                   const nameControl =
                     editingSpeaker === speaker ? (
@@ -1220,6 +1781,19 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
                     <div key={speaker} className="jayrr-called-embed__now-row">
                       {nameControl}
                       {speakerMbti ? <MbtiBadge mbti={speakerMbti} /> : null}
+                      {speakerAdvance ? (
+                        <AdvanceBadge advance={speakerAdvance} />
+                      ) : null}
+                      {speakerEnnea ? (
+                        <EnneaBadge ennea={speakerEnnea} />
+                      ) : null}
+                      {speakerHype ? <HypeBadge hype={speakerHype} /> : null}
+                      {speakerEnergy ? (
+                        <EnergyBadge energy={speakerEnergy} />
+                      ) : null}
+                      {speakerOnline ? (
+                        <OnlineBadge online={speakerOnline} />
+                      ) : null}
                     </div>
                   );
                 })}

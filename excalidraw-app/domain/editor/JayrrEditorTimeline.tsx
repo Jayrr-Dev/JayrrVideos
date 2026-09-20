@@ -1,10 +1,29 @@
 import {
+  DndContext,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
+import {
+  SortableContext,
+  arrayMove,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import {
   useCallback,
+  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type PointerEvent,
+  type ReactNode,
 } from "react";
 
 import {
@@ -13,17 +32,21 @@ import {
   type EditorClip,
   type EditorTimeline,
 } from "./buildEditorTimeline";
+import { filmstripSliceCount, getClipFilmstrip } from "./captureClipFilmstrip";
 
 type ZoomMode = "fit" | "fixed";
 
 type JayrrEditorTimelineProps = {
   timeline: EditorTimeline;
   currentTimeMs: number;
-  activeClipId: string | null;
+  selectedClipIds: ReadonlySet<string>;
+  playheadClipId: string | null;
   zoomMode: ZoomMode;
   disabled?: boolean;
+  emptyAction?: ReactNode;
   onSeek: (timeMs: number) => void;
-  onSelectClip: (clip: EditorClip) => void;
+  onSelectClip: (clip: EditorClip, opts?: { toggle?: boolean }) => void;
+  onReorderClips: (orderedIds: readonly string[]) => void;
 };
 
 const msToPx = (ms: number, pxPerMs: number) => ms * pxPerMs;
@@ -33,15 +56,30 @@ const RULER_TICK_MS = 1000;
 export const JayrrEditorTimeline = ({
   timeline,
   currentTimeMs,
-  activeClipId,
+  selectedClipIds,
+  playheadClipId,
   zoomMode,
   disabled,
+  emptyAction,
   onSeek,
   onSelectClip,
+  onReorderClips,
 }: JayrrEditorTimelineProps) => {
   const bodyRef = useRef<HTMLDivElement | null>(null);
-  const draggingRef = useRef(false);
+  const draggingSeekRef = useRef(false);
+  const skipClickRef = useRef(false);
   const [bodyHeight, setBodyHeight] = useState(360);
+
+  const clipIds = useMemo(
+    () => timeline.sequence.map((clip) => clip.id),
+    [timeline.sequence],
+  );
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 6 },
+    }),
+  );
 
   useLayoutEffect(() => {
     const body = bodyRef.current;
@@ -108,27 +146,43 @@ export const JayrrEditorTimeline = ({
     if (target.closest(".jayrr-editor-clip")) {
       return;
     }
-    draggingRef.current = true;
+    draggingSeekRef.current = true;
     event.currentTarget.setPointerCapture(event.pointerId);
     onSeek(timeFromClientY(event.clientY));
   };
 
   const onPointerMove = (event: PointerEvent<HTMLDivElement>) => {
-    if (!draggingRef.current) {
+    if (!draggingSeekRef.current) {
       return;
     }
     onSeek(timeFromClientY(event.clientY));
   };
 
   const onPointerUp = (event: PointerEvent<HTMLDivElement>) => {
-    if (!draggingRef.current) {
+    if (!draggingSeekRef.current) {
       return;
     }
-    draggingRef.current = false;
+    draggingSeekRef.current = false;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
   };
+
+  const onDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) {
+      return;
+    }
+    const oldIndex = clipIds.indexOf(String(active.id));
+    const newIndex = clipIds.indexOf(String(over.id));
+    if (oldIndex < 0 || newIndex < 0) {
+      return;
+    }
+    skipClickRef.current = true;
+    onReorderClips(arrayMove(clipIds, oldIndex, newIndex));
+  };
+
+  const canReorder = clipIds.length >= 2;
 
   return (
     <div className="jayrr-editor-timeline">
@@ -169,69 +223,200 @@ export const JayrrEditorTimeline = ({
               </div>
             ))}
           </div>
-          <div className="jayrr-editor-timeline__lane jayrr-editor-timeline__lane--sequence">
-            {timeline.sequence.map((clip) => (
-              <SequenceClip
-                key={clip.id}
-                clip={clip}
-                pxPerMs={pxPerMs}
-                active={activeClipId === clip.id}
-                disabled={disabled}
-                onSelect={() => {
-                  onSelectClip(clip);
-                  onSeek(clip.startMs);
-                }}
-              />
-            ))}
-          </div>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            modifiers={[restrictToVerticalAxis]}
+            onDragEnd={onDragEnd}
+          >
+            <SortableContext
+              items={clipIds}
+              strategy={verticalListSortingStrategy}
+            >
+              <div className="jayrr-editor-timeline__lane jayrr-editor-timeline__lane--sequence">
+                {timeline.sequence.map((clip) => (
+                  <SequenceClip
+                    key={clip.id}
+                    clip={clip}
+                    pxPerMs={pxPerMs}
+                    selected={selectedClipIds.has(clip.id)}
+                    playhead={playheadClipId === clip.id}
+                    reorderDisabled={!canReorder}
+                    onSelect={(toggle) => {
+                      if (skipClickRef.current) {
+                        skipClickRef.current = false;
+                        return;
+                      }
+                      onSelectClip(clip, { toggle });
+                      if (!toggle) {
+                        onSeek(clip.startMs);
+                      }
+                    }}
+                  />
+                ))}
+              </div>
+            </SortableContext>
+          </DndContext>
           <div
             className="jayrr-editor-timeline__playhead"
             style={{ top: playheadTop }}
             aria-hidden
           />
         </div>
+        {timeline.sequence.length === 0 && emptyAction ? (
+          <div
+            className="jayrr-editor-timeline__empty"
+            onPointerDown={(event) => event.stopPropagation()}
+          >
+            {emptyAction}
+          </div>
+        ) : null}
       </div>
     </div>
   );
 };
 
+const useClipFilmstripFrames = (
+  clip: EditorClip,
+  sliceCount: number,
+  ownerDocument: Document | null,
+) => {
+  const [frames, setFrames] = useState<readonly string[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setFrames(null);
+    if (!clip.url || !ownerDocument) {
+      return;
+    }
+    void getClipFilmstrip({
+      url: clip.url,
+      sourceOffsetMs: clip.sourceOffsetMs ?? 0,
+      durationMs: clip.durationMs,
+      sliceCount,
+      ownerDocument,
+    }).then((next) => {
+      if (!cancelled) {
+        setFrames(next.length > 0 ? next : null);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    clip.url,
+    clip.durationMs,
+    clip.sourceOffsetMs,
+    ownerDocument,
+    sliceCount,
+  ]);
+
+  return frames;
+};
+
+const filmstripSources = (
+  sliceCount: number,
+  frames: readonly string[] | null,
+  posterUrl: string | null,
+): readonly string[] => {
+  if (frames && frames.length > 0) {
+    if (frames.length === sliceCount) {
+      return frames;
+    }
+    const out: string[] = [];
+    for (let i = 0; i < sliceCount; i++) {
+      const src = frames[Math.min(frames.length - 1, i)];
+      if (src) {
+        out.push(src);
+      }
+    }
+    return out;
+  }
+  if (!posterUrl) {
+    return [];
+  }
+  return Array.from({ length: sliceCount }, () => posterUrl);
+};
+
 const SequenceClip = ({
   clip,
   pxPerMs,
-  active,
-  disabled,
+  selected,
+  playhead,
+  reorderDisabled,
   onSelect,
 }: {
   clip: EditorClip;
   pxPerMs: number;
-  active: boolean;
-  disabled?: boolean;
-  onSelect: () => void;
+  selected: boolean;
+  playhead: boolean;
+  reorderDisabled?: boolean;
+  onSelect: (toggle: boolean) => void;
 }) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: clip.id, disabled: reorderDisabled });
+
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const setRefs = useCallback(
+    (node: HTMLButtonElement | null) => {
+      buttonRef.current = node;
+      setNodeRef(node);
+    },
+    [setNodeRef],
+  );
+
+  const heightPx = Math.max(18, msToPx(clip.durationMs, pxPerMs));
+  const sliceCount = filmstripSliceCount(heightPx);
+  const [ownerDocument, setOwnerDocument] = useState<Document | null>(null);
+  useLayoutEffect(() => {
+    setOwnerDocument(buttonRef.current?.ownerDocument ?? null);
+  }, []);
+  const frames = useClipFilmstripFrames(clip, sliceCount, ownerDocument);
+  const slices = filmstripSources(sliceCount, frames, clip.posterUrl);
+
+  const style: CSSProperties = {
+    height: heightPx,
+    transform: CSS.Transform.toString(transform),
+    transition,
+    ["--jayrr-editor-slice-count" as string]: String(Math.max(1, sliceCount)),
+  };
+
   return (
     <button
+      ref={setRefs}
       type="button"
       className={`jayrr-editor-clip jayrr-editor-clip--recording${
-        active ? " is-active" : ""
-      }`}
-      style={{
-        top: msToPx(clip.startMs, pxPerMs),
-        height: Math.max(18, msToPx(clip.durationMs, pxPerMs) - 2),
-        ...(clip.posterUrl
-          ? {
-              backgroundImage: `linear-gradient(90deg, rgb(30 41 59 / 78%), rgb(30 41 59 / 45%)), url(${clip.posterUrl})`,
-              backgroundSize: "cover",
-              backgroundPosition: "center",
-            }
-          : {}),
-      }}
-      disabled={disabled}
+        selected ? " is-selected" : ""
+      }${playhead ? " is-playhead" : ""}${isDragging ? " is-dragging" : ""}`}
+      style={style}
       title={clip.label}
+      {...attributes}
+      {...listeners}
+      aria-pressed={selected}
       onClick={(event) => {
         event.stopPropagation();
-        onSelect();
+        const toggle = event.ctrlKey || event.metaKey;
+        onSelect(toggle);
       }}
     >
+      <span className="jayrr-editor-clip__filmstrip" aria-hidden>
+        {slices.map((src, index) => (
+          <span key={`${clip.id}-${index}`} className="jayrr-editor-clip__cell">
+            <img
+              className="jayrr-editor-clip__slice"
+              src={src}
+              alt=""
+              draggable={false}
+            />
+          </span>
+        ))}
+      </span>
       <span className="jayrr-editor-clip__label">{clip.label}</span>
     </button>
   );

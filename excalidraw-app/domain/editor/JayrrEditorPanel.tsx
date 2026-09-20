@@ -1,5 +1,11 @@
-import { helpIcon } from "@excalidraw/excalidraw/components/icons";
+import { CaptureUpdateAction, useExcalidrawAPI } from "@excalidraw/excalidraw";
+import { useExcalidrawContainer } from "@excalidraw/excalidraw/components/App";
+import {
+  helpIcon,
+  settingsIcon,
+} from "@excalidraw/excalidraw/components/icons";
 import { useConvexAuth, useQuery } from "convex/react";
+import { ContextMenu, DropdownMenu, Popover } from "radix-ui";
 import {
   useCallback,
   useEffect,
@@ -9,35 +15,47 @@ import {
   type KeyboardEvent,
 } from "react";
 
+import type { NonDeletedExcalidrawElement } from "@excalidraw/element/types";
+
+import { FilledButton, Island, Tooltip } from "../../components/ui/editor";
 import { api, isConvexLinked } from "../../convexClient";
-import { FilledButton, Tooltip } from "../../components/ui/editor";
 import { formatRecordingClock } from "../recordings/formatRecording";
 
-import type { Id } from "../../../../convex/_generated/dataModel";
+import "../../components/ui/JayrrLibraryMenu.scss";
 
 import {
   buildEditorTimeline,
+  canCutAtTime,
+  EDITOR_CUT_MIN_MS,
   formatEditorClock,
+  getMergeableClips,
+  mergeProjectClips,
   newEditorClipId,
   type EditorClip,
   type EditorProjectClip,
 } from "./buildEditorTimeline";
+import { isJayrrEditorPreviewElement } from "./editorPreviewModel";
+import { insertEditorPreview } from "./insertEditorPreview";
 import { JayrrEditorTimeline } from "./JayrrEditorTimeline";
 import { useEditorPlayback } from "./useEditorPlayback";
 
-import "../../components/ui/JayrrLibraryMenu.scss";
 import "./JayrrEditorPanel.scss";
+
+import type { Id } from "../../../convex/_generated/dataModel";
 
 export const JAYRR_EDITOR_TAB = "jayrrEditor";
 
-const EDITOR_INFO =
-  "Assemble a vertical timeline from your Recordings. Pick clips to stack top to bottom. Play previews the cut in the panel above the timeline.";
+const SETTINGS_INFO =
+  "Place a preview box on the canvas, or link a selected embeddable (recording or editor preview). Timeline playback plays into that box.";
 
+const PREVIEW_ID_KEY = "jayrr-editor-preview-element-v1";
 const STORAGE_KEY = "jayrr-editor-recording-clips-v1";
 
 type StoredClip = {
   id: string;
   recordingId: string;
+  durationMs?: number;
+  sourceOffsetMs?: number;
 };
 
 const readStoredClips = (): StoredClip[] => {
@@ -58,9 +76,17 @@ const readStoredClips = (): StoredClip[] => {
         typeof Reflect.get(item, "id") === "string" &&
         typeof Reflect.get(item, "recordingId") === "string"
       ) {
+        const durationRaw = Reflect.get(item, "durationMs");
+        const offsetRaw = Reflect.get(item, "sourceOffsetMs");
         out.push({
           id: Reflect.get(item, "id") as string,
           recordingId: Reflect.get(item, "recordingId") as string,
+          ...(typeof durationRaw === "number" && Number.isFinite(durationRaw)
+            ? { durationMs: Math.max(1, Math.round(durationRaw)) }
+            : {}),
+          ...(typeof offsetRaw === "number" && Number.isFinite(offsetRaw)
+            ? { sourceOffsetMs: Math.max(0, Math.round(offsetRaw)) }
+            : {}),
         });
       }
     }
@@ -74,8 +100,26 @@ const writeStoredClips = (clips: readonly EditorProjectClip[]) => {
   const payload: StoredClip[] = clips.map((clip) => ({
     id: clip.id,
     recordingId: clip.recordingId,
+    durationMs: clip.durationMs,
+    sourceOffsetMs: clip.sourceOffsetMs ?? 0,
   }));
   localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+};
+
+const readStoredPreviewId = (): string | null => {
+  try {
+    return localStorage.getItem(PREVIEW_ID_KEY);
+  } catch {
+    return null;
+  }
+};
+
+const writeStoredPreviewId = (id: string | null) => {
+  if (!id) {
+    localStorage.removeItem(PREVIEW_ID_KEY);
+    return;
+  }
+  localStorage.setItem(PREVIEW_ID_KEY, id);
 };
 
 export const editorTabIcon = (
@@ -110,7 +154,22 @@ type RecordingRow = {
   createdAt: number;
 };
 
+const isLinkablePreviewTarget = (
+  element: NonDeletedExcalidrawElement,
+): boolean => {
+  if (element.type !== "embeddable") {
+    return false;
+  }
+  if (isJayrrEditorPreviewElement(element)) {
+    return true;
+  }
+  return Boolean(element.link);
+};
+
 export const JayrrEditorPanel = () => {
+  const apiExcal = useExcalidrawAPI();
+  const { container } = useExcalidrawContainer();
+  const ownerDocument = container?.ownerDocument ?? document;
   const { isAuthenticated } = useConvexAuth();
   const canQuery = isConvexLinked && isAuthenticated;
   const recordings = useQuery(
@@ -118,14 +177,41 @@ export const JayrrEditorPanel = () => {
     canQuery ? { limit: 40 } : "skip",
   );
 
-  const videoRef = useRef<HTMLVideoElement | null>(null);
   const [zoomMode, setZoomMode] = useState<"fit" | "fixed">("fit");
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
+  const [selectedClipIds, setSelectedClipIds] = useState<string[]>([]);
   const [clips, setClips] = useState<EditorProjectClip[]>([]);
+  const [previewElementId, setPreviewElementId] = useState<string | null>(
+    readStoredPreviewId,
+  );
+  const [selectedElementIds, setSelectedElementIds] = useState<
+    Record<string, boolean>
+  >({});
   const hydratedRef = useRef(false);
 
-  // Restore order from localStorage once recordings load.
+  useEffect(() => {
+    if (!apiExcal) {
+      return;
+    }
+    setSelectedElementIds(apiExcal.getAppState().selectedElementIds);
+    return apiExcal.onChange((_elements, appState) => {
+      setSelectedElementIds(appState.selectedElementIds);
+    });
+  }, [apiExcal]);
+
+  // Drop link if the canvas element was deleted.
+  useEffect(() => {
+    if (!apiExcal || !previewElementId) {
+      return;
+    }
+    const exists = apiExcal
+      .getSceneElements()
+      .some((element) => element.id === previewElementId);
+    if (!exists) {
+      setPreviewElementId(null);
+      writeStoredPreviewId(null);
+    }
+  }, [apiExcal, previewElementId, selectedElementIds]);
+
   useEffect(() => {
     if (hydratedRef.current || recordings === undefined) {
       return;
@@ -142,13 +228,22 @@ export const JayrrEditorPanel = () => {
       if (!row) {
         continue;
       }
+      const sourceOffsetMs = Math.max(
+        0,
+        Math.min(Math.max(0, row.durationMs - 1), item.sourceOffsetMs ?? 0),
+      );
+      const maxDuration = Math.max(1, row.durationMs - sourceOffsetMs);
       restored.push({
         id: item.id,
         recordingId: row._id,
         url: row.url,
         posterUrl: row.posterUrl,
         label: row.name?.trim() || "Recording",
-        durationMs: row.durationMs,
+        durationMs: Math.max(
+          1,
+          Math.min(maxDuration, item.durationMs ?? maxDuration),
+        ),
+        sourceOffsetMs,
       });
     }
     if (restored.length > 0) {
@@ -158,22 +253,110 @@ export const JayrrEditorPanel = () => {
 
   const timeline = useMemo(() => buildEditorTimeline(clips), [clips]);
   const { currentTimeMs, playing, play, pause, stop, seek, togglePlay } =
-    useEditorPlayback({ timeline, videoRef });
+    useEditorPlayback({
+      timeline,
+      previewElementId,
+      ownerDocument,
+    });
 
-  const disabled = timeline.sequence.length === 0;
-  const activeClipId =
-    selectedClipId ??
+  const selectedIdSet = useMemo(
+    () => new Set(selectedClipIds),
+    [selectedClipIds],
+  );
+
+  // Drop selection for clips that no longer exist.
+  useEffect(() => {
+    const alive = new Set(clips.map((clip) => clip.id));
+    setSelectedClipIds((current) => {
+      const next = current.filter((id) => alive.has(id));
+      return next.length === current.length ? current : next;
+    });
+  }, [clips]);
+
+  const disabled = timeline.sequence.length === 0 || !previewElementId;
+  const playheadClipId =
     timeline.sequence.find(
       (clip) =>
         currentTimeMs >= clip.startMs &&
         currentTimeMs < clip.startMs + clip.durationMs,
-    )?.id ??
-    null;
+    )?.id ?? null;
+
+  const selectedLinkable = useMemo(() => {
+    if (!apiExcal) {
+      return null;
+    }
+    const ids = Object.keys(selectedElementIds).filter(
+      (id) => selectedElementIds[id],
+    );
+    if (ids.length !== 1) {
+      return null;
+    }
+    const id = ids[0];
+    const element = apiExcal.getSceneElements().find((item) => item.id === id);
+    if (!element || !isLinkablePreviewTarget(element)) {
+      return null;
+    }
+    return element;
+  }, [apiExcal, selectedElementIds]);
 
   const persist = useCallback((next: EditorProjectClip[]) => {
     setClips(next);
     writeStoredClips(next);
   }, []);
+
+  const linkPreview = useCallback((id: string) => {
+    setPreviewElementId(id);
+    writeStoredPreviewId(id);
+  }, []);
+
+  const placePreview = useCallback(() => {
+    if (!apiExcal) {
+      return;
+    }
+    const id = insertEditorPreview(apiExcal);
+    linkPreview(id);
+  }, [apiExcal, linkPreview]);
+
+  const linkSelected = useCallback(() => {
+    if (!selectedLinkable) {
+      return;
+    }
+    linkPreview(selectedLinkable.id);
+    apiExcal?.setToast({
+      message: "Linked selection as editor preview.",
+      closable: true,
+    });
+  }, [apiExcal, linkPreview, selectedLinkable]);
+
+  const clearPreviewLink = useCallback(() => {
+    setPreviewElementId(null);
+    writeStoredPreviewId(null);
+    stop();
+  }, [stop]);
+
+  const focusPreview = useCallback(() => {
+    if (!apiExcal || !previewElementId) {
+      return;
+    }
+    const element = apiExcal
+      .getSceneElements()
+      .find((item) => item.id === previewElementId);
+    if (!element) {
+      return;
+    }
+    const appState = apiExcal.getAppState();
+    const zoom = appState.zoom.value || 1;
+    const cx = element.x + element.width / 2;
+    const cy = element.y + element.height / 2;
+    apiExcal.updateScene({
+      appState: {
+        selectedElementIds: { [previewElementId]: true },
+        scrollX: appState.width / 2 / zoom - cx,
+        scrollY: appState.height / 2 / zoom - cy,
+      },
+      captureUpdate: CaptureUpdateAction.EVENTUALLY,
+    });
+  }, [apiExcal, previewElementId]);
 
   const addRecording = useCallback(
     (row: RecordingRow) => {
@@ -186,25 +369,137 @@ export const JayrrEditorPanel = () => {
         durationMs: Math.max(1, row.durationMs),
       };
       persist([...clips, next]);
-      setSelectedClipId(next.id);
-      setPickerOpen(false);
+      setSelectedClipIds([next.id]);
     },
     [clips, persist],
   );
 
   const removeSelected = useCallback(() => {
-    if (!selectedClipId) {
+    if (selectedClipIds.length === 0) {
       return;
     }
-    const next = clips.filter((clip) => clip.id !== selectedClipId);
+    const remove = new Set(selectedClipIds);
+    const next = clips.filter((clip) => !remove.has(clip.id));
     persist(next);
-    setSelectedClipId(null);
+    setSelectedClipIds([]);
     stop();
-  }, [clips, persist, selectedClipId, stop]);
+  }, [clips, persist, selectedClipIds, stop]);
 
-  const selectClip = useCallback((clip: EditorClip) => {
-    setSelectedClipId(clip.id);
-  }, []);
+  const canCut = canCutAtTime(timeline.sequence, currentTimeMs);
+  const mergeable = useMemo(
+    () => getMergeableClips(clips, selectedIdSet),
+    [clips, selectedIdSet],
+  );
+  const canMerge = Boolean(mergeable);
+
+  const mergeSelected = useCallback(() => {
+    const group = getMergeableClips(clips, selectedIdSet);
+    if (!group) {
+      return;
+    }
+    const merged = mergeProjectClips(group);
+    if (!merged) {
+      return;
+    }
+    const remove = new Set(group.map((clip) => clip.id));
+    const insertAt = clips.findIndex((clip) => clip.id === group[0]?.id);
+    if (insertAt < 0) {
+      return;
+    }
+    const next = [
+      ...clips.slice(0, insertAt),
+      merged,
+      ...clips.slice(insertAt).filter((clip) => !remove.has(clip.id)),
+    ];
+    persist(next);
+    setSelectedClipIds([merged.id]);
+  }, [clips, persist, selectedIdSet]);
+
+  const cutAtPlayhead = useCallback(() => {
+    if (!canCutAtTime(timeline.sequence, currentTimeMs)) {
+      return;
+    }
+    const clip = timeline.sequence.find(
+      (item) =>
+        currentTimeMs >= item.startMs &&
+        currentTimeMs < item.startMs + item.durationMs,
+    );
+    if (!clip) {
+      return;
+    }
+    const offsetInClip = Math.round(currentTimeMs - clip.startMs);
+    if (
+      offsetInClip < EDITOR_CUT_MIN_MS ||
+      clip.durationMs - offsetInClip < EDITOR_CUT_MIN_MS
+    ) {
+      return;
+    }
+    const sourceOffsetMs = clip.sourceOffsetMs ?? 0;
+    const left: EditorProjectClip = {
+      id: clip.id,
+      recordingId: clip.recordingId,
+      url: clip.url,
+      posterUrl: clip.posterUrl,
+      label: clip.label,
+      durationMs: offsetInClip,
+      sourceOffsetMs,
+    };
+    const right: EditorProjectClip = {
+      id: newEditorClipId(),
+      recordingId: clip.recordingId,
+      url: clip.url,
+      posterUrl: clip.posterUrl,
+      label: clip.label,
+      durationMs: clip.durationMs - offsetInClip,
+      sourceOffsetMs: sourceOffsetMs + offsetInClip,
+    };
+    const index = clips.findIndex((item) => item.id === clip.id);
+    if (index < 0) {
+      return;
+    }
+    const next = [
+      ...clips.slice(0, index),
+      left,
+      right,
+      ...clips.slice(index + 1),
+    ];
+    persist(next);
+    setSelectedClipIds([left.id, right.id]);
+  }, [clips, currentTimeMs, persist, timeline.sequence]);
+
+  const selectClip = useCallback(
+    (clip: EditorClip, opts?: { toggle?: boolean }) => {
+      if (opts?.toggle) {
+        setSelectedClipIds((current) => {
+          if (current.includes(clip.id)) {
+            return current.filter((id) => id !== clip.id);
+          }
+          return [...current, clip.id];
+        });
+        return;
+      }
+      setSelectedClipIds([clip.id]);
+    },
+    [],
+  );
+
+  const reorderClips = useCallback(
+    (orderedIds: readonly string[]) => {
+      const byId = new Map(clips.map((clip) => [clip.id, clip]));
+      const next: EditorProjectClip[] = [];
+      for (const id of orderedIds) {
+        const clip = byId.get(id);
+        if (clip) {
+          next.push(clip);
+        }
+      }
+      if (next.length !== clips.length) {
+        return;
+      }
+      persist(next);
+    },
+    [clips, persist],
+  );
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (disabled) {
@@ -229,50 +524,37 @@ export const JayrrEditorPanel = () => {
     >
       <div className="jayrr-library__header">
         <div className="jayrr-library__title">Video editor</div>
-        <Tooltip label={EDITOR_INFO} long>
-          <span className="jayrr-editor-panel__info" aria-label="More info">
-            {helpIcon}
-          </span>
-        </Tooltip>
-        <span className="visually-hidden">{EDITOR_INFO}</span>
+        <EditorSettingsPopover
+          container={container}
+          canLinkSelected={Boolean(selectedLinkable)}
+          hasPreview={Boolean(previewElementId)}
+          onPlace={placePreview}
+          onLinkSelected={linkSelected}
+          onClear={clearPreviewLink}
+          onFocus={focusPreview}
+        />
       </div>
       <div className="jayrr-editor-panel__body">
-        <div className="jayrr-editor-panel__preview">
-          <video
-            ref={videoRef}
-            className="jayrr-editor-panel__video"
-            playsInline
-            preload="metadata"
-            poster={
-              timeline.sequence.find((c) => c.id === activeClipId)?.posterUrl ??
-              undefined
-            }
-          />
-          {timeline.sequence.length === 0 ? (
-            <p className="jayrr-editor-panel__preview-empty">
-              Pick a recording to start the timeline.
-            </p>
-          ) : null}
-        </div>
-
         <div className="jayrr-editor-panel__transport">
-          <FilledButton
-            color="primary"
-            label={playing ? "Pause" : "Play"}
-            onClick={() => (playing ? pause() : play())}
-            disabled={disabled}
-          >
-            {playing ? "Pause" : "Play"}
-          </FilledButton>
-          <FilledButton
-            color="muted"
-            variant="outlined"
-            label="Stop"
-            onClick={stop}
-            disabled={disabled}
-          >
-            Stop
-          </FilledButton>
+          {!disabled ? (
+            <FilledButton
+              color="primary"
+              label={playing ? "Pause" : "Play"}
+              onClick={() => (playing ? pause() : play())}
+            >
+              {playing ? "Pause" : "Play"}
+            </FilledButton>
+          ) : null}
+          {timeline.sequence.length > 0 ? (
+            <FilledButton
+              color="muted"
+              variant="outlined"
+              label="Stop"
+              onClick={stop}
+            >
+              Stop
+            </FilledButton>
+          ) : null}
           <span className="jayrr-editor-panel__clock">
             {formatEditorClock(currentTimeMs)} /{" "}
             {formatEditorClock(timeline.totalMs)}
@@ -303,109 +585,297 @@ export const JayrrEditorPanel = () => {
           </div>
         </div>
 
-        <div className="jayrr-editor-panel__actions">
-          <FilledButton
-            color="muted"
-            variant="outlined"
-            label="Add recording"
-            onClick={() => setPickerOpen((open) => !open)}
-            disabled={!canQuery}
-          >
-            {pickerOpen ? "Hide library" : "Add recording"}
-          </FilledButton>
-          <FilledButton
-            color="danger"
-            variant="outlined"
-            label="Remove clip"
-            onClick={removeSelected}
-            disabled={!selectedClipId}
-          >
-            Remove
-          </FilledButton>
-        </div>
-
-        {pickerOpen ? (
-          <RecordingPicker
-            recordings={recordings}
-            canQuery={canQuery}
-            onPick={addRecording}
-          />
-        ) : null}
-
-        {timeline.sequence.length === 0 && !pickerOpen ? (
-          <p className="jayrr-editor-panel__empty">
-            {canQuery
-              ? "Add a recording from your library to build the timeline."
-              : "Sign in to pick recordings for the timeline."}
-          </p>
-        ) : timeline.sequence.length > 0 ? (
-          <JayrrEditorTimeline
-            timeline={timeline}
-            currentTimeMs={currentTimeMs}
-            activeClipId={activeClipId}
-            zoomMode={zoomMode}
-            onSeek={seek}
-            onSelectClip={selectClip}
-          />
-        ) : null}
+        <ContextMenu.Root modal={false}>
+          <ContextMenu.Trigger asChild>
+            <div className="jayrr-editor-panel__timeline-wrap">
+              <JayrrEditorTimeline
+                timeline={timeline}
+                currentTimeMs={currentTimeMs}
+                selectedClipIds={selectedIdSet}
+                playheadClipId={playheadClipId}
+                zoomMode={zoomMode}
+                onSeek={seek}
+                onSelectClip={selectClip}
+                onReorderClips={reorderClips}
+                emptyAction={
+                  <EditorAddRecordingButton
+                    container={container}
+                    canQuery={canQuery}
+                    recordings={recordings}
+                    onPick={addRecording}
+                  />
+                }
+              />
+            </div>
+          </ContextMenu.Trigger>
+          <ContextMenu.Portal container={container}>
+            <ContextMenu.Content
+              className="jayrr-editor-menu"
+              collisionPadding={8}
+              data-prevent-outside-click
+            >
+              <ContextMenu.Sub>
+                <ContextMenu.SubTrigger className="jayrr-editor-menu__item">
+                  Add recording
+                </ContextMenu.SubTrigger>
+                <ContextMenu.Portal container={container}>
+                  <ContextMenu.SubContent
+                    className="jayrr-editor-menu jayrr-editor-menu--sub"
+                    collisionPadding={8}
+                    data-prevent-outside-click
+                  >
+                    {!canQuery ? (
+                      <ContextMenu.Item
+                        className="jayrr-editor-menu__item"
+                        disabled
+                      >
+                        Sign in to load recordings
+                      </ContextMenu.Item>
+                    ) : recordings === undefined ? (
+                      <ContextMenu.Item
+                        className="jayrr-editor-menu__item"
+                        disabled
+                      >
+                        Loading recordings…
+                      </ContextMenu.Item>
+                    ) : recordings.length === 0 ? (
+                      <ContextMenu.Item
+                        className="jayrr-editor-menu__item"
+                        disabled
+                      >
+                        No recordings yet
+                      </ContextMenu.Item>
+                    ) : (
+                      recordings.map((row) => (
+                        <ContextMenu.Item
+                          key={row._id}
+                          className="jayrr-editor-menu__item jayrr-editor-menu__item--recording"
+                          onSelect={() => addRecording(row)}
+                        >
+                          <RecordingMenuRow row={row} />
+                        </ContextMenu.Item>
+                      ))
+                    )}
+                  </ContextMenu.SubContent>
+                </ContextMenu.Portal>
+              </ContextMenu.Sub>
+              {canCut ? (
+                <ContextMenu.Item
+                  className="jayrr-editor-menu__item"
+                  onSelect={cutAtPlayhead}
+                >
+                  Cut
+                </ContextMenu.Item>
+              ) : null}
+              {canMerge ? (
+                <ContextMenu.Item
+                  className="jayrr-editor-menu__item"
+                  onSelect={mergeSelected}
+                >
+                  Merge
+                </ContextMenu.Item>
+              ) : null}
+              {selectedClipIds.length > 0 ? (
+                <ContextMenu.Item
+                  className="jayrr-editor-menu__item jayrr-editor-menu__item--danger"
+                  onSelect={removeSelected}
+                >
+                  Remove
+                </ContextMenu.Item>
+              ) : null}
+            </ContextMenu.Content>
+          </ContextMenu.Portal>
+        </ContextMenu.Root>
       </div>
     </div>
   );
 };
 
-const RecordingPicker = ({
-  recordings,
+const RecordingMenuRow = ({ row }: { row: RecordingRow }) => {
+  const title = row.name?.trim() || "Recording";
+  const clock = formatRecordingClock(row.durationMs);
+  return (
+    <>
+      {row.posterUrl ? (
+        <img className="jayrr-editor-menu__thumb" src={row.posterUrl} alt="" />
+      ) : (
+        <span className="jayrr-editor-menu__thumb jayrr-editor-menu__thumb--empty" />
+      )}
+      <span className="jayrr-editor-menu__meta">
+        <span className="jayrr-editor-menu__name">{title}</span>
+        <span className="jayrr-editor-menu__clock">{clock}</span>
+      </span>
+    </>
+  );
+};
+
+const EditorAddRecordingButton = ({
+  container,
   canQuery,
+  recordings,
   onPick,
 }: {
-  recordings: RecordingRow[] | undefined;
+  container: HTMLDivElement | null;
   canQuery: boolean;
+  recordings: RecordingRow[] | undefined;
   onPick: (row: RecordingRow) => void;
 }) => {
-  if (!canQuery) {
-    return (
-      <p className="jayrr-editor-panel__empty">Sign in to browse recordings.</p>
-    );
-  }
-  if (recordings === undefined) {
-    return <p className="jayrr-editor-panel__empty">Loading recordings…</p>;
-  }
-  if (recordings.length === 0) {
-    return (
-      <p className="jayrr-editor-panel__empty">
-        No recordings yet. Record from the Present tab first.
-      </p>
-    );
-  }
+  const [open, setOpen] = useState(false);
+
   return (
-    <ul className="jayrr-editor-picker" aria-label="Pick a recording">
-      {recordings.map((row) => {
-        const title = row.name?.trim() || "Recording";
-        const clock = formatRecordingClock(row.durationMs);
-        return (
-          <li key={row._id}>
-            <button
-              type="button"
-              className="jayrr-editor-picker__item"
-              onClick={() => onPick(row)}
-            >
-              {row.posterUrl ? (
-                <img
-                  className="jayrr-editor-picker__thumb"
-                  src={row.posterUrl}
-                  alt=""
-                />
-              ) : (
-                <span className="jayrr-editor-picker__thumb jayrr-editor-picker__thumb--empty" />
-              )}
-              <span className="jayrr-editor-picker__meta">
-                <span className="jayrr-editor-picker__name">{title}</span>
-                <span className="jayrr-editor-picker__clock">{clock}</span>
-              </span>
-            </button>
-          </li>
-        );
-      })}
-    </ul>
+    <DropdownMenu.Root open={open} onOpenChange={setOpen} modal={false}>
+      <DropdownMenu.Trigger asChild>
+        <FilledButton color="primary" label="Add recording">
+          Add recording
+        </FilledButton>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal container={container}>
+        <DropdownMenu.Content
+          className="jayrr-editor-menu jayrr-editor-menu--sub"
+          side="bottom"
+          align="center"
+          sideOffset={8}
+          collisionPadding={8}
+          data-prevent-outside-click
+        >
+          {!canQuery ? (
+            <DropdownMenu.Item className="jayrr-editor-menu__item" disabled>
+              Sign in to load recordings
+            </DropdownMenu.Item>
+          ) : recordings === undefined ? (
+            <DropdownMenu.Item className="jayrr-editor-menu__item" disabled>
+              Loading recordings…
+            </DropdownMenu.Item>
+          ) : recordings.length === 0 ? (
+            <DropdownMenu.Item className="jayrr-editor-menu__item" disabled>
+              No recordings yet
+            </DropdownMenu.Item>
+          ) : (
+            recordings.map((row) => (
+              <DropdownMenu.Item
+                key={row._id}
+                className="jayrr-editor-menu__item jayrr-editor-menu__item--recording"
+                onSelect={() => onPick(row)}
+              >
+                <RecordingMenuRow row={row} />
+              </DropdownMenu.Item>
+            ))
+          )}
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
+  );
+};
+
+const EditorSettingsPopover = ({
+  container,
+  canLinkSelected,
+  hasPreview,
+  onPlace,
+  onLinkSelected,
+  onClear,
+  onFocus,
+}: {
+  container: HTMLDivElement | null;
+  canLinkSelected: boolean;
+  hasPreview: boolean;
+  onPlace: () => void;
+  onLinkSelected: () => void;
+  onClear: () => void;
+  onFocus: () => void;
+}) => {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Popover.Root open={open} onOpenChange={setOpen}>
+      <Popover.Trigger asChild>
+        <button
+          type="button"
+          className="jayrr-editor-panel__settings"
+          aria-label="Video editor settings"
+          aria-expanded={open}
+        >
+          {settingsIcon}
+        </button>
+      </Popover.Trigger>
+      <Popover.Portal container={container}>
+        <Popover.Content
+          side="bottom"
+          align="end"
+          sideOffset={8}
+          collisionPadding={8}
+          collisionBoundary={container ?? undefined}
+          data-prevent-outside-click
+          className="jayrr-editor-panel__settings-popover"
+        >
+          <Island padding={2}>
+            <div className="jayrr-editor-panel__settings-head">
+              <h3 className="jayrr-editor-panel__settings-title">Settings</h3>
+              <Tooltip label={SETTINGS_INFO} long position="top">
+                <span className="jayrr-editor-panel__settings-info">
+                  {helpIcon}
+                </span>
+              </Tooltip>
+            </div>
+            <p className="visually-hidden">{SETTINGS_INFO}</p>
+            <div className="jayrr-editor-panel__settings-actions">
+              <FilledButton
+                color="primary"
+                label="Place preview on canvas"
+                onClick={() => {
+                  onPlace();
+                  setOpen(false);
+                }}
+                fullWidth
+              >
+                Place preview on canvas
+              </FilledButton>
+              {canLinkSelected ? (
+                <FilledButton
+                  color="muted"
+                  variant="outlined"
+                  label="Link selected object"
+                  onClick={() => {
+                    onLinkSelected();
+                    setOpen(false);
+                  }}
+                  fullWidth
+                >
+                  Link selected object
+                </FilledButton>
+              ) : null}
+              {hasPreview ? (
+                <>
+                  <FilledButton
+                    color="muted"
+                    variant="outlined"
+                    label="Show preview"
+                    onClick={() => {
+                      onFocus();
+                      setOpen(false);
+                    }}
+                    fullWidth
+                  >
+                    Show preview
+                  </FilledButton>
+                  <FilledButton
+                    color="danger"
+                    variant="outlined"
+                    label="Unlink preview"
+                    onClick={() => {
+                      onClear();
+                      setOpen(false);
+                    }}
+                    fullWidth
+                  >
+                    Unlink preview
+                  </FilledButton>
+                </>
+              ) : null}
+            </div>
+          </Island>
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
   );
 };

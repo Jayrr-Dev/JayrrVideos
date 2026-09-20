@@ -74,7 +74,7 @@ const pauseIcon = (
 
 const PitchMark = ({ hz }: { hz: number }) => (
   <span
-    className="jayrr-sound-library__metric"
+    className="jayrr-sound-library__metric jayrr-sound-library__metric--hz"
     style={{ color: centroidHzColor(hz) }}
     title={centroidHzLabel(hz)}
   >
@@ -105,7 +105,10 @@ const LoudnessMark = ({
 
   if (db == null) {
     return (
-      <span className="jayrr-sound-library__metric is-empty" title="Loudness">
+      <span
+        className="jayrr-sound-library__metric jayrr-sound-library__metric--db is-empty"
+        title="Loudness"
+      >
         — dB
       </span>
     );
@@ -113,7 +116,7 @@ const LoudnessMark = ({
 
   return (
     <span
-      className="jayrr-sound-library__metric"
+      className="jayrr-sound-library__metric jayrr-sound-library__metric--db"
       style={{ color: loudnessDbColor(db) }}
       title={loudnessDbLabel(db)}
     >
@@ -229,6 +232,45 @@ const MetricFilter = ({
 
 const RING_R = 7.25;
 const RING_C = 2 * Math.PI * RING_R;
+
+type SoundSortKey = "name" | "hz" | "db" | "time";
+
+const SortCol = ({
+  column,
+  label,
+  sortKey,
+  sortDir,
+  onSort,
+  className,
+}: {
+  column: SoundSortKey;
+  label: string;
+  sortKey: SoundSortKey;
+  sortDir: "asc" | "desc";
+  onSort: (column: SoundSortKey) => void;
+  className?: string;
+}) => {
+  const active = sortKey === column;
+  const mark = active ? (sortDir === "asc" ? "↑" : "↓") : "";
+  return (
+    <button
+      type="button"
+      className={
+        active
+          ? `jayrr-sound-library__sort is-on ${className ?? ""}`.trim()
+          : `jayrr-sound-library__sort ${className ?? ""}`.trim()
+      }
+      aria-label={`Sort by ${label}`}
+      aria-pressed={active}
+      onClick={() => {
+        onSort(column);
+      }}
+    >
+      {label}
+      {mark ? <span aria-hidden="true">{mark}</span> : null}
+    </button>
+  );
+};
 
 const PlayMark = ({
   playing,
@@ -383,20 +425,30 @@ const JayrrSoundLibraryDialogConnected = ({
   const [pitchFilter, setPitchFilter] = useState(0);
   const [dbFilter, setDbFilter] = useState(0);
   const [loudnessGen, setLoudnessGen] = useState(0);
+  const [sortKey, setSortKey] = useState<SoundSortKey>("name");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
   useEffect(() => {
-    if (dbFilter === 0) {
+    if (dbFilter === 0 && sortKey !== "db") {
       return;
     }
     return subscribeLoudnessCache(() => {
       setLoudnessGen((n) => n + 1);
     });
-  }, [dbFilter]);
+  }, [dbFilter, sortKey]);
+
+  const toggleSort = (column: SoundSortKey) => {
+    if (sortKey === column) {
+      setSortDir((dir) => (dir === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSortKey(column);
+    setSortDir(column === "name" ? "asc" : "desc");
+  };
 
   const visibleSounds = useMemo(() => {
-    // Recompute when async loudness cache notifies (loudnessGen bumps).
     void loudnessGen;
-    return sounds.results.filter((row) => {
+    const filtered = sounds.results.filter((row) => {
       if (!matchesPitchFilter(row.centroidHz, pitchFilter)) {
         return false;
       }
@@ -404,7 +456,33 @@ const JayrrSoundLibraryDialogConnected = ({
         row.loudnessDb ?? peekLoudnessDb(jayrrSoundPlayUrls(row.url, row.path));
       return matchesDecibelFilter(db, dbFilter);
     });
-  }, [dbFilter, loudnessGen, pitchFilter, sounds.results]);
+    const direction = sortDir === "asc" ? 1 : -1;
+    return [...filtered].sort((a, b) => {
+      if (sortKey === "name") {
+        return a.name.localeCompare(b.name) * direction;
+      }
+      if (sortKey === "hz") {
+        return (a.centroidHz - b.centroidHz) * direction;
+      }
+      if (sortKey === "time") {
+        return (a.durationSec - b.durationSec) * direction;
+      }
+      const aDb =
+        a.loudnessDb ?? peekLoudnessDb(jayrrSoundPlayUrls(a.url, a.path));
+      const bDb =
+        b.loudnessDb ?? peekLoudnessDb(jayrrSoundPlayUrls(b.url, b.path));
+      if (aDb == null && bDb == null) {
+        return a.name.localeCompare(b.name);
+      }
+      if (aDb == null) {
+        return 1;
+      }
+      if (bDb == null) {
+        return -1;
+      }
+      return (aDb - bDb) * direction;
+    });
+  }, [dbFilter, loudnessGen, pitchFilter, sortDir, sortKey, sounds.results]);
 
   const children = useMemo(() => {
     if (!folders) {
@@ -612,24 +690,66 @@ const JayrrSoundLibraryDialogConnected = ({
                 type="search"
                 value={search}
               />
-              <MetricFilter
-                unit="Hz"
-                label="Filter by pitch"
-                value={pitchFilter}
-                options={PITCH_FILTERS}
-                onChange={setPitchFilter}
-              />
-              <MetricFilter
-                unit="dB"
-                label="Filter by loudness"
-                value={dbFilter}
-                options={DECIBEL_FILTERS}
-                onChange={setDbFilter}
-              />
+              <div className="jayrr-sound-library__filters">
+                <MetricFilter
+                  unit="Hz"
+                  label="Filter by pitch"
+                  value={pitchFilter}
+                  options={PITCH_FILTERS}
+                  onChange={setPitchFilter}
+                />
+                <MetricFilter
+                  unit="dB"
+                  label="Filter by loudness"
+                  value={dbFilter}
+                  options={DECIBEL_FILTERS}
+                  onChange={setDbFilter}
+                />
+              </div>
             </div>
             {playError ? (
               <p className="jayrr-sound-library__error">{playError}</p>
             ) : null}
+          </div>
+          <div className="jayrr-sound-library__cols" role="row">
+            <span
+              className="jayrr-sound-library__cols-play"
+              aria-hidden="true"
+            />
+            <SortCol
+              column="name"
+              label="Name"
+              sortKey={sortKey}
+              sortDir={sortDir}
+              onSort={toggleSort}
+              className="jayrr-sound-library__sort--name"
+            />
+            <span className="jayrr-sound-library__stats">
+              <SortCol
+                column="hz"
+                label="Hz"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onSort={toggleSort}
+                className="jayrr-sound-library__metric--hz"
+              />
+              <SortCol
+                column="db"
+                label="dB"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onSort={toggleSort}
+                className="jayrr-sound-library__metric--db"
+              />
+              <SortCol
+                column="time"
+                label="Time"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onSort={toggleSort}
+                className="jayrr-sound-library__clock"
+              />
+            </span>
           </div>
           <ul className="jayrr-sound-library__sounds">
             {visibleSounds.map((row) => {

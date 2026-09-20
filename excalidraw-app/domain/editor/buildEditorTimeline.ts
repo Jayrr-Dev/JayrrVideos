@@ -1,4 +1,4 @@
-import type { Id } from "../../../../convex/_generated/dataModel";
+import type { Id } from "../../../convex/_generated/dataModel";
 
 export const EDITOR_PX_PER_SECOND = 40;
 
@@ -8,6 +8,8 @@ export type EditorRecordingSource = {
   posterUrl: string | null;
   label: string;
   durationMs: number;
+  /** Offset into the source recording (ms). Used after Cut. */
+  sourceOffsetMs?: number;
 };
 
 /** User-ordered clip on the timeline (before layout). */
@@ -38,6 +40,7 @@ export const buildEditorTimeline = (
       kind: "recording",
       startMs: cursor,
       durationMs,
+      sourceOffsetMs: clip.sourceOffsetMs ?? 0,
     });
     cursor += durationMs;
   }
@@ -69,3 +72,95 @@ export const formatEditorClock = (ms: number) => {
 
 export const newEditorClipId = () =>
   `clip-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+
+/** Minimum slice length so Cut does not create empty fragments. */
+export const EDITOR_CUT_MIN_MS = 120;
+
+/** True when playhead is inside a clip with room to split on both sides. */
+export const canCutAtTime = (
+  clips: readonly EditorClip[],
+  timeMs: number,
+  minMs = EDITOR_CUT_MIN_MS,
+): boolean => {
+  const clip = clipAtTime(clips, timeMs);
+  if (!clip) {
+    return false;
+  }
+  const offsetInClip = timeMs - clip.startMs;
+  return offsetInClip >= minMs && clip.durationMs - offsetInClip >= minMs;
+};
+
+/**
+ * Selected clips that can merge: 2+ contiguous timeline neighbors from the
+ * same recording with abutting source offsets (typical undo of Cut).
+ */
+export const getMergeableClips = (
+  clips: readonly EditorProjectClip[],
+  selectedIds: ReadonlySet<string>,
+): EditorProjectClip[] | null => {
+  if (selectedIds.size < 2) {
+    return null;
+  }
+  const indices: number[] = [];
+  for (let i = 0; i < clips.length; i++) {
+    const clip = clips[i];
+    if (clip && selectedIds.has(clip.id)) {
+      indices.push(i);
+    }
+  }
+  if (indices.length < 2) {
+    return null;
+  }
+  for (let i = 1; i < indices.length; i++) {
+    if (indices[i] !== (indices[i - 1] ?? -2) + 1) {
+      return null;
+    }
+  }
+  const group = indices
+    .map((index) => clips[index])
+    .filter((clip): clip is EditorProjectClip => Boolean(clip));
+  if (group.length < 2) {
+    return null;
+  }
+  const first = group[0];
+  if (!first) {
+    return null;
+  }
+  for (let i = 1; i < group.length; i++) {
+    const prev = group[i - 1];
+    const cur = group[i];
+    if (!prev || !cur) {
+      return null;
+    }
+    if (cur.recordingId !== first.recordingId) {
+      return null;
+    }
+    const prevEnd = (prev.sourceOffsetMs ?? 0) + prev.durationMs;
+    if ((cur.sourceOffsetMs ?? 0) !== prevEnd) {
+      return null;
+    }
+  }
+  return group;
+};
+
+export const mergeProjectClips = (
+  group: readonly EditorProjectClip[],
+): EditorProjectClip | null => {
+  const first = group[0];
+  if (!first || group.length < 2) {
+    return null;
+  }
+  let durationMs = 0;
+  for (const clip of group) {
+    durationMs += Math.max(1, Math.round(clip.durationMs));
+  }
+  return {
+    id: first.id,
+    recordingId: first.recordingId,
+    url: first.url,
+    posterUrl: first.posterUrl,
+    label: first.label,
+    sourceOffsetMs: first.sourceOffsetMs ?? 0,
+    durationMs,
+  };
+};

@@ -7,7 +7,7 @@ import { createPortal } from "react-dom";
 import type { NonDeletedExcalidrawElement } from "@excalidraw/element/types";
 
 import { useAtomValue } from "../app-jotai";
-import { cameraCutoutAtom } from "../domain/flags";
+import { cameraCutoutAtom } from "../domain/flags/cameraCutoutFlag";
 import {
   getTranscribeEnabled,
   listenDisplayAudio,

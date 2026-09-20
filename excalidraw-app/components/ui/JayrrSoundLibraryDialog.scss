@@ -44,20 +44,22 @@
   }
 
   .jayrr-sound-library__toolbar {
+    flex: 0 0 auto;
     margin-bottom: 0.65rem;
   }
 
   .jayrr-sound-library__toolbar-row {
-    display: flex;
-    align-items: stretch;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
     gap: 0.4rem;
     min-width: 0;
+    width: 100%;
   }
 
   .jayrr-sound-library__search {
-    flex: 1;
     min-width: 0;
-    width: auto;
+    width: 100%;
     box-sizing: border-box;
     padding: 0.45rem 0.65rem;
     border: 1px solid var(--dialog-border-color);
@@ -65,6 +67,15 @@
     background: var(--input-bg-color, var(--island-bg-color));
     color: inherit;
     font: inherit;
+    appearance: none;
+    -webkit-appearance: none;
+  }
+
+  .jayrr-sound-library__filters {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 0.4rem;
   }
 
   .jayrr-sound-library__filter {
@@ -78,9 +89,8 @@
     align-items: center;
     justify-content: center;
     box-sizing: border-box;
-    height: 100%;
-    aspect-ratio: 1 / 1;
-    width: auto;
+    width: 2.35rem;
+    height: 2.35rem;
     padding: 0;
     border: 1px solid var(--dialog-border-color);
     border-radius: 0.4rem;
@@ -168,6 +178,59 @@
     overflow-x: hidden;
     overflow-y: auto;
     scrollbar-width: thin;
+    scrollbar-gutter: stable;
+  }
+
+  .jayrr-sound-library__col--sounds {
+    --jayrr-sound-scroll: 8px;
+  }
+
+  .jayrr-sound-library__cols {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 0.5rem;
+    box-sizing: border-box;
+    min-width: 0;
+    width: 100%;
+    padding: 0 calc(0.5rem + var(--jayrr-sound-scroll)) 0.35rem 0.5rem;
+    border-bottom: 1px solid var(--dialog-border-color);
+    color: var(--color-gray-40);
+    background: var(--island-bg-color);
+  }
+
+  .jayrr-sound-library__cols-play {
+    flex: 0 0 1.7rem;
+    width: 1.7rem;
+  }
+
+  .jayrr-sound-library__sort {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .jayrr-sound-library__sort:hover,
+  .jayrr-sound-library__sort.is-on {
+    color: var(--color-primary);
+  }
+
+  .jayrr-sound-library__sort--name {
+    flex: 1;
+    min-width: 0;
+    justify-content: flex-start;
   }
 
   .jayrr-sound-library__folders::-webkit-scrollbar,
@@ -326,7 +389,7 @@
   .jayrr-sound-library__stats {
     display: flex;
     flex: 0 0 auto;
-    align-items: baseline;
+    align-items: center;
     gap: 0.55rem;
   }
 
@@ -336,6 +399,24 @@
     font-size: 0.75rem;
     font-weight: 600;
     white-space: nowrap;
+    text-align: center;
+  }
+
+  .jayrr-sound-library__metric--hz,
+  .jayrr-sound-library__metric--db,
+  .jayrr-sound-library__clock {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+  }
+
+  .jayrr-sound-library__metric--hz {
+    min-width: 4.5rem;
+  }
+
+  .jayrr-sound-library__metric--db {
+    min-width: 3.6rem;
   }
 
   .jayrr-sound-library__metric.is-empty {
@@ -347,7 +428,14 @@
     width: 3.25rem;
     font-variant-numeric: tabular-nums;
     font-size: 0.8rem;
-    text-align: right;
+  }
+
+  .jayrr-sound-library__cols .jayrr-sound-library__sort {
+    justify-content: center;
+  }
+
+  .jayrr-sound-library__cols .jayrr-sound-library__sort--name {
+    justify-content: flex-start;
   }
 
   .jayrr-sound-library__more {

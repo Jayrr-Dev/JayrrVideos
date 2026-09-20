@@ -8,7 +8,7 @@ export const CAMERA_CUTOUT_OPTIONS = [
   { id: "segmo", label: "Segmo" },
 ] as const;
 
-export type CameraCutout = (typeof CAMERA_CUTOUT_OPTIONS)[number]["id"];
+export type CameraCutout = typeof CAMERA_CUTOUT_OPTIONS[number]["id"];
 
 export const isCameraCutout = (value: string): value is CameraCutout =>
   CAMERA_CUTOUT_OPTIONS.some((option) => option.id === value);

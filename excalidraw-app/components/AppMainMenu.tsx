@@ -21,7 +21,6 @@ import type { Theme } from "@excalidraw/element/types";
 import { useAtomValue } from "../app-jotai";
 import { LanguageList } from "../app-language/LanguageList";
 import { isConvexLinked } from "../convexClient";
-import { JayrrFeatureFlags } from "../domain/flags";
 import {
   connectGoogleDrive,
   disconnectGoogleDrive,
@@ -29,6 +28,7 @@ import {
   isGoogleDriveConfigured,
 } from "../data/connectGoogleDrive";
 import { saveCanvasAsScene } from "../data/jayrrScenes";
+import { JayrrFeatureFlags } from "../domain/flags/JayrrFeatureFlags";
 import { JAYRR_PRESENT_TAB } from "../present/buildPresentDeck";
 
 import { saveDebugState } from "./DebugCanvas";

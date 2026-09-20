@@ -346,27 +346,6 @@ export const usePresentPlayback = (
     };
   }, [goNext, goPrev, presenting, stopPresent]);
 
-  /** Seek PresentPlayer to a step without entering fullscreen Present. */
-  const seekStep = useCallback(
-    (nextIndex: number, animate: boolean) => {
-      applyStep(nextIndex, animate);
-    },
-    [applyStep],
-  );
-
-  /** Clear preview overrides when the editor stops (and Present is not live). */
-  const clearPreview = useCallback(() => {
-    if (presentingRef.current) {
-      return;
-    }
-    if (!api) {
-      return;
-    }
-    player.current.stop(api);
-    stepRef.current = 0;
-    setStepIndex(0);
-  }, [api]);
-
   return {
     deck,
     presenting,
@@ -376,7 +355,5 @@ export const usePresentPlayback = (
     stopPresent,
     goNext,
     goPrev,
-    seekStep,
-    clearPreview,
   };
 };

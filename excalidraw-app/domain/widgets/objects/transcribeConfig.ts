@@ -5,6 +5,11 @@ import { JAYRR_CALLED_OBJECT_KEY } from "../model";
 export type TranscribeConfig = {
   jevIq: boolean;
   jevMbti: boolean;
+  jevMbtiAdvance: boolean;
+  jevEnneagram: boolean;
+  jevHype: boolean;
+  jevEnergy: boolean;
+  jevOnline: boolean;
   jevEmotion: boolean;
   sourceId: string;
 };
@@ -12,6 +17,11 @@ export type TranscribeConfig = {
 export const DEFAULT_TRANSCRIBE: TranscribeConfig = {
   jevIq: false,
   jevMbti: false,
+  jevMbtiAdvance: false,
+  jevEnneagram: false,
+  jevHype: false,
+  jevEnergy: false,
+  jevOnline: false,
   jevEmotion: false,
   sourceId: "mic",
 };
@@ -27,6 +37,12 @@ export const readTranscribeConfig = (
   return {
     jevIq: (bag as { jevIq?: unknown }).jevIq === true,
     jevMbti: (bag as { jevMbti?: unknown }).jevMbti === true,
+    jevMbtiAdvance:
+      (bag as { jevMbtiAdvance?: unknown }).jevMbtiAdvance === true,
+    jevEnneagram: (bag as { jevEnneagram?: unknown }).jevEnneagram === true,
+    jevHype: (bag as { jevHype?: unknown }).jevHype === true,
+    jevEnergy: (bag as { jevEnergy?: unknown }).jevEnergy === true,
+    jevOnline: (bag as { jevOnline?: unknown }).jevOnline === true,
     jevEmotion: (bag as { jevEmotion?: unknown }).jevEmotion === true,
     sourceId: typeof sourceId === "string" && sourceId ? sourceId : "mic",
   };
@@ -44,6 +60,11 @@ export const writeTranscribeConfig = (
   bag.kind = "transcribe";
   bag.jevIq = config.jevIq;
   bag.jevMbti = config.jevMbti;
+  bag.jevMbtiAdvance = config.jevMbtiAdvance;
+  bag.jevEnneagram = config.jevEnneagram;
+  bag.jevHype = config.jevHype;
+  bag.jevEnergy = config.jevEnergy;
+  bag.jevOnline = config.jevOnline;
   bag.jevEmotion = config.jevEmotion;
   bag.sourceId = config.sourceId;
   return {

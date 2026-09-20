@@ -1,6 +1,11 @@
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useEffect } from "react";
 
+import {
+  checkIcon,
+  emptyIcon,
+  settingsIcon,
+} from "@excalidraw/excalidraw/components/icons";
 import { MainMenu } from "@excalidraw/excalidraw/index";
 
 import { useSetAtom } from "../../app-jotai";
@@ -12,13 +17,14 @@ import {
   cameraCutoutAtom,
   isCameraCutout,
   type CameraCutout,
-} from "./jayrrFeatureFlags";
-
-import "./JayrrFeatureFlags.scss";
+} from "./cameraCutoutFlag";
 
 const readCutout = (flags: { key: string; value: string }[] | undefined) => {
   const row = flags?.find((flag) => flag.key === CAMERA_CUTOUT_FLAG);
-  if (!row || !isCameraCutout(row.value)) {
+  if (!row) {
+    return "off";
+  }
+  if (!isCameraCutout(row.value)) {
     return "off";
   }
   return row.value;
@@ -36,7 +42,10 @@ export const JayrrFeatureFlags = () => {
     setCutout(cutout);
   }, [cutout, setCutout]);
 
-  if (!isConvexLinked || !isAuthenticated) {
+  if (!isConvexLinked) {
+    return null;
+  }
+  if (!isAuthenticated) {
     return null;
   }
 
@@ -46,31 +55,25 @@ export const JayrrFeatureFlags = () => {
   };
 
   return (
-    <MainMenu.ItemCustom className="jayrr-feature-flags">
-      <div className="jayrr-feature-flags__row">
-        <span className="jayrr-feature-flags__label">Cutout</span>
-        <div className="jayrr-feature-flags__pills" role="group" aria-label="Camera cutout">
-          {CAMERA_CUTOUT_OPTIONS.map((option) => (
-            <button
-              key={option.id}
-              type="button"
-              className={
-                option.id === cutout
-                  ? "jayrr-feature-flags__pill is-active"
-                  : "jayrr-feature-flags__pill"
-              }
-              aria-pressed={option.id === cutout}
-              onClick={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                onPick(option.id);
-              }}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-      </div>
-    </MainMenu.ItemCustom>
+    <MainMenu.Sub>
+      <MainMenu.Sub.Trigger icon={settingsIcon}>
+        Feature flag
+      </MainMenu.Sub.Trigger>
+      <MainMenu.Sub.Content>
+        {CAMERA_CUTOUT_OPTIONS.map((option) => (
+          <MainMenu.Item
+            key={option.id}
+            icon={option.id === cutout ? checkIcon : emptyIcon}
+            aria-checked={option.id === cutout}
+            onSelect={(event) => {
+              event.preventDefault();
+              onPick(option.id);
+            }}
+          >
+            {option.label}
+          </MainMenu.Item>
+        ))}
+      </MainMenu.Sub.Content>
+    </MainMenu.Sub>
   );
 };
