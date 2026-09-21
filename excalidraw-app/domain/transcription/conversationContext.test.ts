@@ -152,6 +152,28 @@ describe("conversation topic memory", () => {
     expect(notify).toHaveBeenCalledTimes(1);
   });
 
+  it("does not notify when only live speech changes next to existing finals", () => {
+    const context = new ConversationContext();
+    const notify = vi.fn();
+    context.subscribe(notify);
+    context.ingest([turn("a", "Done")]);
+    expect(notify).toHaveBeenCalledTimes(1);
+    context.ingest([turn("a", "Done"), turn("live", "Hello", 0, false)]);
+    context.ingest([turn("a", "Done"), turn("live", "Hello there", 0, false)]);
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(context.version).toBe(0);
+  });
+
+  it("keeps the last topic stamp when a final caption is corrected", () => {
+    const context = new ConversationContext();
+    context.ingest([turn("a", "Our holiday to Paris")]);
+    const topicId = decide(context, "a", "new").topicId!;
+    context.ingest([turn("a", "Our holiday to Paris in June")]);
+    expect(context.results.get("a")?.topicId).toBe(topicId);
+    expect(context.results.get("a")?.provisional).toBe(true);
+    expect(context.turnInTopic("a", topicId)).toBe(true);
+  });
+
   it("keeps 200 turns independently of an 80-bubble feed and caps topics at 100", () => {
     const context = new ConversationContext();
     for (let i = 0; i < 220; i++) {

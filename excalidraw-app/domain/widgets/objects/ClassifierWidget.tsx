@@ -241,8 +241,6 @@ export const ClassifierWidget = ({ elementId }: { elementId: string }) => {
     rootRef,
   );
   const evaluateContext = conversation.evaluate;
-  const contextVersionRef = useRef(conversation.version);
-  contextVersionRef.current = conversation.version;
   const turnsRef = useRef(turns);
   turnsRef.current = turns;
 
@@ -381,7 +379,6 @@ export const ClassifierWidget = ({ elementId }: { elementId: string }) => {
     try {
       for (;;) {
         const generation = generationRef.current;
-        const contextVersion = contextVersionRef.current;
         const job: Job | null | undefined = lastWasLive
           ? queueRef.current.shift() ?? liveJobRef.current
           : liveJobRef.current ?? queueRef.current.shift();
@@ -390,8 +387,7 @@ export const ClassifierWidget = ({ elementId }: { elementId: string }) => {
         }
         if (
           job.turnId !== LIVE_TURN_ID &&
-          scoredTextRef.current.get(job.turnId) ===
-            `${contextVersion}:${job.text}`
+          scoredTextRef.current.get(job.turnId) === job.text
         ) {
           continue;
         }
@@ -425,10 +421,7 @@ export const ClassifierWidget = ({ elementId }: { elementId: string }) => {
           if (job.turnId === LIVE_TURN_ID) {
             setLive(score);
           } else {
-            scoredTextRef.current.set(
-              job.turnId,
-              `${contextVersion}:${job.text}`,
-            );
+            scoredTextRef.current.set(job.turnId, job.text);
             setScores((current) =>
               [
                 ...current.filter((item) => item.turnId !== job.turnId),
@@ -482,15 +475,7 @@ export const ClassifierWidget = ({ elementId }: { elementId: string }) => {
     ) {
       return false;
     }
-    const previous = scoredTextRef.current.get(turn.id);
-    const recent = turnsRef.current
-      .filter((item) => item.isFinal)
-      .slice(-6)
-      .some((item) => item.id === turn.id);
-    if (
-      previous === `${contextVersionRef.current}:${text}` ||
-      (previous?.endsWith(`:${text}`) && !recent)
-    ) {
+    if (scoredTextRef.current.get(turn.id) === text) {
       return false;
     }
     queueRef.current = queueRef.current.filter((job) => job.turnId !== turn.id);
@@ -522,15 +507,7 @@ export const ClassifierWidget = ({ elementId }: { elementId: string }) => {
     if (added) {
       void pump();
     }
-  }, [
-    classesReady,
-    config.sourceId,
-    enqueueFinal,
-    pump,
-    recipeKey,
-    turns,
-    conversation.version,
-  ]);
+  }, [classesReady, config.sourceId, enqueueFinal, pump, recipeKey, turns]);
 
   const liveTurn = useMemo(
     () => turns.filter((turn) => !turn.isFinal).at(-1) ?? null,
@@ -580,11 +557,8 @@ export const ClassifierWidget = ({ elementId }: { elementId: string }) => {
     void conversation.version;
     return buildSpeakerCards(
       config.contextEnabled
-        ? scores.filter(
-            (row) =>
-              conversation.topicId !== null &&
-              conversation.context.results.get(row.turnId)?.topicId ===
-                conversation.topicId,
+        ? scores.filter((row) =>
+            conversation.context.turnInTopic(row.turnId, conversation.topicId),
           )
         : live
         ? [...scores, live]

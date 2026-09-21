@@ -190,20 +190,73 @@ const slug = (label: string) =>
 export const EMOTION_BANDS: readonly {
   tone: EmotionTone;
   label: string;
+  what: string;
 }[] = [
-  { tone: "uncertain", label: "Uncertain" },
-  { tone: "unplanned", label: "Unplanned" },
-  { tone: "compare", label: "Compare" },
-  { tone: "beyond", label: "Beyond" },
-  { tone: "seem", label: "Seem" },
-  { tone: "together", label: "Together" },
-  { tone: "short", label: "Short" },
-  { tone: "heart", label: "Heart" },
-  { tone: "connect", label: "Connect" },
-  { tone: "hurt", label: "Hurt" },
-  { tone: "good", label: "Good" },
-  { tone: "assess", label: "Assess" },
-  { tone: "wronged", label: "Wronged" },
+  {
+    tone: "uncertain",
+    label: "Uncertain",
+    what: "Things feel uncertain or overwhelming.",
+  },
+  {
+    tone: "unplanned",
+    label: "Unplanned",
+    what: "Things did not go as planned.",
+  },
+  {
+    tone: "compare",
+    label: "Compare",
+    what: "Comparing yourself or others.",
+  },
+  {
+    tone: "beyond",
+    label: "Beyond",
+    what: "Something feels bigger than you can hold.",
+  },
+  {
+    tone: "seem",
+    label: "Seem",
+    what: "Things are not quite what they seem.",
+  },
+  {
+    tone: "together",
+    label: "Together",
+    what: "Feeling with other people.",
+  },
+  {
+    tone: "short",
+    label: "Short",
+    what: "Feeling like you fell short.",
+  },
+  {
+    tone: "heart",
+    label: "Heart",
+    what: "The heart is open, hurt, or guarded.",
+  },
+  {
+    tone: "connect",
+    label: "Connect",
+    what: "Searching for belonging or connection.",
+  },
+  {
+    tone: "hurt",
+    label: "Hurt",
+    what: "Pain, sadness, or grief.",
+  },
+  {
+    tone: "good",
+    label: "Good",
+    what: "Life feels good, calm, or grateful.",
+  },
+  {
+    tone: "assess",
+    label: "Assess",
+    what: "Judging yourself: pride or humility.",
+  },
+  {
+    tone: "wronged",
+    label: "Wronged",
+    what: "Feeling treated unfairly or angry.",
+  },
 ];
 
 export const EMOTIONS: readonly EmotionDef[] = CLUSTERS.flatMap((cluster) =>

@@ -7,23 +7,50 @@ export type CreateEditorClipInput = {
   height?: number;
 };
 
-export const isCreateEditorClipInput = (
+const readFiniteNumber = (value: unknown) => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return null;
+};
+
+export const parseCreateEditorClipInput = (
   value: unknown,
-): value is CreateEditorClipInput => {
+): CreateEditorClipInput | null => {
   if (!value || typeof value !== "object") {
-    return false;
+    return null;
   }
   const label = Reflect.get(value, "label");
-  const durationMs = Reflect.get(value, "durationMs");
+  const durationMs = readFiniteNumber(Reflect.get(value, "durationMs"));
   const html = Reflect.get(value, "html");
   if (typeof label !== "string" || !label.trim()) {
-    return false;
+    return null;
   }
-  if (typeof durationMs !== "number" || !Number.isFinite(durationMs)) {
-    return false;
+  if (durationMs == null || durationMs < 1) {
+    return null;
   }
   if (typeof html !== "string" || !html.trim()) {
-    return false;
+    return null;
   }
-  return true;
+  const css = Reflect.get(value, "css");
+  const width = readFiniteNumber(Reflect.get(value, "width"));
+  const height = readFiniteNumber(Reflect.get(value, "height"));
+  return {
+    label,
+    durationMs: Math.round(durationMs),
+    html,
+    ...(typeof css === "string" && css.trim() ? { css } : {}),
+    ...(width != null && width > 0 ? { width: Math.round(width) } : {}),
+    ...(height != null && height > 0 ? { height: Math.round(height) } : {}),
+  };
 };
+
+export const isCreateEditorClipInput = (
+  value: unknown,
+): value is CreateEditorClipInput => parseCreateEditorClipInput(value) != null;

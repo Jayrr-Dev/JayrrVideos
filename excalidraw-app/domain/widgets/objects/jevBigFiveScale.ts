@@ -1,7 +1,6 @@
 import { JEV_SHARED_EVIDENCE } from "../../transcription/jevSharedState";
 
-const UTTERANCE_SCOPE =
-  `Judge only \`utterance\`. ${JEV_SHARED_EVIDENCE} Each trait is a spectrum, not a type. Score how this line behaves, not a life diagnosis.`;
+const UTTERANCE_SCOPE = `Judge only \`utterance\`. ${JEV_SHARED_EVIDENCE} Each trait is a spectrum, not a type. Score how this line behaves, not a life diagnosis.`;
 
 export type BigFiveId = "O" | "C" | "E" | "A" | "N";
 

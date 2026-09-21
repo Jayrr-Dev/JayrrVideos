@@ -1,7 +1,6 @@
 import { JEV_SHARED_EVIDENCE } from "../../transcription/jevSharedState";
 
-const UTTERANCE_SCOPE =
-  `Judge only \`utterance\`. ${JEV_SHARED_EVIDENCE} Score the emotional energy this line expresses, not a life diagnosis or a running speaker mean.`;
+const UTTERANCE_SCOPE = `Judge only \`utterance\`. ${JEV_SHARED_EVIDENCE} Score the emotional energy this line expresses, not a life diagnosis or a running speaker mean.`;
 
 export type EnergyZone = "low" | "mid" | "high";
 

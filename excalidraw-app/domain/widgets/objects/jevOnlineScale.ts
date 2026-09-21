@@ -1,7 +1,6 @@
 import { JEV_SHARED_EVIDENCE } from "../../transcription/jevSharedState";
 
-const UTTERANCE_SCOPE =
-  `Judge only \`utterance\`. ${JEV_SHARED_EVIDENCE} Score how this line treats other people, not whether the topic is serious.`;
+const UTTERANCE_SCOPE = `Judge only \`utterance\`. ${JEV_SHARED_EVIDENCE} Score how this line treats other people, not whether the topic is serious.`;
 
 export type OnlineId =
   | "troll"

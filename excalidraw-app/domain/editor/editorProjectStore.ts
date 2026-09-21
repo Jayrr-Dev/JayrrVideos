@@ -5,8 +5,8 @@ import {
   EDITOR_AUDIO_TYPE,
   EDITOR_CLIP_TYPE,
   EDITOR_HTML_TYPE,
+  clampEditorPxPerSecond,
   EDITOR_PX_PER_SECOND,
-  EDITOR_PX_PER_SECOND_OPTIONS,
   EDITOR_SOUND_TYPE,
   EDITOR_STATIC_TYPE,
   isEditorAudioType,
@@ -167,8 +167,12 @@ export const parseStoredEditorClips = (parsed: unknown): StoredEditorClip[] => {
       });
       continue;
     }
-    if (isEditorHtmlType(typeRaw)) {
-      const html = Reflect.get(item, "html");
+    const htmlRaw = Reflect.get(item, "html");
+    if (
+      isEditorHtmlType(typeRaw) ||
+      (typeRaw === undefined && typeof htmlRaw === "string" && htmlRaw.trim())
+    ) {
+      const html = htmlRaw;
       if (typeof html !== "string" || !html.trim()) {
         continue;
       }
@@ -316,10 +320,14 @@ export const readStoredClips = (): StoredEditorClip[] => {
 };
 
 export const writeStoredClips = (clips: readonly EditorProjectClip[]) => {
-  localStorage.setItem(
-    EDITOR_CLIPS_STORAGE_KEY,
-    JSON.stringify(clipsToStoredEditor(clips)),
-  );
+  try {
+    localStorage.setItem(
+      EDITOR_CLIPS_STORAGE_KEY,
+      JSON.stringify(clipsToStoredEditor(clips)),
+    );
+  } catch {
+    // Quota or private mode: Convex autosave is the durable copy.
+  }
 };
 
 export const readStoredStackLanes = (): string[] => {
@@ -362,16 +370,14 @@ export const parseStoredEditorView = (parsed: unknown): StoredEditorView => {
       }
     }
   }
-  const pxAllowed = (
-    EDITOR_PX_PER_SECOND_OPTIONS as readonly number[]
-  ).includes(typeof pxRaw === "number" ? pxRaw : NaN);
   return {
     zoomMode: isEditorZoomMode(zoomRaw)
       ? zoomRaw
       : DEFAULT_EDITOR_VIEW.zoomMode,
-    pxPerSecond: pxAllowed
-      ? (pxRaw as number)
-      : DEFAULT_EDITOR_VIEW.pxPerSecond,
+    pxPerSecond:
+      typeof pxRaw === "number" && Number.isFinite(pxRaw)
+        ? clampEditorPxPerSecond(pxRaw)
+        : DEFAULT_EDITOR_VIEW.pxPerSecond,
     currentTimeMs: timeRaw ?? 0,
     selectedClipIds,
     previewElementId:

@@ -557,6 +557,8 @@
     flex: 1;
     min-height: 0;
     overflow: auto;
+    overscroll-behavior: contain;
+    touch-action: pan-y;
     position: relative;
     cursor: ns-resize;
     outline: none;
@@ -775,7 +777,7 @@
     overflow: hidden;
     z-index: 1;
     flex-shrink: 0;
-    touch-action: none;
+    touch-action: pan-y;
     outline: none;
     appearance: none;
     opacity: 0.85;

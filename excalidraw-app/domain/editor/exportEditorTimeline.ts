@@ -156,6 +156,31 @@ const startVisualCapture = (
     context.drawImage(image, 0, 0, canvas.width, canvas.height);
     context.restore();
   };
+  const compositionCaption = (html: string) => {
+    const title = html.match(/<title>([^<]*)<\/title>/i)?.[1]?.trim();
+    if (title) {
+      return title;
+    }
+    return html.match(/<h1\b[^>]*>([^<]*)<\/h1>/i)?.[1]?.trim() ?? "";
+  };
+  const paintComposition = (frame: HTMLIFrameElement | null | undefined) => {
+    if (!frame || !frame.classList.contains("is-on")) {
+      return;
+    }
+    const caption = compositionCaption(frame.srcdoc || "");
+    context.save();
+    context.fillStyle = "#0f172a";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    if (caption) {
+      const size = Math.max(28, Math.round(canvas.width * 0.08));
+      context.fillStyle = "#f8fafc";
+      context.font = `800 ${size}px Nunito, system-ui, sans-serif`;
+      context.textAlign = "center";
+      context.textBaseline = "middle";
+      context.fillText(caption, canvas.width / 2, canvas.height / 2);
+    }
+    context.restore();
+  };
   let raf = 0;
   const draw = () => {
     context.fillStyle = "#0f172a";
@@ -167,6 +192,7 @@ const startVisualCapture = (
     for (const still of layers.staticStacks ?? []) {
       paintStill(still);
     }
+    paintComposition(layers.composition);
     raf = ownerWindow.requestAnimationFrame(draw);
   };
   draw();

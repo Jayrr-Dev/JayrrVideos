@@ -10,11 +10,11 @@ import { Dialog, Tooltip } from "../../components/ui/editor";
 import { Field, Input } from "../../components/ui/Field";
 import { api } from "../../convexClient";
 import { getOpenRecordingFolderId } from "../../present/openRecordingFolder";
-import { DEFAULT_EDITOR_PROJECT_NAME } from "./editorProjectStore";
 
 import "../../components/ui/JayrrLibraryMenu.scss";
-
 import "../../present/JayrrPresentPanel.scss";
+
+import { DEFAULT_EDITOR_PROJECT_NAME } from "./editorProjectStore";
 
 import "./JayrrEditorAddRecordingDialog.scss";
 

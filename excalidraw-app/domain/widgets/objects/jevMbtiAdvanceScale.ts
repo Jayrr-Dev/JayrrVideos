@@ -1,7 +1,6 @@
 import { JEV_SHARED_EVIDENCE } from "../../transcription/jevSharedState";
 
-const UTTERANCE_SCOPE =
-  `Judge only \`utterance\`. ${JEV_SHARED_EVIDENCE} Score the cognitive function this line is using, not a life diagnosis.`;
+const UTTERANCE_SCOPE = `Judge only \`utterance\`. ${JEV_SHARED_EVIDENCE} Score the cognitive function this line is using, not a life diagnosis.`;
 
 export type CogFn = "Se" | "Si" | "Ne" | "Ni" | "Te" | "Ti" | "Fe" | "Fi";
 
@@ -10,6 +9,7 @@ type CogDef = {
   attitude: "E" | "I";
   axis: "perceive" | "judge";
   family: "S" | "N" | "T" | "F";
+  what: string;
   option: string;
 };
 
@@ -19,6 +19,7 @@ export const COG_FUNCTIONS: readonly CogDef[] = [
     attitude: "E",
     axis: "perceive",
     family: "S",
+    what: "Notices and acts on what is happening right now.",
     option:
       "Extraverted Sensing. Immersed in the present, acts on what is here now, improvises, seizes chances. Adventurous, realistic, sensory.",
   },
@@ -27,6 +28,7 @@ export const COG_FUNCTIONS: readonly CogDef[] = [
     attitude: "I",
     axis: "perceive",
     family: "S",
+    what: "Uses past experience, details, and what already works.",
     option:
       "Introverted Sensing. Compares now with memory, prefers the familiar, details, routines, what has worked. Reliable, meticulous, traditional.",
   },
@@ -35,6 +37,7 @@ export const COG_FUNCTIONS: readonly CogDef[] = [
     attitude: "E",
     axis: "perceive",
     family: "N",
+    what: "Spots new possibilities and connections between ideas.",
     option:
       "Extraverted Intuition. Generates alternatives and connections, plays with ideas, sees potential everywhere. Creative, curious, scattered if stretched.",
   },
@@ -43,6 +46,7 @@ export const COG_FUNCTIONS: readonly CogDef[] = [
     attitude: "I",
     axis: "perceive",
     family: "N",
+    what: "Follows one inner hunch about where things are heading.",
     option:
       "Introverted Intuition. One inner vision, hidden pattern, forecast. Insightful, strategic, converges instead of branching.",
   },
@@ -51,6 +55,7 @@ export const COG_FUNCTIONS: readonly CogDef[] = [
     attitude: "E",
     axis: "judge",
     family: "T",
+    what: "Organizes people and plans to get a result.",
     option:
       "Extraverted Thinking. Organizes the outer world for results, plans, metrics, efficiency. Decisive, pragmatic, systems and execution.",
   },
@@ -59,6 +64,7 @@ export const COG_FUNCTIONS: readonly CogDef[] = [
     attitude: "I",
     axis: "judge",
     family: "T",
+    what: "Builds an inner logic and checks if it holds.",
     option:
       "Introverted Thinking. Internal logic, precise models, finds the flaw. Independent, accuracy over harmony, challenges assumptions.",
   },
@@ -67,6 +73,7 @@ export const COG_FUNCTIONS: readonly CogDef[] = [
     attitude: "E",
     axis: "judge",
     family: "F",
+    what: "Reads the room and cares about group mood.",
     option:
       "Extraverted Feeling. Reads the room, group values, mood, belonging. Empathetic, expressive, people over things.",
   },
@@ -75,6 +82,7 @@ export const COG_FUNCTIONS: readonly CogDef[] = [
     attitude: "I",
     axis: "judge",
     family: "F",
+    what: "Stays true to personal values and feelings.",
     option:
       "Introverted Feeling. Personal values and identity, sincere, individual. Ethics over logic, meaning and authenticity.",
   },
@@ -83,6 +91,8 @@ export const COG_FUNCTIONS: readonly CogDef[] = [
 const COG_BY_ID = new Map(COG_FUNCTIONS.map((row) => [row.id, row]));
 
 export const COG_BANDS: readonly CogFn[] = COG_FUNCTIONS.map((row) => row.id);
+
+export const cogWhat = (fn: CogFn) => COG_BY_ID.get(fn)?.what;
 
 export const COG_QUESTION_ID = "cogfn";
 

@@ -1,7 +1,6 @@
 import { JEV_SHARED_EVIDENCE } from "../../transcription/jevSharedState";
 
-const UTTERANCE_SCOPE =
-  `Judge only \`utterance\`. ${JEV_SHARED_EVIDENCE} Score how well this line understands the situation, not a lifetime IQ or whether you like the speaker.`;
+const UTTERANCE_SCOPE = `Judge only \`utterance\`. ${JEV_SHARED_EVIDENCE} Score how well this line understands the situation, not a lifetime IQ or whether you like the speaker.`;
 
 export type SmartId =
   | "clueless"

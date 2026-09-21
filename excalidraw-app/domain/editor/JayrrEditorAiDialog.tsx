@@ -26,7 +26,7 @@ import { Button } from "../../components/ui/Button";
 import { Dialog, Tooltip } from "../../components/ui/editor";
 import { convexSiteUrl } from "../../convexClient";
 
-import { isCreateEditorClipInput } from "./applyEditorClipTool";
+import { parseCreateEditorClipInput } from "./applyEditorClipTool";
 import {
   compositionDurationMs,
   wrapHyperframeComposition,
@@ -184,6 +184,7 @@ export const JayrrEditorAiDialog = ({ onClose }: JayrrEditorAiDialogProps) => {
     () => new Map(),
   );
   const scroller = useRef<HTMLDivElement>(null);
+  const appliedToolCalls = useRef(new Set<string>());
 
   const editorSnapshot = useMemo(
     () => ({
@@ -220,6 +221,38 @@ export const JayrrEditorAiDialog = ({ onClose }: JayrrEditorAiDialogProps) => {
     [editorSnapshot, token],
   );
 
+  const applyCreatedClip = useCallback(
+    (
+      toolCallId: string,
+      spec: NonNullable<ReturnType<typeof parseCreateEditorClipInput>>,
+    ) => {
+      if (appliedToolCalls.current.has(toolCallId)) {
+        return;
+      }
+      appliedToolCalls.current.add(toolCallId);
+      const durationMs = compositionDurationMs(spec.html, spec.durationMs);
+      const html = wrapHyperframeComposition({
+        html: spec.html,
+        css: spec.css,
+        width: spec.width,
+        height: spec.height,
+        durationMs,
+        label: spec.label,
+      });
+      const clipId = addHtmlClip({
+        label: spec.label,
+        html,
+        durationMs,
+        width: spec.width,
+        height: spec.height,
+      });
+      setSelectedClipIds([clipId]);
+    },
+    [addHtmlClip, setSelectedClipIds],
+  );
+  const applyCreatedClipRef = useRef(applyCreatedClip);
+  applyCreatedClipRef.current = applyCreatedClip;
+
   const { messages, sendMessage, status, error, stop } = useChat<UIMessage>({
     throttle: 250,
     transport,
@@ -236,38 +269,49 @@ export const JayrrEditorAiDialog = ({ onClose }: JayrrEditorAiDialogProps) => {
       if (toolCall.toolName !== "create_clip") {
         return;
       }
-      if (!isCreateEditorClipInput(toolCall.input)) {
+      const spec = parseCreateEditorClipInput(toolCall.input);
+      if (!spec) {
         setToolErrors((prev) =>
           new Map(prev).set(toolCall.toolCallId, "Clip spec was invalid."),
         );
         return;
       }
-      const durationMs = compositionDurationMs(
-        toolCall.input.html,
-        toolCall.input.durationMs,
-      );
-      const html = wrapHyperframeComposition({
-        html: toolCall.input.html,
-        css: toolCall.input.css,
-        width: toolCall.input.width,
-        height: toolCall.input.height,
-        durationMs,
-        label: toolCall.input.label,
-      });
-      const clipId = addHtmlClip({
-        label: toolCall.input.label,
-        html,
-        durationMs,
-        width: toolCall.input.width,
-        height: toolCall.input.height,
-      });
-      setSelectedClipIds([clipId]);
+      applyCreatedClipRef.current(toolCall.toolCallId, spec);
     },
   });
 
   const busy = status === "submitted" || status === "streaming";
   const last = messages.at(-1);
   const showThinking = busy && !hasVisibleParts(last);
+
+  useEffect(() => {
+    for (const message of messages) {
+      if (message.role !== "assistant") {
+        continue;
+      }
+      for (const part of message.parts) {
+        if (!isToolUIPart(part)) {
+          continue;
+        }
+        const name =
+          part.type === "dynamic-tool"
+            ? part.toolName
+            : part.type.startsWith("tool-")
+            ? part.type.slice("tool-".length)
+            : part.type;
+        if (name !== "create_clip") {
+          continue;
+        }
+        const spec = parseCreateEditorClipInput(
+          "input" in part ? part.input : undefined,
+        );
+        if (!spec) {
+          continue;
+        }
+        applyCreatedClip(part.toolCallId, spec);
+      }
+    }
+  }, [applyCreatedClip, messages]);
 
   useEffect(() => {
     scroller.current?.scrollTo({ top: scroller.current.scrollHeight });

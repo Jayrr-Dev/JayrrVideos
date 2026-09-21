@@ -38,6 +38,7 @@ import {
 import { DropdownMenu } from "radix-ui";
 
 import {
+  clampEditorPxPerSecond,
   clipLaneId,
   collectLaneOverlaps,
   collectOverlapBands,
@@ -133,16 +134,40 @@ type JayrrEditorTimelineProps = {
   ) => void;
   onAddStackLane: () => void;
   onRemoveStackLane: (laneId: string) => void;
+  onZoomPxPerSecond: (px: number) => void;
   menuContainer?: HTMLElement | null;
 };
 
 const msToPx = (ms: number, pxPerMs: number) => ms * pxPerMs;
 
-const RULER_TICK_MS = 1000;
 const TRACK_PAD_PX = 10;
+const MIN_RULER_TICK_PX = 28;
+const RULER_TICK_MS_OPTIONS = [
+  100, 200, 500, 1000, 2000, 5000, 10_000, 15_000, 30_000, 60_000, 120_000,
+  300_000,
+] as const;
+
+const pickRulerTickMs = (pxPerMs: number) => {
+  for (const ms of RULER_TICK_MS_OPTIONS) {
+    if (ms * pxPerMs >= MIN_RULER_TICK_PX) {
+      return ms;
+    }
+  }
+  return RULER_TICK_MS_OPTIONS[RULER_TICK_MS_OPTIONS.length - 1];
+};
+
+const formatRulerTick = (ms: number, tickMs: number) => {
+  if (tickMs >= 1000) {
+    return formatEditorClock(ms);
+  }
+  const rounded = Math.round(ms / 100) * 100;
+  const minutes = Math.floor(rounded / 60_000);
+  const rest = (rounded % 60_000) / 1000;
+  return `${minutes}:${rest.toFixed(1).padStart(4, "0")}`;
+};
 const SNAP_THRESHOLD_PX = 8;
 const CLIP_SHADE_COUNT = 5;
-const TAIL_VIEWPORTS = 1;
+const TAIL_VIEWPORTS = 2;
 const GROW_NEAR_END_PX = 160;
 
 const clipShadeIndex = (clipId: string) => {
@@ -189,6 +214,7 @@ export const JayrrEditorTimeline = ({
   onReorderOverlap,
   onAddStackLane,
   onRemoveStackLane,
+  onZoomPxPerSecond,
   menuContainer,
 }: JayrrEditorTimelineProps) => {
   const bodyRef = useRef<HTMLDivElement | null>(null);
@@ -201,6 +227,9 @@ export const JayrrEditorTimeline = ({
     clip: EditorClip;
     edge: EditorClipEdge;
   } | null>(null);
+  const zoomAnchorRef = useRef<{ pointerMs: number; offsetY: number } | null>(
+    null,
+  );
   const [bodyHeight, setBodyHeight] = useState(360);
   const [scrollTop, setScrollTop] = useState(0);
   const [grownPx, setGrownPx] = useState(0);
@@ -305,6 +334,19 @@ export const JayrrEditorTimeline = ({
   }, [bodyHeight, pxPerSecond, timeline.totalMs, zoomMode]);
 
   const snapThresholdMs = SNAP_THRESHOLD_PX / pxPerMs;
+  const rulerTickMs = pickRulerTickMs(pxPerMs);
+
+  useLayoutEffect(() => {
+    const body = bodyRef.current;
+    const anchor = zoomAnchorRef.current;
+    if (!body || !anchor) {
+      return;
+    }
+    zoomAnchorRef.current = null;
+    body.scrollTop =
+      TRACK_PAD_PX + msToPx(anchor.pointerMs, pxPerMs) - anchor.offsetY;
+    setScrollTop(body.scrollTop);
+  }, [pxPerMs]);
 
   const viewportPx = Math.max(80, Math.min(bodyHeight, 2400));
   const contentHeight = Math.max(
@@ -320,30 +362,31 @@ export const JayrrEditorTimeline = ({
   const playheadTop = TRACK_PAD_PX + msToPx(currentTimeMs, pxPerMs);
 
   const ticks = useMemo(() => {
+    const tickMs = rulerTickMs;
     const startMs = Math.max(
       0,
       Math.floor(
-        (scrollTop - TRACK_PAD_PX) / Math.max(pxPerMs, 0.0001) / RULER_TICK_MS,
+        (scrollTop - TRACK_PAD_PX) / Math.max(pxPerMs, 0.0001) / tickMs,
       ) *
-        RULER_TICK_MS -
-        RULER_TICK_MS * 2,
+        tickMs -
+        tickMs * 2,
     );
     const endMs = Math.min(
       canvasMs,
       Math.ceil(
         (scrollTop + bodyHeight - TRACK_PAD_PX) /
           Math.max(pxPerMs, 0.0001) /
-          RULER_TICK_MS,
+          tickMs,
       ) *
-        RULER_TICK_MS +
-        RULER_TICK_MS * 2,
+        tickMs +
+        tickMs * 2,
     );
     const marks: number[] = [];
-    for (let t = startMs; t <= endMs; t += RULER_TICK_MS) {
+    for (let t = startMs; t <= endMs; t += tickMs) {
       marks.push(t);
     }
     return marks;
-  }, [bodyHeight, canvasMs, pxPerMs, scrollTop]);
+  }, [bodyHeight, canvasMs, pxPerMs, rulerTickMs, scrollTop]);
 
   const timeFromClientY = useCallback(
     (clientY: number, clampToTimeline = true) => {
@@ -357,10 +400,48 @@ export const JayrrEditorTimeline = ({
       if (!clampToTimeline) {
         return Math.max(0, ms);
       }
-      return Math.max(0, Math.min(Math.max(timeline.totalMs, 1), ms));
+      return Math.max(0, Math.min(Math.max(canvasMs, 1), ms));
     },
-    [pxPerMs, timeline.totalMs],
+    [canvasMs, pxPerMs],
   );
+
+  useEffect(() => {
+    const body = bodyRef.current;
+    if (!body) {
+      return;
+    }
+    const onWheel = (event: WheelEvent) => {
+      if (event.ctrlKey || event.metaKey) {
+        event.preventDefault();
+        event.stopPropagation();
+        const rect = body.getBoundingClientRect();
+        const offsetY = event.clientY - rect.top;
+        const pointerMs = Math.max(
+          0,
+          (body.scrollTop + offsetY - TRACK_PAD_PX) / Math.max(pxPerMs, 0.0001),
+        );
+        const scale = Math.pow(2, -event.deltaY / 380);
+        const next = clampEditorPxPerSecond(pxPerMs * 1000 * scale);
+        if (Math.abs(next - pxPerMs * 1000) < 0.05) {
+          return;
+        }
+        zoomAnchorRef.current = { pointerMs, offsetY };
+        onZoomPxPerSecond(next);
+        return;
+      }
+      const delta = event.shiftKey
+        ? event.deltaX || event.deltaY
+        : event.deltaY;
+      if (!delta) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      body.scrollTop += delta;
+    };
+    body.addEventListener("wheel", onWheel, { passive: false });
+    return () => body.removeEventListener("wheel", onWheel);
+  }, [onZoomPxPerSecond, pxPerMs]);
 
   const onTimelineScroll = useCallback(() => {
     const body = bodyRef.current;
@@ -893,7 +974,11 @@ export const JayrrEditorTimeline = ({
             className="jayrr-editor-timeline__tracks"
             style={{ height: totalHeight }}
           >
-            <TimelineRuler ticks={ticks} pxPerMs={pxPerMs} />
+            <TimelineRuler
+              ticks={ticks}
+              pxPerMs={pxPerMs}
+              tickMs={rulerTickMs}
+            />
             <TrackLane
               laneId={SEQUENCE_LANE_ID}
               dropSlot={
@@ -1093,9 +1178,11 @@ const LaneHeader = ({
 const TimelineRuler = ({
   ticks,
   pxPerMs,
+  tickMs,
 }: {
   ticks: readonly number[];
   pxPerMs: number;
+  tickMs: number;
 }) => (
   <div className="jayrr-editor-timeline__ruler">
     {ticks.map((t) => (
@@ -1104,7 +1191,7 @@ const TimelineRuler = ({
         className="jayrr-editor-timeline__tick"
         style={{ top: TRACK_PAD_PX + msToPx(t, pxPerMs) }}
       >
-        {formatEditorClock(t)}
+        {formatRulerTick(t, tickMs)}
       </div>
     ))}
   </div>

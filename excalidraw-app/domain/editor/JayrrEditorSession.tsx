@@ -24,7 +24,7 @@ import {
   buildEditorTimeline,
   EDITOR_CLIP_TYPE,
   EDITOR_HTML_TYPE,
-  EDITOR_PX_PER_SECOND_OPTIONS,
+  clampEditorPxPerSecond,
   EDITOR_SOUND_TYPE,
   EDITOR_STATIC_DURATION_MS,
   EDITOR_STATIC_TYPE,
@@ -184,6 +184,7 @@ type EditorSessionValue = {
   loadProject: (projectId: Id<"editorProjects">) => Promise<void>;
   projectName: string;
   loadedProjectId: Id<"editorProjects"> | null;
+  sessionReady: boolean;
   setProjectName: (name: string) => void;
   markProjectSaved: (projectId: Id<"editorProjects">, name: string) => void;
   undo: () => boolean;
@@ -234,6 +235,7 @@ export const JayrrEditorSession = ({ children }: { children: ReactNode }) => {
     useState<Id<"editorProjects"> | null>(
       () => readStoredEditorProjectMeta().projectId,
     );
+  const [sessionReady, setSessionReady] = useState(false);
   const [selectedElementIds, setSelectedElementIds] = useState<
     Record<string, boolean>
   >({});
@@ -311,7 +313,6 @@ export const JayrrEditorSession = ({ children }: { children: ReactNode }) => {
     }
     const stored = readStoredClips();
     if (stored.length === 0) {
-      hydratedRef.current = true;
       return;
     }
     const needsRecordings = stored.some((item) => item.recordingId);
@@ -336,6 +337,7 @@ export const JayrrEditorSession = ({ children }: { children: ReactNode }) => {
         return next;
       });
     }
+    setSessionReady(true);
   }, [authLoading, canQuery, recordings]);
 
   useEffect(() => {
@@ -431,10 +433,10 @@ export const JayrrEditorSession = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const setPxPerSecond = useCallback((px: number) => {
-    if (!(EDITOR_PX_PER_SECOND_OPTIONS as readonly number[]).includes(px)) {
+    if (!Number.isFinite(px)) {
       return;
     }
-    setPxPerSecondState(px);
+    setPxPerSecondState(clampEditorPxPerSecond(px));
     setZoomModeState("fixed");
   }, []);
 
@@ -777,7 +779,7 @@ export const JayrrEditorSession = ({ children }: { children: ReactNode }) => {
   );
 
   const loadProject = useCallback(
-    async (projectId: Id<"editorProjects">) => {
+    async (projectId: Id<"editorProjects">, options?: { quiet?: boolean }) => {
       if (!convexClient) {
         throw new Error("Sign in to load projects.");
       }
@@ -828,13 +830,37 @@ export const JayrrEditorSession = ({ children }: { children: ReactNode }) => {
           // Keep restored clips even if view payload is invalid.
         }
       }
-      apiExcal?.setToast({
-        message: `Loaded "${project.name}".`,
-        closable: true,
-      });
+      if (!options?.quiet) {
+        apiExcal?.setToast({
+          message: `Loaded "${project.name}".`,
+          closable: true,
+        });
+      }
     },
     [apiExcal, applyRestored, linkPreview, persistProjectMeta, seek],
   );
+
+  useEffect(() => {
+    if (hydratedRef.current) {
+      return;
+    }
+    if (readStoredClips().length > 0) {
+      return;
+    }
+    if (authLoading) {
+      return;
+    }
+    const projectId = loadedProjectId;
+    if (!projectId || !canQuery) {
+      hydratedRef.current = true;
+      setSessionReady(true);
+      return;
+    }
+    hydratedRef.current = true;
+    void loadProject(projectId, { quiet: true }).finally(() => {
+      setSessionReady(true);
+    });
+  }, [authLoading, canQuery, loadProject, loadedProjectId]);
 
   const hasVisual =
     clips.some(isEditorVideoClip) || clips.some(isEditorClocklessVisual);
@@ -882,6 +908,7 @@ export const JayrrEditorSession = ({ children }: { children: ReactNode }) => {
       loadProject,
       projectName,
       loadedProjectId,
+      sessionReady,
       setProjectName,
       markProjectSaved,
       undo,
@@ -922,6 +949,7 @@ export const JayrrEditorSession = ({ children }: { children: ReactNode }) => {
       seek,
       selectedClipIds,
       selectedLinkable,
+      sessionReady,
       setProjectName,
       setPxPerSecond,
       setSelectedClipIds,

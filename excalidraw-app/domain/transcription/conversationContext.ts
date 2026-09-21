@@ -1,8 +1,9 @@
+import { debugTranscribe } from "./debugTranscribe";
+
 import type {
   JevAnswer,
   JevQuestion,
 } from "../../../convex/canvasAi/jevClient";
-import { debugTranscribe } from "./debugTranscribe";
 import type { TranscriptFeedTurn } from "./publishTranscript";
 
 export type TopicMemory = {
@@ -116,6 +117,7 @@ export class ConversationContext {
 
   ingest(incoming: TranscriptFeedTurn[], now = Date.now()) {
     let changed = false;
+    let finalChanged = false;
     for (const turn of incoming) {
       const old = this.turns.find((item) => item.id === turn.id);
       if (
@@ -136,7 +138,16 @@ export class ConversationContext {
           this.version++;
         }
         this.turns[this.turns.indexOf(old)] = next;
-        this.results.delete(old.id);
+        const previous = this.results.get(old.id);
+        if (!next.isFinal) {
+          this.results.delete(old.id);
+        } else if (previous) {
+          this.results.set(old.id, {
+            ...previous,
+            revision: next.revision,
+            provisional: true,
+          });
+        }
         // A corrected source invalidates memories that incorporated its old text.
         for (const topic of this.topics) {
           if (topic.turnIds.includes(old.id)) {
@@ -153,6 +164,7 @@ export class ConversationContext {
           this.dirtySince = now;
         }
         this.dirty.add(next.id);
+        finalChanged = true;
       }
       changed = true;
     }
@@ -187,7 +199,6 @@ export class ConversationContext {
     if (changed) {
       this.rememberSpeakers();
     }
-    const emit = changed && incoming.some((turn) => turn.isFinal);
     if (changed) {
       debugTranscribe("ingest", {
         incoming: incoming.length,
@@ -195,10 +206,10 @@ export class ConversationContext {
         live: incoming.filter((turn) => !turn.isFinal).length,
         ids: incoming.map((turn) => turn.id),
         version: this.version,
-        emit,
+        emit: finalChanged,
       });
     }
-    if (emit) {
+    if (finalChanged) {
       this.emit();
     }
   }
@@ -241,6 +252,22 @@ export class ConversationContext {
     this.rememberSpeakers();
     this.version++;
     this.emit();
+  }
+
+  turnInTopic(turnId: string, topicId: string | null) {
+    if (!topicId) {
+      return true;
+    }
+    const stamped = this.results.get(turnId)?.topicId;
+    if (stamped) {
+      return stamped === topicId;
+    }
+    if (!this.results.has(turnId)) {
+      return true;
+    }
+    return this.topics.some(
+      (topic) => topic.id === topicId && topic.turnIds.includes(turnId),
+    );
   }
 
   find(text: string, turnId: string) {

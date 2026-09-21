@@ -1,7 +1,6 @@
 import { JEV_SHARED_EVIDENCE } from "../../transcription/jevSharedState";
 
-const UTTERANCE_SCOPE =
-  `Judge only \`utterance\`. ${JEV_SHARED_EVIDENCE} There are no better or worse preferences. Score the natural orientation this line shows, not a life diagnosis.`;
+const UTTERANCE_SCOPE = `Judge only \`utterance\`. ${JEV_SHARED_EVIDENCE} There are no better or worse preferences. Score the natural orientation this line shows, not a life diagnosis.`;
 
 export type MbtiLetter = "E" | "I" | "S" | "N" | "T" | "F" | "J" | "P";
 
@@ -10,17 +9,22 @@ export type MbtiPairId = "ei" | "sn" | "tf" | "jp";
 export type MbtiBand = {
   letter: MbtiLetter;
   pair: MbtiPairId;
+  what: string;
 };
 
 export const MBTI_BANDS: readonly MbtiBand[] = [
-  { letter: "E", pair: "ei" },
-  { letter: "I", pair: "ei" },
-  { letter: "S", pair: "sn" },
-  { letter: "N", pair: "sn" },
-  { letter: "T", pair: "tf" },
-  { letter: "F", pair: "tf" },
-  { letter: "J", pair: "jp" },
-  { letter: "P", pair: "jp" },
+  { letter: "E", pair: "ei", what: "Gets energy from people and action." },
+  {
+    letter: "I",
+    pair: "ei",
+    what: "Gets energy from thinking things through.",
+  },
+  { letter: "S", pair: "sn", what: "Trusts facts and what is here now." },
+  { letter: "N", pair: "sn", what: "Trusts ideas and what could be." },
+  { letter: "T", pair: "tf", what: "Decides with logic." },
+  { letter: "F", pair: "tf", what: "Decides with people and values." },
+  { letter: "J", pair: "jp", what: "Likes plans and finishing things." },
+  { letter: "P", pair: "jp", what: "Likes options and staying flexible." },
 ];
 
 export const MBTI_PAIRS: readonly {
@@ -180,6 +184,30 @@ const pairProb = (row: MbtiResult, pairId: MbtiPairId, letter: MbtiLetter) => {
   }
   return 0;
 };
+
+const MBTI_TYPE_WHAT: Record<string, string> = {
+  INTJ: "Plans the future with inner vision and logic.",
+  INTP: "Builds mental models and questions how things work.",
+  ENTJ: "Directs people and plans to get results.",
+  ENTP: "Plays with ideas and debates possibilities.",
+  INFJ: "Follows an inner vision while caring about people.",
+  INFP: "Stays true to personal values and meaning.",
+  ENFJ: "Rallies people around a shared feeling or cause.",
+  ENFP: "Connects people and possibilities with warmth.",
+  ISTJ: "Relies on proven methods, facts, and duty.",
+  ISFJ: "Cares for people through practical, reliable help.",
+  ESTJ: "Organizes work and people to get things done.",
+  ESFJ: "Takes care of the group and keeps things running smoothly.",
+  ISTP: "Fixes problems in the moment with calm logic.",
+  ISFP: "Follows personal taste and stays true to what feels right.",
+  ESTP: "Acts on what is happening now and makes things happen.",
+  ESFP: "Brings energy to the moment and reads people.",
+};
+
+export const mbtiLetterWhat = (letter: MbtiLetter) =>
+  MBTI_BANDS.find((band) => band.letter === letter)?.what;
+
+export const mbtiTypeWhat = (type: string) => MBTI_TYPE_WHAT[type];
 
 export const rankedMbti = (row: MbtiResult, count: number): MbtiResult[] => {
   const lettersFor = {

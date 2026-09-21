@@ -242,12 +242,52 @@ export const JayrrEditorPanel = () => {
     disabled,
     projectName,
     loadedProjectId,
+    sessionReady,
     setProjectName,
     markProjectSaved,
   } = useJayrrEditorSession();
   const excalidrawAPI = useExcalidrawAPI();
   const saveProject = useMutation(api.editorProjects.save);
   const renameSavedProject = useMutation(api.editorProjects.rename);
+  const snapshotViewRef = useRef(snapshotView);
+  snapshotViewRef.current = snapshotView;
+
+  useEffect(() => {
+    if (!sessionReady || !canQuery) {
+      return;
+    }
+    if (clips.length === 0 && !loadedProjectId) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      void saveProject({
+        ...(loadedProjectId ? { projectId: loadedProjectId } : {}),
+        name: projectName,
+        clipsJson: JSON.stringify(clipsToStoredEditor(clips)),
+        stackLanesJson: JSON.stringify(stackLaneIds),
+        stateJson: serializeEditorView(snapshotViewRef.current()),
+        durationMs: timeline.totalMs,
+        clipCount: clips.length,
+      })
+        .then((projectId) => {
+          if (projectId !== loadedProjectId) {
+            markProjectSaved(projectId, projectName);
+          }
+        })
+        .catch(() => undefined);
+    }, 900);
+    return () => window.clearTimeout(timer);
+  }, [
+    canQuery,
+    clips,
+    loadedProjectId,
+    markProjectSaved,
+    projectName,
+    saveProject,
+    sessionReady,
+    stackLaneIds,
+    timeline.totalMs,
+  ]);
 
   const [addRecordingOpen, setAddRecordingOpen] = useState(false);
   const [addSoundOpen, setAddSoundOpen] = useState(false);
@@ -919,7 +959,7 @@ export const JayrrEditorPanel = () => {
                   title="Right-click to choose scale"
                   onClick={() => setZoomMode("fixed")}
                 >
-                  {pxPerSecond}px/s
+                  {Math.round(pxPerSecond)}px/s
                 </button>
               </ContextMenu.Trigger>
               <ContextMenu.Portal container={container}>
@@ -994,6 +1034,7 @@ export const JayrrEditorPanel = () => {
                 playheadClipId={playheadClipId}
                 zoomMode={zoomMode}
                 pxPerSecond={pxPerSecond}
+                onZoomPxPerSecond={setPxPerSecond}
                 stackLaneIds={stackLaneIds}
                 onSeek={seek}
                 onSelectClip={selectClip}
@@ -1215,6 +1256,7 @@ export const JayrrEditorPanel = () => {
             setSaveBusy(true);
             try {
               const projectId = await saveProject({
+                ...(loadedProjectId ? { projectId: loadedProjectId } : {}),
                 name,
                 folderId: folderId ?? undefined,
                 clipsJson: JSON.stringify(clipsToStoredEditor(clips)),

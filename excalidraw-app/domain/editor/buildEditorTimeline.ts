@@ -2,6 +2,14 @@ import type { Id } from "../../../convex/_generated/dataModel";
 
 export const EDITOR_PX_PER_SECOND = 40;
 export const EDITOR_PX_PER_SECOND_OPTIONS = [10, 20, 40, 80, 160] as const;
+export const EDITOR_PX_PER_SECOND_MIN = 6;
+export const EDITOR_PX_PER_SECOND_MAX = 320;
+
+export const clampEditorPxPerSecond = (px: number) =>
+  Math.min(
+    EDITOR_PX_PER_SECOND_MAX,
+    Math.max(EDITOR_PX_PER_SECOND_MIN, px),
+  );
 
 export type EditorRecordingSource = {
   recordingId: Id<"presentRecordings">;

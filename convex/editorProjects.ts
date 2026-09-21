@@ -174,6 +174,7 @@ export const get = query({
 
 export const save = mutation({
   args: {
+    projectId: v.optional(v.id("editorProjects")),
     name: v.string(),
     folderId: v.optional(v.id("editorProjectFolders")),
     clipsJson: v.string(),
@@ -186,6 +187,32 @@ export const save = mutation({
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
     requirePayload(args.clipsJson, args.stackLanesJson, args.stateJson);
+    const payload = {
+      name: normalizeName(args.name),
+      clipsJson: args.clipsJson,
+      stackLanesJson: args.stackLanesJson,
+      ...(args.stateJson ? { stateJson: args.stateJson } : {}),
+      durationMs: Math.max(0, Math.round(args.durationMs)),
+      clipCount: Math.max(0, Math.round(args.clipCount)),
+      updatedAt: Date.now(),
+    };
+    if (args.projectId) {
+      const project = await getOwnedProject(ctx, args.projectId, user._id);
+      let folderId = project.folderId;
+      if (args.folderId) {
+        const folder = await getOwnedFolder(ctx, args.folderId, user._id);
+        if (project.folderId !== folder._id) {
+          await bumpFolderCount(ctx, project.folderId, -1);
+          await bumpFolderCount(ctx, folder._id, 1);
+        }
+        folderId = folder._id;
+      }
+      await ctx.db.patch(project._id, {
+        ...payload,
+        ...(folderId ? { folderId } : {}),
+      });
+      return project._id;
+    }
     let folderId: Id<"editorProjectFolders"> | undefined;
     if (args.folderId) {
       const folder = await getOwnedFolder(ctx, args.folderId, user._id);
@@ -194,13 +221,7 @@ export const save = mutation({
     const projectId = await ctx.db.insert("editorProjects", {
       userId: user._id,
       folderId,
-      name: normalizeName(args.name),
-      clipsJson: args.clipsJson,
-      stackLanesJson: args.stackLanesJson,
-      ...(args.stateJson ? { stateJson: args.stateJson } : {}),
-      durationMs: Math.max(0, Math.round(args.durationMs)),
-      clipCount: Math.max(0, Math.round(args.clipCount)),
-      updatedAt: Date.now(),
+      ...payload,
     });
     await bumpFolderCount(ctx, folderId, 1);
     return projectId;

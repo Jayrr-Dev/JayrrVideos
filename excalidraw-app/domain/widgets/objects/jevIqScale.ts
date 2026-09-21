@@ -15,20 +15,61 @@ export type IqShade =
 export type IqBand = {
   shade: IqShade;
   label: string;
+  what: string;
 };
 
 // Legend chips only. The rubric Jev sees lives in IQ_DIMENSIONS below.
 export const IQ_BANDS: readonly IqBand[] = [
-  { shade: "white", label: "70" },
-  { shade: "white2", label: "80" },
-  { shade: "yellow", label: "90" },
-  { shade: "yellow2", label: "100" },
-  { shade: "yellow3", label: "110" },
-  { shade: "orange", label: "120" },
-  { shade: "orange2", label: "130" },
-  { shade: "red", label: "140" },
-  { shade: "red2", label: "150" },
-  { shade: "red3", label: "160" },
+  {
+    shade: "white",
+    label: "70",
+    what: "Very simple speech with little reasoning.",
+  },
+  {
+    shade: "white2",
+    label: "80",
+    what: "Basic statements, usually one idea at a time.",
+  },
+  {
+    shade: "yellow",
+    label: "90",
+    what: "Everyday talk with a little reasoning.",
+  },
+  {
+    shade: "yellow2",
+    label: "100",
+    what: "Clear everyday reasoning most people follow.",
+  },
+  {
+    shade: "yellow3",
+    label: "110",
+    what: "Clearer than average. Makes a useful distinction.",
+  },
+  {
+    shade: "orange",
+    label: "120",
+    what: "Strong reasoning. Weighs more than one idea.",
+  },
+  {
+    shade: "orange2",
+    label: "130",
+    what: "Very strong reasoning packed into a short line.",
+  },
+  {
+    shade: "red",
+    label: "140",
+    what: "Rarely dense. Several ideas linked with care.",
+  },
+  {
+    shade: "red2",
+    label: "150",
+    what: "Exceptional density and precise wording.",
+  },
+  {
+    shade: "red3",
+    label: "160",
+    what: "Extremely dense reasoning in a short line.",
+  },
 ];
 
 type IqLevel = { what: string; examples: string[] };
@@ -312,6 +353,11 @@ export const iqFromComposite = (composite: number) => {
 export const shadeFromComposite = (composite: number): IqShade => {
   const index = Math.min(IQ_TOP, Math.max(0, Math.round(composite * IQ_TOP)));
   return IQ_BANDS[index]?.shade ?? "white";
+};
+
+export const iqWhat = (composite: number) => {
+  const index = Math.min(IQ_TOP, Math.max(0, Math.round(composite * IQ_TOP)));
+  return IQ_BANDS[index]?.what;
 };
 
 export const rankedIqComposites = (

@@ -32,7 +32,6 @@ import {
   presentMicDeviceId,
   setPresentMic,
 } from "../../../present/presentMic";
-import { conversationFor } from "../../transcription/conversationContext";
 import { debugTranscribe } from "../../transcription/debugTranscribe";
 import {
   listenStreamTranscript,
@@ -102,6 +101,7 @@ import {
   buildIqState,
   compositeFromAnswers,
   iqFromComposite,
+  iqWhat,
   rankedIqComposites,
   shadeFromComposite,
   type IqResult,
@@ -112,6 +112,7 @@ import {
   COG_QUESTION,
   advanceFromAnswers,
   averageAdvance,
+  cogWhat,
   rankedAdvanceFns,
   type CogFn,
   type MbtiAdvanceResult,
@@ -121,6 +122,7 @@ import {
   MBTI_QUESTIONS,
   averageMbti,
   mbtiFromAnswers,
+  mbtiTypeWhat,
   rankedMbti,
   type MbtiResult,
 } from "./jevMbtiScale";
@@ -409,6 +411,56 @@ const mergeChatTurns = (turns: ChatTurn[]) => {
     merged.push(...asBubbles(turn, turn.text, true));
   }
   return merged;
+};
+
+const foldIncomingTurns = (
+  current: ChatTurn[],
+  attributed: TranscriptTurn[],
+  isFinal: boolean,
+) => {
+  const kept = current.filter((turn) => turn.isFinal);
+  const incoming = withLiveIds(current, attributed, isFinal);
+  const incomingIds = incoming.map((turn) => turn.id);
+  const packed = mergeChatTurns(incoming);
+  const last = kept[kept.length - 1];
+  const first = packed[0] ?? null;
+  if (last && first && shouldJoin(last, first)) {
+    const joined = asBubbles(last, joinSentences(last.text, first.text), true);
+    const nextTurns = [
+      ...kept.slice(0, -1),
+      ...joined,
+      ...packed.slice(1),
+    ].slice(-80);
+    if (sameChatTurns(current, nextTurns)) {
+      return {
+        turns: current,
+        incomingIds,
+        skipped: true,
+        adopted: null,
+      };
+    }
+    return {
+      turns: nextTurns,
+      incomingIds,
+      skipped: false,
+      adopted: isFinal ? joined[0] ?? first : null,
+    };
+  }
+  const nextTurns = [...kept, ...packed].slice(-80);
+  if (sameChatTurns(current, nextTurns)) {
+    return {
+      turns: current,
+      incomingIds,
+      skipped: true,
+      adopted: null,
+    };
+  }
+  return {
+    turns: nextTurns,
+    incomingIds,
+    skipped: false,
+    adopted: isFinal ? first : null,
+  };
 };
 
 // First-seen order, not speaker id: nearby ids used to land on similar hues.
@@ -780,7 +832,10 @@ const JevCardHeader = ({
 const IqBadge = ({ composite }: { composite: number }) => {
   const shade: IqShade = shadeFromComposite(composite);
   return (
-    <JevTip title={`Verbal IQ ${iqFromComposite(composite)}`}>
+    <JevTip
+      title={`Verbal IQ ${iqFromComposite(composite)}`}
+      body={iqWhat(composite)}
+    >
       <span
         className={`jayrr-called-embed__iq jayrr-called-embed__iq--${shade}`}
       >
@@ -807,7 +862,13 @@ const SmartBadge = ({ smart }: { smart: SmartResult }) => {
 };
 
 const EmotionBadge = ({ emotion }: { emotion: EmotionPick }) => (
-  <JevTip title={`${emotion.label} · ${emotion.cluster}`}>
+  <JevTip
+    title={`${emotion.label} · ${emotion.cluster}`}
+    body={
+      EMOTION_BANDS.find((band) => band.tone === emotion.tone)?.what ??
+      emotion.cluster
+    }
+  >
     <span
       className={`jayrr-called-embed__emo jayrr-called-embed__emo--${emotion.tone}`}
     >
@@ -817,7 +878,7 @@ const EmotionBadge = ({ emotion }: { emotion: EmotionPick }) => (
 );
 
 const MbtiBadge = ({ mbti }: { mbti: MbtiResult }) => (
-  <JevTip title={`MBTI ${mbti.type}`}>
+  <JevTip title={`MBTI ${mbti.type}`} body={mbtiTypeWhat(mbti.type)}>
     <span className="jayrr-called-embed__iq jayrr-called-embed__mbti">
       {mbti.type}
     </span>
@@ -825,7 +886,7 @@ const MbtiBadge = ({ mbti }: { mbti: MbtiResult }) => (
 );
 
 const CogBadge = ({ fn }: { fn: CogFn }) => (
-  <JevTip title={fn}>
+  <JevTip title={fn} body={cogWhat(fn)}>
     <span
       className={`jayrr-called-embed__iq jayrr-called-embed__fn jayrr-called-embed__fn--${fn.toLowerCase()}`}
     >
@@ -835,7 +896,7 @@ const CogBadge = ({ fn }: { fn: CogFn }) => (
 );
 
 const EnneaBadge = ({ ennea }: { ennea: EnneaResult }) => (
-  <JevTip title={`Type ${ennea.id} · The ${ennea.name}`}>
+  <JevTip title={`Type ${ennea.id} · The ${ennea.name}`} body={ennea.what}>
     <span
       className={`jayrr-called-embed__iq jayrr-called-embed__ennea jayrr-called-embed__ennea--${ennea.id}`}
     >
@@ -904,6 +965,7 @@ const OnlineBadge = ({ online }: { online: OnlineResult }) => {
 const SocionBadge = ({ socion }: { socion: SocionResult }) => (
   <JevTip
     title={`${socion.id} ${socion.code4} · ${socion.nick} · ${socion.ego}`}
+    body={socion.what}
   >
     <span
       className={`jayrr-called-embed__iq jayrr-called-embed__socion jayrr-called-embed__socion--${
@@ -938,7 +1000,10 @@ const BigFiveBadge = ({ bigFive }: { bigFive: BigFiveResult }) => (
 );
 
 const BigFiveTraitBadge = ({ trait }: { trait: BigFiveTrait }) => (
-  <JevTip title={`${trait.name}: ${trait.level}`}>
+  <JevTip
+    title={`${trait.name}: ${trait.level}`}
+    body={BIG5_BANDS.find((band) => band.id === trait.id)?.what}
+  >
     <span
       className={`jayrr-called-embed__iq jayrr-called-embed__big5 jayrr-called-embed__big5--${trait.id.toLowerCase()}`}
     >
@@ -1104,15 +1169,12 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
   namesRef.current = names;
   const speakerScores = useMemo(() => {
     void conversation.version;
-    const base =
-      config.contextEnabled && conversation.topicId !== null
-        ? scores.filter(
-            (row) =>
-              conversation.context.results.get(row.turnId)?.topicId ===
-              conversation.topicId,
-          )
-        : scores;
-    return base;
+    if (!config.contextEnabled) {
+      return scores;
+    }
+    return scores.filter((row) =>
+      conversation.context.turnInTopic(row.turnId, conversation.topicId),
+    );
   }, [
     scores,
     config.contextEnabled,
@@ -1387,49 +1449,24 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
         attributed.map((turn) => turn.speaker),
       ),
     );
-    let adopted: ChatTurn | null = null;
-    let skipped = false;
-    let incomingIds: string[] = [];
     const leftoverIds = turnsRef.current
       .filter((turn) => !turn.isFinal)
       .map((turn) => turn.id);
+    const folded = {
+      skipped: false,
+      incomingIds: [] as string[],
+      adopted: null as ChatTurn | null,
+    };
     setTurns((current) => {
-      const kept = current.filter((turn) => turn.isFinal);
-      const incoming = withLiveIds(current, attributed, isFinal);
-      incomingIds = incoming.map((turn) => turn.id);
-      const packed = mergeChatTurns(incoming);
-      const last = kept[kept.length - 1];
-      const first = packed[0];
-      if (last && first && shouldJoin(last, first)) {
-        const joined = asBubbles(
-          last,
-          joinSentences(last.text, first.text),
-          true,
-        );
-        const nextTurns = [
-          ...kept.slice(0, -1),
-          ...joined,
-          ...packed.slice(1),
-        ].slice(-80);
-        if (sameChatTurns(current, nextTurns)) {
-          skipped = true;
-          return current;
-        }
-        if (isFinal) {
-          adopted = joined[0] ?? first;
-        }
-        return nextTurns;
-      }
-      const nextTurns = [...kept, ...packed].slice(-80);
-      if (sameChatTurns(current, nextTurns)) {
-        skipped = true;
-        return current;
-      }
-      if (isFinal) {
-        adopted = first ?? null;
-      }
-      return nextTurns;
+      const next = foldIncomingTurns(current, attributed, isFinal);
+      folded.skipped = next.skipped;
+      folded.incomingIds = next.incomingIds;
+      folded.adopted = next.adopted;
+      return next.turns;
     });
+    const adopted = folded.adopted;
+    const skipped = folded.skipped;
+    const incomingIds = folded.incomingIds;
     debugTranscribe("applyTurns", {
       isFinal,
       skipped,
@@ -1451,10 +1488,7 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
         snapshot.text === turn.text.trim() &&
         snapshot.speaker === turn.speaker
       ) {
-        scoredTextRef.current.set(
-          turn.id,
-          `${contextVersionRef.current}:${turn.text.trim()}`,
-        );
+        scoredTextRef.current.set(turn.id, turn.text.trim());
         setScores((current) =>
           [
             ...current.filter((row) => row.turnId !== turn.id),
@@ -1542,8 +1576,7 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
         }
         if (
           job.turnId !== LIVE_TURN_ID &&
-          scoredTextRef.current.get(job.turnId) ===
-            `${contextVersion}:${job.text}`
+          scoredTextRef.current.get(job.turnId) === job.text
         ) {
           debugTranscribe("score skip", {
             turnId: job.turnId,
@@ -1608,10 +1641,7 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
           if (job.turnId === LIVE_TURN_ID) {
             setLive(row);
           } else {
-            scoredTextRef.current.set(
-              job.turnId,
-              `${contextVersion}:${job.text}`,
-            );
+            scoredTextRef.current.set(job.turnId, job.text);
             setScores((current) =>
               [
                 ...current.filter((item) => item.turnId !== job.turnId),
@@ -1685,20 +1715,8 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
       ) {
         return false;
       }
-      const previous = scoredTextRef.current.get(turn.id);
-      if (previous === `${contextVersionRef.current}:${text}`) {
+      if (scoredTextRef.current.get(turn.id) === text) {
         return false;
-      }
-      if (previous?.endsWith(`:${text}`)) {
-        const result = conversationFor(elementId).results.get(turn.id);
-        if (!result?.provisional) {
-          return false;
-        }
-        debugTranscribe("enqueue retry", {
-          turnId: turn.id,
-          reason: "provisional",
-          version: contextVersionRef.current,
-        });
       }
       queueRef.current = queueRef.current.filter(
         (job) => job.turnId !== turn.id,
@@ -1718,7 +1736,7 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
       });
       return true;
     },
-    [elementId],
+    [],
   );
 
   useEffect(() => {
@@ -1742,7 +1760,7 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
     if (added) {
       void pump();
     }
-  }, [config, enqueueFinal, pump, turns, conversation.version]);
+  }, [config, enqueueFinal, pump, turns]);
 
   const liveIndex = turns.findIndex((turn) => !turn.isFinal);
   const liveTurn = liveIndex === -1 ? null : turns[liveIndex] ?? null;
@@ -2409,7 +2427,11 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
                 </div>
                 <div className="jayrr-called-embed__bands">
                   {IQ_BANDS.map((band) => (
-                    <JevTip key={band.label} title={`Verbal IQ ${band.label}`}>
+                    <JevTip
+                      key={band.label}
+                      title={`Verbal IQ ${band.label}`}
+                      body={band.what}
+                    >
                       <span
                         className={`jayrr-called-embed__iq jayrr-called-embed__iq--${band.shade}`}
                       >
@@ -2587,7 +2609,7 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
                     <JevTip
                       key={band.id}
                       title={`${band.id} ${band.code4} · ${band.nick} · ${band.ego}`}
-                      body={band.name}
+                      body={band.what}
                     >
                       <span
                         className={`jayrr-called-embed__iq jayrr-called-embed__socion jayrr-called-embed__socion--${
@@ -2655,12 +2677,17 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
                 </div>
                 <div className="jayrr-called-embed__bands jayrr-called-embed__bands--pairs">
                   {MBTI_BANDS.map((band) => (
-                    <span
+                    <JevTip
                       key={band.letter}
-                      className={`jayrr-called-embed__iq jayrr-called-embed__mbti jayrr-called-embed__mbti--${band.letter.toLowerCase()}`}
+                      title={band.letter}
+                      body={band.what}
                     >
-                      {band.letter}
-                    </span>
+                      <span
+                        className={`jayrr-called-embed__iq jayrr-called-embed__mbti jayrr-called-embed__mbti--${band.letter.toLowerCase()}`}
+                      >
+                        {band.letter}
+                      </span>
+                    </JevTip>
                   ))}
                 </div>
               </JevCardHeader>
@@ -2690,12 +2717,13 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
                 </div>
                 <div className="jayrr-called-embed__bands jayrr-called-embed__bands--pairs">
                   {COG_BANDS.map((fn) => (
-                    <span
-                      key={fn}
-                      className={`jayrr-called-embed__iq jayrr-called-embed__fn jayrr-called-embed__fn--${fn.toLowerCase()}`}
-                    >
-                      {fn}
-                    </span>
+                    <JevTip key={fn} title={fn} body={cogWhat(fn)}>
+                      <span
+                        className={`jayrr-called-embed__iq jayrr-called-embed__fn jayrr-called-embed__fn--${fn.toLowerCase()}`}
+                      >
+                        {fn}
+                      </span>
+                    </JevTip>
                   ))}
                 </div>
               </JevCardHeader>
@@ -2728,6 +2756,7 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
                     <JevTip
                       key={band.id}
                       title={`Type ${band.id} · The ${band.name}`}
+                      body={band.what}
                     >
                       <span
                         className={`jayrr-called-embed__iq jayrr-called-embed__ennea jayrr-called-embed__ennea--${band.id}`}
@@ -2760,7 +2789,7 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
                 </div>
                 <div className="jayrr-called-embed__bands jayrr-called-embed__bands--emotion">
                   {EMOTION_BANDS.map((band) => (
-                    <JevTip key={band.tone} title={band.label}>
+                    <JevTip key={band.tone} title={band.label} body={band.what}>
                       <span
                         className={`jayrr-called-embed__emo jayrr-called-embed__emo--${band.tone}`}
                       >

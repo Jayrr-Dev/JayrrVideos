@@ -134,6 +134,8 @@ const overlayVisualOnLaneAtTime = (
   );
 /** Start warming the next cut this far before the boundary. */
 const PREFETCH_LEAD_MS = 900;
+/** Skip a seek when the layer is already this close to the timeline clock. */
+const SEEK_DRIFT_SEC = 0.35;
 
 const WAIT_DATA_MS = 4000;
 const SEEK_WAIT_MS = 1500;
@@ -198,12 +200,47 @@ const projectMsFromVideo = (video: HTMLVideoElement, clip: EditorClip) => {
 const compositionTimeMs = (clip: EditorClip, timeMs: number) =>
   Math.max(0, (clip.sourceOffsetMs ?? 0) + (timeMs - clip.startMs));
 
+const htmlClipAtTime = (
+  sequence: readonly EditorClip[],
+  overlays: readonly EditorClip[],
+  laneClips: readonly (EditorClip | null)[],
+  timeMs: number,
+) => {
+  for (let index = laneClips.length - 1; index >= 0; index--) {
+    const clip = laneClips[index];
+    if (clip && isEditorHtmlClip(clip)) {
+      return clip;
+    }
+  }
+  const sequenceClip = visualClipAtTime(sequence, timeMs);
+  if (sequenceClip && isEditorHtmlClip(sequenceClip)) {
+    return sequenceClip;
+  }
+  const overlayClip = visualClipAtTime(overlays, timeMs);
+  if (overlayClip && isEditorHtmlClip(overlayClip)) {
+    return overlayClip;
+  }
+  return null;
+};
+
 const setCompositionOn = (frame: HTMLIFrameElement | null, on: boolean) => {
   frame?.classList.toggle("is-on", on);
 };
 
 const videoHasUrl = (video: HTMLVideoElement, url: string) =>
   video.getAttribute("src") === url || video.currentSrc === url;
+
+const videoMatchesClock = (
+  video: HTMLVideoElement,
+  clip: EditorClip,
+  timeMs: number,
+) =>
+  Boolean(clip.url) &&
+  videoHasUrl(video, clip.url) &&
+  video.readyState >= 2 &&
+  Math.abs(video.currentTime - sourceOffsetSec(clip, timeMs)) < SEEK_DRIFT_SEC;
+
+type ApplyProgramMode = "all" | "stacks";
 
 const nextSequenceClip = (
   sequence: readonly EditorClip[],
@@ -287,6 +324,9 @@ export const useEditorPlayback = ({
   previewIdRef.current = previewElementId;
   const docRef = useRef(ownerDocument);
   docRef.current = ownerDocument;
+
+  const clockMs = (requestedMs: number, shouldPlay: boolean) =>
+    shouldPlay && playingRef.current ? timeRef.current : requestedMs;
 
   const resolveLayers = useCallback((): EditorPreviewLayers | null => {
     return resolveEditorPreviewLayers(previewIdRef.current, docRef.current);
@@ -428,9 +468,28 @@ export const useEditorPlayback = ({
         setLayerVisible(video, false);
         return null;
       }
+      const at = clockMs(timeMs, shouldPlay);
+      if (shouldPlay && videoMatchesClock(video, clip, at)) {
+        applyVideoMix(video, clipIsMuted(clip));
+        setLayerVisible(video, true, blend, clipHasRemoveBg(clip));
+        if (video.paused) {
+          try {
+            await video.play();
+          } catch {
+            if (isClockMaster) {
+              playingRef.current = false;
+              setPlaying(false);
+            }
+          }
+        }
+        return clip.id;
+      }
       await prepareSrc(video, clip.url, clipIsMuted(clip));
       applyVideoMix(video, clipIsMuted(clip));
-      await seekVideo(video, sourceOffsetSec(clip, timeMs));
+      await seekVideo(
+        video,
+        sourceOffsetSec(clip, clockMs(timeMs, shouldPlay)),
+      );
       setLayerVisible(video, true, blend, clipHasRemoveBg(clip));
       if (shouldPlay) {
         try {
@@ -499,7 +558,13 @@ export const useEditorPlayback = ({
       // Same file (including cut siblings): keep the visible frame, just seek.
       if (videoHasUrl(active, clip.url) && active.readyState >= 2) {
         applyVideoMix(active, clipIsMuted(clip));
-        await seekVideo(active, sourceOffsetSec(clip, timeMs));
+        const at = clockMs(timeMs, shouldPlay);
+        if (!videoMatchesClock(active, clip, at)) {
+          await seekVideo(
+            active,
+            sourceOffsetSec(clip, clockMs(timeMs, shouldPlay)),
+          );
+        }
         setLayerVisible(active, true, blend, clipHasRemoveBg(clip));
         if (idle) {
           setLayerVisible(idle, false);
@@ -523,7 +588,10 @@ export const useEditorPlayback = ({
       if (idle) {
         await prepareSrc(idle, clip.url, clipIsMuted(clip));
         applyVideoMix(idle, clipIsMuted(clip));
-        await seekVideo(idle, sourceOffsetSec(clip, timeMs));
+        await seekVideo(
+          idle,
+          sourceOffsetSec(clip, clockMs(timeMs, shouldPlay)),
+        );
         if (shouldPlay) {
           try {
             await idle.play();
@@ -649,21 +717,26 @@ export const useEditorPlayback = ({
   );
 
   const applyProgram = useCallback(
-    async (timeMs: number, shouldPlay: boolean) => {
-      await syncSounds(timeMs, shouldPlay);
+    async (
+      timeMs: number,
+      shouldPlay: boolean,
+      mode: ApplyProgramMode = "all",
+    ) => {
+      const at = () => clockMs(timeMs, shouldPlay);
+      await syncSounds(at(), shouldPlay);
       const layers = resolveLayers();
       if (!layers) {
         return;
       }
       const { sequence, overlays } = timelineRef.current;
-      const sequenceClip = visualClipAtTime(sequence, timeMs);
+      const sequenceClip = visualClipAtTime(sequence, at());
       const laneClips = stackLaneIdsRef.current.map((laneId) =>
-        overlayVisualOnLaneAtTime(overlays, laneId, timeMs),
+        overlayVisualOnLaneAtTime(overlays, laneId, at()),
       );
       const firstOverlay = laneClips.find((clip) => clip) ?? null;
       const orphanOverlay =
         !sequenceClip && !firstOverlay && layers.stacks.length === 0
-          ? visualClipAtTime(overlays, timeMs)
+          ? visualClipAtTime(overlays, at())
           : null;
       const baseClip = sequenceClip ?? orphanOverlay;
       const overlaps = timelineOverlaps(timelineRef.current);
@@ -671,17 +744,28 @@ export const useEditorPlayback = ({
         (item) =>
           isSameLaneOverlap(item) &&
           item.leftLaneId === SEQUENCE_LANE_ID &&
-          overlapContainsTime(item, timeMs),
+          overlapContainsTime(item, at()),
       );
       const coveringOverlap = sequenceClip
         ? overlaps.find(
             (item) =>
               item.leftClipId === sequenceClip.id &&
-              overlapContainsTime(item, timeMs),
+              overlapContainsTime(item, at()),
           ) ?? null
         : null;
 
       if (!baseClip && !firstOverlay && !orphanOverlay) {
+        if (mode === "stacks") {
+          for (const stack of layers.stacks) {
+            stack.pause();
+            setLayerVisible(stack, false);
+          }
+          for (const still of layers.staticStacks ?? []) {
+            setStillVisible(still, false);
+          }
+          stackClipIdsRef.current = layers.stacks.map(() => null);
+          return;
+        }
         layers.base.pause();
         layers.baseAlt?.pause();
         for (const stack of layers.stacks) {
@@ -702,74 +786,80 @@ export const useEditorPlayback = ({
         return;
       }
 
-      const htmlBase = baseClip && isEditorHtmlClip(baseClip) ? baseClip : null;
+      const htmlBase = htmlClipAtTime(sequence, overlays, laneClips, at());
       const frame = layers.composition ?? null;
       if (htmlBase && frame) {
         if (htmlClipIdRef.current !== htmlBase.id) {
           htmlClipIdRef.current = htmlBase.id;
           frame.onload = () => {
-            seekHyperframeFrame(frame, compositionTimeMs(htmlBase, timeMs));
+            seekHyperframeFrame(frame, compositionTimeMs(htmlBase, at()));
           };
           frame.srcdoc = htmlBase.html;
         } else {
-          seekHyperframeFrame(frame, compositionTimeMs(htmlBase, timeMs));
+          seekHyperframeFrame(frame, compositionTimeMs(htmlBase, at()));
         }
         setCompositionOn(frame, true);
-      } else {
+      } else if (mode === "all") {
         htmlClipIdRef.current = null;
         setCompositionOn(frame, false);
       }
 
-      if (baseClip && isEditorStaticClip(baseClip) && layers.staticBase) {
-        applyStillSrc(layers.staticBase, baseClip.url);
-        setStillVisible(
-          layers.staticBase,
-          true,
-          baseBlendAtTime(timeMs, coveringOverlap),
-        );
-      } else {
-        setStillVisible(layers.staticBase, false);
-      }
+      if (mode === "all") {
+        if (baseClip && isEditorStaticClip(baseClip) && layers.staticBase) {
+          applyStillSrc(layers.staticBase, baseClip.url);
+          setStillVisible(
+            layers.staticBase,
+            true,
+            baseBlendAtTime(at(), coveringOverlap),
+          );
+        } else {
+          setStillVisible(layers.staticBase, false);
+        }
 
-      const outgoing = sameLaneSequence
-        ? sequence.find((clip) => clip.id === sameLaneSequence.leftClipId)
-        : null;
-      const incoming = sameLaneSequence
-        ? sequence.find((clip) => clip.id === sameLaneSequence.rightClipId)
-        : null;
-      let nextBaseId: string | null;
-      if (
-        sameLaneSequence &&
-        outgoing &&
-        incoming &&
-        !isEditorAudioLikeClip(outgoing) &&
-        !isEditorAudioLikeClip(incoming) &&
-        !isEditorClocklessVisual(outgoing) &&
-        !isEditorClocklessVisual(incoming)
-      ) {
-        nextBaseId = await applySameLaneSequence(
-          layers,
-          outgoing,
-          incoming,
-          sameLaneSequence,
-          timeMs,
-          shouldPlay,
-        );
-      } else {
-        nextBaseId = await applyBaseClip(
-          layers,
-          baseClip,
-          timeMs,
-          shouldPlay,
-          baseBlendAtTime(timeMs, coveringOverlap),
-        );
+        const outgoing = sameLaneSequence
+          ? sequence.find((clip) => clip.id === sameLaneSequence.leftClipId)
+          : null;
+        const incoming = sameLaneSequence
+          ? sequence.find((clip) => clip.id === sameLaneSequence.rightClipId)
+          : null;
+        let nextBaseId: string | null;
+        if (
+          sameLaneSequence &&
+          outgoing &&
+          incoming &&
+          !isEditorAudioLikeClip(outgoing) &&
+          !isEditorAudioLikeClip(incoming) &&
+          !isEditorClocklessVisual(outgoing) &&
+          !isEditorClocklessVisual(incoming)
+        ) {
+          nextBaseId = await applySameLaneSequence(
+            layers,
+            outgoing,
+            incoming,
+            sameLaneSequence,
+            at(),
+            shouldPlay,
+          );
+        } else {
+          nextBaseId = await applyBaseClip(
+            layers,
+            baseClip,
+            at(),
+            shouldPlay,
+            baseBlendAtTime(at(), coveringOverlap),
+          );
+        }
+        if (!playingRef.current && shouldPlay) {
+          return;
+        }
+        baseClipIdRef.current = nextBaseId;
       }
-      if (!playingRef.current && shouldPlay) {
-        return;
-      }
-      baseClipIdRef.current = nextBaseId;
 
       const nextStackIds: (string | null)[] = [];
+      const liveLaneClips = stackLaneIdsRef.current.map((laneId) =>
+        overlayVisualOnLaneAtTime(overlays, laneId, at()),
+      );
+      const liveFirstOverlay = liveLaneClips.find((clip) => clip) ?? null;
       for (let index = 0; index < layers.stacks.length; index++) {
         const video = layers.stacks[index];
         if (!video) {
@@ -779,19 +869,19 @@ export const useEditorPlayback = ({
         if (!playingRef.current && shouldPlay) {
           return;
         }
-        const clip = laneClips[index] ?? null;
-        const overlap = clip ? overlapAtTime(overlaps, clip.id, timeMs) : null;
+        const clip = liveLaneClips[index] ?? null;
+        const overlap = clip ? overlapAtTime(overlaps, clip.id, at()) : null;
         const blend = clip
-          ? stackBlendAtTime(clip, timeMs, overlap, Boolean(sequenceClip))
+          ? stackBlendAtTime(clip, at(), overlap, Boolean(sequenceClip))
           : null;
         nextStackIds.push(
           await applyClipToLayer(
             video,
             clip,
-            timeMs,
+            at(),
             shouldPlay,
             blend,
-            !baseClip && clip !== null && clip === firstOverlay,
+            !baseClip && clip !== null && clip === liveFirstOverlay,
           ),
         );
         const still = layers.staticStacks?.[index];
@@ -804,8 +894,8 @@ export const useEditorPlayback = ({
       }
       stackClipIdsRef.current = nextStackIds;
 
-      if (shouldPlay && sequenceClip && !sameLaneSequence) {
-        prefetchNextBase(layers, timeMs);
+      if (mode === "all" && shouldPlay && sequenceClip && !sameLaneSequence) {
+        prefetchNextBase(layers, at());
       }
     },
     [
@@ -909,16 +999,27 @@ export const useEditorPlayback = ({
           overlapContainsTime(item, timeMs),
       )?.id ?? "";
     const layers = resolveLayers();
-    if (
+    const sequenceChanged =
       prevSeq !== nextSeq ||
-      prevOverlay !== nextOverlay ||
       prevOrphan !== nextOrphan ||
-      seqOverlapId(prevMs) !== seqOverlapId(nextMs)
-    ) {
-      void applyProgram(nextMs, true);
+      seqOverlapId(prevMs) !== seqOverlapId(nextMs);
+    const overlayChanged = prevOverlay !== nextOverlay;
+    if (sequenceChanged) {
+      void applyProgram(nextMs, true, "all");
+    } else if (overlayChanged) {
+      void applyProgram(nextMs, true, "stacks");
     } else if (layers) {
-      const htmlClip = visualClipAtTime(timelineNow.sequence, nextMs);
-      if (htmlClip && isEditorHtmlClip(htmlClip) && layers.composition) {
+      const htmlClip = htmlClipAtTime(
+        timelineNow.sequence,
+        timelineNow.overlays,
+        timelineNow.overlays.length
+          ? stackLaneIdsRef.current.map((laneId) =>
+              overlayVisualOnLaneAtTime(timelineNow.overlays, laneId, nextMs),
+            )
+          : [],
+        nextMs,
+      );
+      if (htmlClip && layers.composition) {
         seekHyperframeFrame(
           layers.composition,
           compositionTimeMs(htmlClip, nextMs),
@@ -944,7 +1045,7 @@ export const useEditorPlayback = ({
         const active = getActiveBase(layers);
         applyVideoMix(active, clipIsMuted(sequenceClip));
         const expected = sourceOffsetSec(sequenceClip, nextMs);
-        if (Math.abs(active.currentTime - expected) > 0.35) {
+        if (Math.abs(active.currentTime - expected) > SEEK_DRIFT_SEC) {
           seekVideo(active, expected);
         }
         setLayerVisible(
@@ -962,7 +1063,9 @@ export const useEditorPlayback = ({
           );
           if (incoming) {
             const expectedIn = sourceOffsetSec(incoming, nextMs);
-            if (Math.abs(layers.baseAlt.currentTime - expectedIn) > 0.35) {
+            if (
+              Math.abs(layers.baseAlt.currentTime - expectedIn) > SEEK_DRIFT_SEC
+            ) {
               seekVideo(layers.baseAlt, expectedIn);
             }
             setLayerVisible(
@@ -991,7 +1094,7 @@ export const useEditorPlayback = ({
         }
         applyVideoMix(video, clipIsMuted(clip));
         const expected = sourceOffsetSec(clip, nextMs);
-        if (Math.abs(video.currentTime - expected) > 0.35) {
+        if (Math.abs(video.currentTime - expected) > SEEK_DRIFT_SEC) {
           seekVideo(video, expected);
         }
         const overlap = overlapAtTime(overlaps, clip.id, nextMs);
