@@ -16,6 +16,7 @@ import {
   returnClipsAudio,
   separateClipsAudio,
   SEQUENCE_LANE_ID,
+  setClipsLabel,
   setClipsRemoveBg,
   snapClipStart,
   stackBlendAtTime,
@@ -746,6 +747,20 @@ describe("returnClipsAudio", () => {
     }
     expect(clipHasReturnableAudio(split?.clips ?? [], video)).toBe(true);
     expect(clipHasReturnableAudio(split?.clips ?? [], audio)).toBe(true);
+  });
+});
+
+describe("setClipsLabel", () => {
+  it("renames matching clips and ignores blank names", () => {
+    const renamed = setClipsLabel(
+      [clip("a", 1000), clip("b", 800, { laneId: "stack-1" })],
+      ["a"],
+      "  Scene one  ",
+    );
+    expect(renamed?.find((item) => item.id === "a")?.label).toBe("Scene one");
+    expect(renamed?.find((item) => item.id === "b")?.label).toBe("b");
+    expect(setClipsLabel(renamed ?? [], ["a"], "   ")).toBeNull();
+    expect(setClipsLabel(renamed ?? [], ["a"], "Scene one")).toBeNull();
   });
 });
 

@@ -925,6 +925,8 @@
     z-index: 0;
     pointer-events: none;
   }
+
+  .jayrr-editor-clip__label {
     position: relative;
     z-index: 1;
     margin: 0.15rem 0.3rem;
@@ -941,6 +943,29 @@
     color: #f8fafc;
     background: rgb(15 23 42 / 62%);
     text-shadow: 0 1px 1px rgb(0 0 0 / 55%);
+  }
+
+  .jayrr-editor-clip-shell.is-renaming .jayrr-editor-clip__label {
+    visibility: hidden;
+  }
+
+  .jayrr-editor-clip__rename {
+    position: absolute;
+    z-index: 3;
+    top: 0.15rem;
+    left: 0.3rem;
+    right: 0.3rem;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0.05rem 0.25rem;
+    border: 1px solid rgb(248 250 252 / 70%);
+    border-radius: 0.2rem;
+    font-size: 0.65rem;
+    line-height: 1.2;
+    font-weight: 600;
+    color: #0f172a;
+    background: #fff;
+    outline: none;
   }
 
   .jayrr-editor-clip--clip,

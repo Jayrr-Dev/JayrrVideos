@@ -93,12 +93,40 @@ let globalAudio = readStoredAudio();
 
 export const getEditorPreviewAudio = (): EditorPreviewAudio => globalAudio;
 
+export const applyPreviewMediaMix = (
+  media: HTMLMediaElement,
+  clipVolume = 1,
+  clipMuted = false,
+) => {
+  const mix = getEditorPreviewAudio();
+  const gain = clampVolume(clipVolume);
+  media.dataset.jayrrClipVolume = String(gain);
+  if (clipMuted) {
+    media.dataset.jayrrClipMuted = "1";
+  } else {
+    delete media.dataset.jayrrClipMuted;
+  }
+  media.volume = clampVolume(mix.volume * gain);
+  media.muted = mix.muted || clipMuted;
+};
+
 const applyAudioToVideo = (
   video: HTMLVideoElement,
   audio: EditorPreviewAudio,
 ) => {
-  video.volume = audio.volume;
+  const stored = Number.parseFloat(video.dataset.jayrrClipVolume ?? "1");
+  const gain = Number.isFinite(stored) ? clampVolume(stored) : 1;
+  video.volume = clampVolume(audio.volume * gain);
   video.muted = audio.muted || video.dataset.jayrrClipMuted === "1";
+};
+
+const applyAudioToSounds = (audio: EditorPreviewAudio) => {
+  for (const sound of soundElements.values()) {
+    const stored = Number.parseFloat(sound.dataset.jayrrClipVolume ?? "1");
+    const gain = Number.isFinite(stored) ? clampVolume(stored) : 1;
+    sound.volume = clampVolume(audio.volume * gain);
+    sound.muted = audio.muted || sound.dataset.jayrrClipMuted === "1";
+  }
 };
 
 const eachRegisteredVideo = (visit: (video: HTMLVideoElement) => void) => {
@@ -148,6 +176,7 @@ export const setEditorPreviewAudio = (
   };
   writeStoredAudio(globalAudio);
   applyAudioToVideos(globalAudio, extraVideo);
+  applyAudioToSounds(globalAudio);
   for (const listener of audioListeners) {
     listener(globalAudio);
   }

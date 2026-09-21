@@ -37,6 +37,8 @@ import {
 } from "@excalidraw/excalidraw/components/icons";
 import { DropdownMenu } from "radix-ui";
 
+import { Tooltip } from "../../components/ui/editor";
+
 import {
   clampEditorPxPerSecond,
   clipLaneId,
@@ -44,6 +46,7 @@ import {
   collectOverlapBands,
   collectSnapPointsMs,
   EDITOR_AUDIO_TYPE,
+  EDITOR_CLIP_LABEL_MAX,
   EDITOR_HTML_TYPE,
   EDITOR_SOUND_TYPE,
   EDITOR_STATIC_TYPE,
@@ -119,6 +122,9 @@ type JayrrEditorTimelineProps = {
     edgeMs: number;
   }) => void;
   onRestoreClipEdge: (args: { clipId: string; edge: EditorClipEdge }) => void;
+  renamingClipId?: string | null;
+  onRenameClip?: (clipId: string, label: string) => void;
+  onCancelRenameClip?: () => void;
   onSetTransition: (
     clipIds: readonly string[],
     kind: EditorTransitionKind,
@@ -210,6 +216,9 @@ export const JayrrEditorTimeline = ({
   onMoveClip,
   onResizeClip,
   onRestoreClipEdge,
+  renamingClipId,
+  onRenameClip,
+  onCancelRenameClip,
   onSetTransition,
   onOpenBlend,
   overlapLayerMoves,
@@ -1004,6 +1013,9 @@ export const JayrrEditorTimeline = ({
                   onResizePointerDown={(edge, event) =>
                     onResizePointerDown(clip, edge, event)
                   }
+                  renaming={renamingClipId === clip.id}
+                  onCommitRename={(label) => onRenameClip?.(clip.id, label)}
+                  onCancelRename={onCancelRenameClip}
                   onSelect={(toggle) => {
                     if (skipClickRef.current) {
                       skipClickRef.current = false;
@@ -1043,6 +1055,9 @@ export const JayrrEditorTimeline = ({
                     onResizePointerDown={(edge, event) =>
                       onResizePointerDown(clip, edge, event)
                     }
+                    renaming={renamingClipId === clip.id}
+                    onCommitRename={(label) => onRenameClip?.(clip.id, label)}
+                    onCancelRename={onCancelRenameClip}
                     onSelect={(toggle) => {
                       if (skipClickRef.current) {
                         skipClickRef.current = false;
@@ -1149,33 +1164,39 @@ const LaneHeader = ({
   >
     <span>{label}</span>
     {onAdd ? (
-      <button
-        type="button"
-        className="jayrr-editor-timeline__add-lane"
-        aria-label="Add column"
-        title="Add column"
-        disabled={addDisabled}
-        onClick={(event) => {
-          event.stopPropagation();
-          onAdd();
-        }}
-      >
-        {PlusIcon}
-      </button>
+      <Tooltip label="Add column" position="top" asChild>
+        <button
+          type="button"
+          className="jayrr-editor-timeline__add-lane"
+          aria-label="Add column"
+          disabled={addDisabled}
+          onClick={(event) => {
+            event.stopPropagation();
+            onAdd();
+          }}
+        >
+          {PlusIcon}
+        </button>
+      </Tooltip>
     ) : null}
     {onRemove ? (
-      <button
-        type="button"
-        className="jayrr-editor-timeline__remove-lane"
-        aria-label="Remove column"
-        title="Move clips left and remove column"
-        onClick={(event) => {
-          event.stopPropagation();
-          onRemove();
+      <Tooltip
+        label="Move clips left and remove column"
+        position="top"
+        asChild
+      >
+        <button
+          type="button"
+          className="jayrr-editor-timeline__remove-lane"
+          aria-label="Remove column"
+          onClick={(event) => {
+            event.stopPropagation();
+            onRemove();
         }}
       >
         {CloseIcon}
-      </button>
+        </button>
+      </Tooltip>
     ) : null}
   </div>
 );
@@ -1503,26 +1524,26 @@ const ClipFace = ({
   };
 
   return (
-    <button
-      ref={setRefs}
-      type="button"
-      className={`jayrr-editor-clip jayrr-editor-clip--${clip.type}${
-        packed ? "" : " jayrr-editor-clip--overlay"
-      }${selected ? " is-selected" : ""}${playhead ? " is-playhead" : ""}${
-        dragging ? " is-dragging" : ""
-      }${hidden ? " is-hidden" : ""}`}
-      data-clip-id={clip.id}
-      data-shade={clipShadeIndex(clip.id)}
-      style={mergedStyle}
-      title={clip.label}
-      {...draggableProps}
-      aria-pressed={selected}
-      onClick={(event) => {
-        event.stopPropagation();
-        const toggle = event.ctrlKey || event.metaKey;
-        onSelect?.(toggle);
-      }}
-    >
+    <Tooltip label={clip.label} position="top" asChild>
+      <button
+        ref={setRefs}
+        type="button"
+        className={`jayrr-editor-clip jayrr-editor-clip--${clip.type}${
+          packed ? "" : " jayrr-editor-clip--overlay"
+        }${selected ? " is-selected" : ""}${playhead ? " is-playhead" : ""}${
+          dragging ? " is-dragging" : ""
+        }${hidden ? " is-hidden" : ""}`}
+        data-clip-id={clip.id}
+        data-shade={clipShadeIndex(clip.id)}
+        style={mergedStyle}
+        {...draggableProps}
+        aria-pressed={selected}
+        onClick={(event) => {
+          event.stopPropagation();
+          const toggle = event.ctrlKey || event.metaKey;
+          onSelect?.(toggle);
+        }}
+      >
       <span className="jayrr-editor-clip__filmstrip" aria-hidden>
         {slices.map((src, index) => (
           <span key={`${clip.id}-${index}`} className="jayrr-editor-clip__cell">
@@ -1547,7 +1568,8 @@ const ClipFace = ({
         />
       ) : null}
       <span className="jayrr-editor-clip__label">{clip.label}</span>
-    </button>
+      </button>
+    </Tooltip>
   );
 };
 
@@ -1563,6 +1585,56 @@ const visibleClip = (clip: EditorClip, draft: TrimDraft | null): EditorClip => {
   };
 };
 
+const ClipRenameInput = ({
+  label,
+  onCommit,
+  onCancel,
+}: {
+  label: string;
+  onCommit: (next: string) => void;
+  onCancel: () => void;
+}) => {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const cancelledRef = useRef(false);
+  const [draft, setDraft] = useState(label);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  }, []);
+
+  return (
+    <input
+      ref={inputRef}
+      className="jayrr-editor-clip__rename"
+      value={draft}
+      maxLength={EDITOR_CLIP_LABEL_MAX}
+      aria-label="Clip name"
+      onPointerDown={(event) => event.stopPropagation()}
+      onClick={(event) => event.stopPropagation()}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={() => {
+        if (cancelledRef.current) {
+          return;
+        }
+        onCommit(draft);
+      }}
+      onKeyDown={(event) => {
+        event.stopPropagation();
+        if (event.key === "Enter") {
+          event.preventDefault();
+          event.currentTarget.blur();
+        }
+        if (event.key === "Escape") {
+          event.preventDefault();
+          cancelledRef.current = true;
+          onCancel();
+        }
+      }}
+    />
+  );
+};
+
 const TimelineClip = ({
   clip,
   pxPerMs,
@@ -1572,7 +1644,10 @@ const TimelineClip = ({
   packed,
   hidden,
   resizing,
+  renaming,
   onSelect,
+  onCommitRename,
+  onCancelRename,
   onResizePointerDown,
 }: {
   clip: EditorClip;
@@ -1583,7 +1658,10 @@ const TimelineClip = ({
   packed?: boolean;
   hidden?: boolean;
   resizing?: boolean;
+  renaming?: boolean;
   onSelect: (toggle: boolean) => void;
+  onCommitRename?: (label: string) => void;
+  onCancelRename?: () => void;
   onResizePointerDown?: (
     edge: EditorClipEdge,
     event: PointerEvent<HTMLButtonElement>,
@@ -1591,6 +1669,7 @@ const TimelineClip = ({
 }) => {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: clip.id,
+    disabled: renaming,
   });
   const heightPx = Math.max(18, msToPx(clip.durationMs, pxPerMs));
   const top = packed ? undefined : TRACK_PAD_PX + msToPx(clip.startMs, pxPerMs);
@@ -1601,7 +1680,7 @@ const TimelineClip = ({
         packed ? "" : " jayrr-editor-clip-shell--overlay"
       }${selected ? " is-selected" : ""}${
         hidden || isDragging ? " is-hidden" : ""
-      }${resizing ? " is-resizing" : ""}`}
+      }${resizing ? " is-resizing" : ""}${renaming ? " is-renaming" : ""}`}
       style={{
         height: heightPx,
         ...(top === undefined ? {} : { top }),
@@ -1616,28 +1695,45 @@ const TimelineClip = ({
         packed
         dragging={isDragging}
         buttonRef={setNodeRef}
-        draggableProps={{ ...attributes, ...listeners }}
+        draggableProps={renaming ? undefined : { ...attributes, ...listeners }}
         onSelect={onSelect}
         style={{ height: "100%" }}
       />
-      {onResizePointerDown ? (
+      {renaming ? (
+        <ClipRenameInput
+          label={clip.label}
+          onCommit={(next) => onCommitRename?.(next)}
+          onCancel={() => onCancelRename?.()}
+        />
+      ) : null}
+      {onResizePointerDown && !renaming ? (
         <>
-          <button
-            type="button"
-            className="jayrr-editor-clip__edge jayrr-editor-clip__edge--start"
-            aria-label="Trim start"
-            title="Drag to trim. Double-click to restore the original start."
-            onPointerDown={(event) => onResizePointerDown("start", event)}
-            onDoubleClick={(event) => event.stopPropagation()}
-          />
-          <button
-            type="button"
-            className="jayrr-editor-clip__edge jayrr-editor-clip__edge--end"
-            aria-label="Trim end"
-            title="Drag to trim. Double-click to restore the original end."
-            onPointerDown={(event) => onResizePointerDown("end", event)}
-            onDoubleClick={(event) => event.stopPropagation()}
-          />
+          <Tooltip
+            label="Drag to trim. Double-click to restore the original start."
+            position="top"
+            asChild
+          >
+            <button
+              type="button"
+              className="jayrr-editor-clip__edge jayrr-editor-clip__edge--start"
+              aria-label="Trim start"
+              onPointerDown={(event) => onResizePointerDown("start", event)}
+              onDoubleClick={(event) => event.stopPropagation()}
+            />
+          </Tooltip>
+          <Tooltip
+            label="Drag to trim. Double-click to restore the original end."
+            position="top"
+            asChild
+          >
+            <button
+              type="button"
+              className="jayrr-editor-clip__edge jayrr-editor-clip__edge--end"
+              aria-label="Trim end"
+              onPointerDown={(event) => onResizePointerDown("end", event)}
+              onDoubleClick={(event) => event.stopPropagation()}
+            />
+          </Tooltip>
         </>
       ) : null}
     </div>

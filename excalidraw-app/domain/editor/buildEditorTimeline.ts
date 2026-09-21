@@ -229,6 +229,10 @@ type EditorItemPlacement = {
   transitionKind?: EditorTransitionKind;
   /** Pixel mix while this clip covers the column to its left. */
   blendMode?: EditorBlendMode;
+  /** Clip loudness 0–1. Omitted means 1. Independent of preview volume. */
+  volume?: number;
+  /** User mute. Independent of Separate Audio (`muted` on video). */
+  audioMuted?: boolean;
 };
 
 export type EditorVideoClip = EditorRecordingSource &
@@ -307,6 +311,64 @@ export const isEditorAudioLikeClip = (
   clip: EditorProjectClip,
 ): clip is EditorSoundClip | EditorAudioClip =>
   isEditorSoundClip(clip) || isEditorAudioClip(clip);
+
+export const DEFAULT_CLIP_VOLUME = 1;
+
+export const clampClipVolume = (value: number) =>
+  Math.min(1, Math.max(0, value));
+
+export const clipVolumeValue = (clip: { volume?: number }) =>
+  typeof clip.volume === "number" && Number.isFinite(clip.volume)
+    ? clampClipVolume(clip.volume)
+    : DEFAULT_CLIP_VOLUME;
+
+export const clipAudioMixFields = (clip: {
+  volume?: number;
+  audioMuted?: boolean;
+}) => ({
+  ...(clipVolumeValue(clip) !== DEFAULT_CLIP_VOLUME
+    ? { volume: clipVolumeValue(clip) }
+    : {}),
+  ...(clip.audioMuted === true ? { audioMuted: true as const } : {}),
+});
+
+/** Video with attached audio, split audio, or library sound. */
+export const clipHasControllableAudio = (clip: EditorProjectClip) => {
+  if (isEditorSoundClip(clip) || isEditorAudioClip(clip)) {
+    return true;
+  }
+  return isEditorVideoClip(clip) && clip.muted !== true;
+};
+
+export const clipAudioIsOff = (clip: { audioMuted?: boolean }) =>
+  clip.audioMuted === true;
+
+export const clipPlaybackMuted = (clip: EditorProjectClip) =>
+  (isEditorVideoClip(clip) && clip.muted === true) || clip.audioMuted === true;
+
+export const setClipAudioMix = (
+  clips: readonly EditorProjectClip[],
+  clipId: string,
+  mix: { volume: number; audioMuted: boolean },
+): EditorProjectClip[] | null => {
+  const frozen = withFrozenStarts(clips);
+  const target = frozen.find((clip) => clip.id === clipId);
+  if (!target || !clipHasControllableAudio(target)) {
+    return null;
+  }
+  const volume = clampClipVolume(mix.volume);
+  return frozen.map((clip) => {
+    if (clip.id !== clipId || !clipHasControllableAudio(clip)) {
+      return clip;
+    }
+    const { volume: _volume, audioMuted: _audioMuted, ...rest } = clip;
+    return {
+      ...rest,
+      ...(volume !== DEFAULT_CLIP_VOLUME ? { volume } : {}),
+      ...(mix.audioMuted ? { audioMuted: true as const } : {}),
+    };
+  });
+};
 
 export const isEditorClocklessVisual = (
   clip: EditorProjectClip,
@@ -1042,6 +1104,29 @@ export const setClipsBlendMode = (
   );
 };
 
+export const EDITOR_CLIP_LABEL_MAX = 80;
+
+export const setClipsLabel = (
+  clips: readonly EditorProjectClip[],
+  clipIds: readonly string[],
+  label: string,
+): EditorProjectClip[] | null => {
+  const nextLabel = label.trim().slice(0, EDITOR_CLIP_LABEL_MAX);
+  if (!nextLabel) {
+    return null;
+  }
+  const frozen = withFrozenStarts(clips);
+  const update = new Set(clipIds);
+  if (
+    !frozen.some((clip) => update.has(clip.id) && clip.label !== nextLabel)
+  ) {
+    return null;
+  }
+  return frozen.map((clip) =>
+    update.has(clip.id) ? { ...clip, label: nextLabel } : clip,
+  );
+};
+
 export const setClipsRemoveBg = (
   clips: readonly EditorProjectClip[],
   clipIds: readonly string[],
@@ -1593,6 +1678,7 @@ export const separateClipsAudio = (
       laneId,
       laneStartMs: clip.laneStartMs ?? 0,
       sourceClipId: clip.id,
+      ...clipAudioMixFields(clip),
     };
   });
   const nextClips = clips.map((clip) => {
@@ -1693,8 +1779,20 @@ export const returnClipsAudio = (
     if (!unmuteVideo.has(clip.id) || !isEditorVideoClip(clip)) {
       return [clip];
     }
-    const { muted: _muted, ...rest } = clip;
-    return [rest];
+    const pair = clips.find(
+      (other) =>
+        removeAudio.has(other.id) &&
+        isEditorAudioClip(other) &&
+        audioBelongsToVideo(other, clip),
+    );
+    const { muted: _muted, volume: _volume, audioMuted: _audioMuted, ...rest } =
+      clip;
+    return [
+      {
+        ...rest,
+        ...clipAudioMixFields(pair ?? clip),
+      },
+    ];
   });
   return { clips: next, videoIds: [...unmuteVideo] };
 };

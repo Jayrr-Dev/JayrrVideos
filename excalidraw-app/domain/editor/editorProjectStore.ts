@@ -1,6 +1,7 @@
 import { jayrrLocalSoundUrl } from "../../sounds/jayrrSoundPlayback";
 
 import {
+  clipAudioMixFields,
   clipLaneId,
   EDITOR_AUDIO_TYPE,
   EDITOR_CLIP_TYPE,
@@ -76,6 +77,8 @@ export type StoredEditorClip = {
   transitionKind?: EditorProjectClip["transitionKind"];
   blendMode?: EditorProjectClip["blendMode"];
   muted?: boolean;
+  audioMuted?: boolean;
+  volume?: number;
   removeBg?: boolean;
   sourceClipId?: string;
   width?: number;
@@ -127,6 +130,8 @@ export const parseStoredEditorClips = (parsed: unknown): StoredEditorClip[] => {
     const transitionRaw = Reflect.get(item, "transitionKind");
     const blendRaw = Reflect.get(item, "blendMode");
     const mutedRaw = Reflect.get(item, "muted");
+    const audioMutedRaw = Reflect.get(item, "audioMuted");
+    const volumeRaw = Reflect.get(item, "volume");
     const removeBgRaw = Reflect.get(item, "removeBg");
     const sourceClipRaw = Reflect.get(item, "sourceClipId");
     const placement = {
@@ -145,6 +150,12 @@ export const parseStoredEditorClips = (parsed: unknown): StoredEditorClip[] => {
         : {}),
       ...(isEditorBlendMode(blendRaw) ? { blendMode: blendRaw } : {}),
       ...(mutedRaw === true ? { muted: true } : {}),
+      ...(audioMutedRaw === true ? { audioMuted: true } : {}),
+      ...(typeof volumeRaw === "number" &&
+      Number.isFinite(volumeRaw) &&
+      volumeRaw !== 1
+        ? { volume: Math.min(1, Math.max(0, volumeRaw)) }
+        : {}),
       ...(removeBgRaw === true ? { removeBg: true } : {}),
       ...(typeof sourceClipRaw === "string" && sourceClipRaw
         ? { sourceClipId: sourceClipRaw }
@@ -249,6 +260,12 @@ export const clipsToStoredEditor = (
       ...(clip.transitionKind ? { transitionKind: clip.transitionKind } : {}),
       ...(clip.blendMode ? { blendMode: clip.blendMode } : {}),
       ...(clip.type === EDITOR_CLIP_TYPE && clip.muted ? { muted: true } : {}),
+      ...(clip.audioMuted ? { audioMuted: true } : {}),
+      ...(typeof clip.volume === "number" &&
+      Number.isFinite(clip.volume) &&
+      clip.volume !== 1
+        ? { volume: clip.volume }
+        : {}),
       ...(clip.type === EDITOR_CLIP_TYPE && clip.removeBg
         ? { removeBg: true }
         : {}),
@@ -485,6 +502,7 @@ export const restoreProjectClips = (
           : {}),
         ...(item.transitionKind ? { transitionKind: item.transitionKind } : {}),
         ...(item.blendMode ? { blendMode: item.blendMode } : {}),
+        ...clipAudioMixFields(item),
       });
       continue;
     }
@@ -567,6 +585,7 @@ export const restoreProjectClips = (
         : {}),
       ...(item.transitionKind ? { transitionKind: item.transitionKind } : {}),
       ...(item.blendMode ? { blendMode: item.blendMode } : {}),
+      ...clipAudioMixFields(item),
     };
     if (isEditorAudioType(item.type)) {
       restored.push({

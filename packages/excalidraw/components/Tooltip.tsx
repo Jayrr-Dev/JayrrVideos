@@ -1,6 +1,59 @@
-import React, { useEffect } from "react";
+import React, {
+  cloneElement,
+  isValidElement,
+  useEffect,
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 
 import "./Tooltip.scss";
+
+const OPEN_DELAY_MS = 200;
+const WARM_FOR_MS = 300;
+
+type TimerHandle = ReturnType<typeof setTimeout>;
+
+let tooltipOpen = false;
+let tooltipWarm = false;
+let openTimer: TimerHandle | null = null;
+let cooldownTimer: TimerHandle | null = null;
+let timerView: Window | null = null;
+
+const viewOf = (node: Element): Window =>
+  node.ownerDocument.defaultView ?? window;
+
+const clearTimer = (handle: TimerHandle | null) => {
+  if (handle == null) {
+    return;
+  }
+  (timerView ?? window).clearTimeout(handle);
+};
+
+const clearOpenTimer = () => {
+  clearTimer(openTimer);
+  openTimer = null;
+};
+
+const clearCooldownTimer = () => {
+  clearTimer(cooldownTimer);
+  cooldownTimer = null;
+};
+
+const markOpened = () => {
+  tooltipWarm = true;
+  clearCooldownTimer();
+};
+
+const markClosed = (view: Window) => {
+  clearCooldownTimer();
+  timerView = view;
+  cooldownTimer = view.setTimeout(() => {
+    tooltipWarm = false;
+    cooldownTimer = null;
+  }, WARM_FOR_MS);
+};
 
 export const getTooltipDiv = () => {
   const existingDiv = document.querySelector<HTMLDivElement>(
@@ -60,7 +113,7 @@ export const updateTooltipPosition = (
 };
 
 const updateTooltip = (
-  item: HTMLDivElement,
+  item: HTMLElement,
   tooltip: HTMLDivElement,
   label: string,
   long: boolean,
@@ -76,14 +129,81 @@ const updateTooltip = (
   updateTooltipPosition(tooltip, itemRect, position);
 };
 
+const revealTooltip = (
+  item: HTMLElement,
+  label: string,
+  long: boolean,
+  position: "bottom" | "top",
+) => {
+  updateTooltip(item, getTooltipDiv(), label, long, position);
+  tooltipOpen = true;
+  markOpened();
+};
+
+export const scheduleTooltip = (
+  item: HTMLElement,
+  label: string,
+  long: boolean,
+  position: "bottom" | "top" = "bottom",
+) => {
+  const view = viewOf(item);
+  clearOpenTimer();
+  if (tooltipWarm) {
+    revealTooltip(item, label, long, position);
+    return;
+  }
+  timerView = view;
+  openTimer = view.setTimeout(() => {
+    openTimer = null;
+    revealTooltip(item, label, long, position);
+  }, OPEN_DELAY_MS);
+};
+
+export const hideScheduledTooltip = (view: Window = window) => {
+  clearOpenTimer();
+  if (!tooltipOpen) {
+    return;
+  }
+  getTooltipDiv().classList.remove("excalidraw-tooltip--visible");
+  tooltipOpen = false;
+  markClosed(view);
+};
+
+type TooltipTriggerProps = {
+  onPointerEnter?: (event: ReactPointerEvent<HTMLElement>) => void;
+  onPointerLeave?: (event: ReactPointerEvent<HTMLElement>) => void;
+  onPointerDown?: (event: ReactPointerEvent<HTMLElement>) => void;
+};
+
 type TooltipProps = {
-  children: React.ReactNode;
+  children: ReactNode;
   label: string;
   long?: boolean;
-  style?: React.CSSProperties;
+  style?: CSSProperties;
   disabled?: boolean;
   position?: "bottom" | "top";
+  asChild?: boolean;
 };
+
+const bindTooltip = (
+  label: string,
+  long: boolean,
+  position: "bottom" | "top",
+  existing?: TooltipTriggerProps,
+): TooltipTriggerProps => ({
+  onPointerEnter: (event) => {
+    existing?.onPointerEnter?.(event);
+    scheduleTooltip(event.currentTarget, label, long, position);
+  },
+  onPointerLeave: (event) => {
+    existing?.onPointerLeave?.(event);
+    hideScheduledTooltip(viewOf(event.currentTarget));
+  },
+  onPointerDown: (event) => {
+    existing?.onPointerDown?.(event);
+    hideScheduledTooltip(viewOf(event.currentTarget));
+  },
+});
 
 export const Tooltip = ({
   children,
@@ -92,30 +212,24 @@ export const Tooltip = ({
   style,
   disabled,
   position = "bottom",
+  asChild = false,
 }: TooltipProps) => {
   useEffect(() => {
-    return () =>
-      getTooltipDiv().classList.remove("excalidraw-tooltip--visible");
+    return () => hideScheduledTooltip();
   }, []);
   if (disabled) {
     return null;
   }
+  if (asChild && isValidElement<TooltipTriggerProps>(children)) {
+    return cloneElement(children as ReactElement<TooltipTriggerProps>, {
+      ...bindTooltip(label, long, position, children.props),
+    });
+  }
   return (
     <div
       className="excalidraw-tooltip-wrapper"
-      onPointerEnter={(event) =>
-        updateTooltip(
-          event.currentTarget as HTMLDivElement,
-          getTooltipDiv(),
-          label,
-          long,
-          position,
-        )
-      }
-      onPointerLeave={() =>
-        getTooltipDiv().classList.remove("excalidraw-tooltip--visible")
-      }
       style={style}
+      {...bindTooltip(label, long, position)}
     >
       {children}
     </div>

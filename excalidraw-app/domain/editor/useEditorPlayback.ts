@@ -7,6 +7,8 @@ import {
   clipAtTime,
   clipLaneId,
   collectLaneOverlaps,
+  clipPlaybackMuted,
+  clipVolumeValue,
   editorHasClips,
   isEditorAudioLikeClip,
   isEditorClocklessVisual,
@@ -32,7 +34,7 @@ import {
   syncEditorClipCutout,
 } from "./editorClipCutout";
 import {
-  getEditorPreviewAudio,
+  applyPreviewMediaMix,
   registerEditorPreviewSound,
   resolveEditorPreviewLayers,
   subscribeEditorPreviewVideos,
@@ -279,18 +281,16 @@ const coveringSounds = (timeline: EditorTimeline, timeMs: number) =>
       timeMs < clip.startMs + clip.durationMs,
   );
 
-const clipIsMuted = (clip: EditorClip) =>
-  isEditorVideoClip(clip) && clip.muted === true;
+const applyVideoMix = (
+  video: HTMLVideoElement,
+  clipMuted: boolean,
+  clipVolume = 1,
+) => {
+  applyPreviewMediaMix(video, clipVolume, clipMuted);
+};
 
-const applyVideoMix = (video: HTMLVideoElement, clipMuted: boolean) => {
-  const mix = getEditorPreviewAudio();
-  if (clipMuted) {
-    video.dataset.jayrrClipMuted = "1";
-  } else {
-    delete video.dataset.jayrrClipMuted;
-  }
-  video.volume = mix.volume;
-  video.muted = mix.muted || clipMuted;
+const applyClipVideoMix = (video: HTMLVideoElement, clip: EditorClip) => {
+  applyVideoMix(video, clipPlaybackMuted(clip), clipVolumeValue(clip));
 };
 
 const overlayVideoOnLaneAtTime = (
@@ -370,8 +370,13 @@ export const useEditorPlayback = ({
   }, []);
 
   const prepareSrc = useCallback(
-    async (video: HTMLVideoElement, url: string, clipMuted = false) => {
-      applyVideoMix(video, clipMuted);
+    async (
+      video: HTMLVideoElement,
+      url: string,
+      clipMuted = false,
+      clipVolume = 1,
+    ) => {
+      applyVideoMix(video, clipMuted, clipVolume);
       if (!url) {
         return;
       }
@@ -386,7 +391,7 @@ export const useEditorPlayback = ({
         video.load();
       }
       await waitForData(video);
-      applyVideoMix(video, clipMuted);
+      applyVideoMix(video, clipMuted, clipVolume);
     },
     [],
   );
@@ -395,7 +400,6 @@ export const useEditorPlayback = ({
     async (timeMs: number, shouldPlay: boolean) => {
       const active = coveringSounds(timelineRef.current, timeMs);
       const activeIds = new Set(active.map((clip) => clip.id));
-      const mix = getEditorPreviewAudio();
       const doc = docRef.current;
       for (const [id, audio] of soundNodesRef.current) {
         if (!activeIds.has(id)) {
@@ -413,8 +417,7 @@ export const useEditorPlayback = ({
           soundNodesRef.current.set(clip.id, audio);
           registerEditorPreviewSound(clip.id, audio);
         }
-        audio.volume = mix.volume;
-        audio.muted = mix.muted;
+        applyPreviewMediaMix(audio, clipVolumeValue(clip), clipPlaybackMuted(clip));
         const src = isEditorSoundClip(clip)
           ? jayrrSoundPlayUrls(clip.url || null, clip.path)[0]
           : clip.url;
@@ -475,7 +478,7 @@ export const useEditorPlayback = ({
       }
       const at = clockMs(timeMs, shouldPlay);
       if (shouldPlay && videoMatchesClock(video, clip, at)) {
-        applyVideoMix(video, clipIsMuted(clip));
+        applyClipVideoMix(video, clip);
         setLayerVisible(video, true, blend, clipHasRemoveBg(clip));
         if (video.paused) {
           try {
@@ -489,8 +492,13 @@ export const useEditorPlayback = ({
         }
         return clip.id;
       }
-      await prepareSrc(video, clip.url, clipIsMuted(clip));
-      applyVideoMix(video, clipIsMuted(clip));
+      await prepareSrc(
+        video,
+        clip.url,
+        clipPlaybackMuted(clip),
+        clipVolumeValue(clip),
+      );
+      applyClipVideoMix(video, clip);
       await seekVideo(
         video,
         sourceOffsetSec(clip, clockMs(timeMs, shouldPlay)),
@@ -562,7 +570,7 @@ export const useEditorPlayback = ({
 
       // Same file (including cut siblings): keep the visible frame, just seek.
       if (videoHasUrl(active, clip.url) && active.readyState >= 2) {
-        applyVideoMix(active, clipIsMuted(clip));
+        applyClipVideoMix(active, clip);
         const at = clockMs(timeMs, shouldPlay);
         if (!videoMatchesClock(active, clip, at)) {
           await seekVideo(
@@ -591,8 +599,13 @@ export const useEditorPlayback = ({
       // Different URL with a spare buffer: load on idle, then swap so the old
       // frame stays until the new one has a paint-ready frame.
       if (idle) {
-        await prepareSrc(idle, clip.url, clipIsMuted(clip));
-        applyVideoMix(idle, clipIsMuted(clip));
+        await prepareSrc(
+          idle,
+          clip.url,
+          clipPlaybackMuted(clip),
+          clipVolumeValue(clip),
+        );
+        applyClipVideoMix(idle, clip);
         await seekVideo(
           idle,
           sourceOffsetSec(clip, clockMs(timeMs, shouldPlay)),
@@ -697,7 +710,12 @@ export const useEditorPlayback = ({
         return;
       }
       prefetchUrlRef.current = next.url;
-      void prepareSrc(idle, next.url, clipIsMuted(next)).then(() => {
+      void prepareSrc(
+        idle,
+        next.url,
+        clipPlaybackMuted(next),
+        clipVolumeValue(next),
+      ).then(() => {
         if (prefetchUrlRef.current !== next.url) {
           return;
         }
@@ -1048,7 +1066,7 @@ export const useEditorPlayback = ({
         : null;
       if (sequenceClip && baseClipIdRef.current === sequenceClip.id) {
         const active = getActiveBase(layers);
-        applyVideoMix(active, clipIsMuted(sequenceClip));
+        applyClipVideoMix(active, sequenceClip);
         const expected = sourceOffsetSec(sequenceClip, nextMs);
         if (Math.abs(active.currentTime - expected) > SEEK_DRIFT_SEC) {
           seekVideo(active, expected);
@@ -1097,7 +1115,7 @@ export const useEditorPlayback = ({
         if (!clip || !video || stackClipIdsRef.current[index] !== clip.id) {
           return;
         }
-        applyVideoMix(video, clipIsMuted(clip));
+        applyClipVideoMix(video, clip);
         const expected = sourceOffsetSec(clip, nextMs);
         if (Math.abs(video.currentTime - expected) > SEEK_DRIFT_SEC) {
           seekVideo(video, expected);

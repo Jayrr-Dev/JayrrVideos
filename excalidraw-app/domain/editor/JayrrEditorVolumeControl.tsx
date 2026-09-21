@@ -66,13 +66,28 @@ export const JayrrEditorVolumeControl = ({
   buttonClassName,
   sliderClassName,
   extraVideo,
+  volume: volumeProp,
+  muted: mutedProp,
+  onChange,
+  muteLabel = "Mute preview",
+  unmuteLabel = "Unmute preview",
+  sliderLabel = "Preview volume",
 }: {
   className: string;
   buttonClassName: string;
   sliderClassName: string;
   extraVideo?: HTMLVideoElement | null;
+  volume?: number;
+  muted?: boolean;
+  onChange?: (volume: number, muted: boolean) => void;
+  muteLabel?: string;
+  unmuteLabel?: string;
+  sliderLabel?: string;
 }) => {
-  const { volume, muted, writeAudio } = useEditorPreviewAudio(extraVideo);
+  const preview = useEditorPreviewAudio(extraVideo);
+  const volume = volumeProp ?? preview.volume;
+  const muted = mutedProp ?? preview.muted;
+  const writeAudio = onChange ?? preview.writeAudio;
   const silent = muted || volume === 0;
   const sliderValue = muted ? 0 : Math.round(volume * 100);
 
@@ -80,7 +95,7 @@ export const JayrrEditorVolumeControl = ({
     <div className={className}>
       <ControlButton
         className={buttonClassName}
-        label={silent ? "Unmute preview" : "Mute preview"}
+        label={silent ? unmuteLabel : muteLabel}
         onClick={() => {
           if (silent) {
             writeAudio(volume === 0 ? 1 : volume, false);
@@ -98,7 +113,7 @@ export const JayrrEditorVolumeControl = ({
         max={100}
         step={1}
         value={sliderValue}
-        aria-label="Preview volume"
+        aria-label={sliderLabel}
         style={{
           background: `linear-gradient(to right, var(--color-primary) ${sliderValue}%, var(--color-gray-20, #e5e7eb) ${sliderValue}%)`,
         }}

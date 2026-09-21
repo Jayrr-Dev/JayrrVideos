@@ -3,6 +3,19 @@
     max-height: min(36rem, 78vh);
   }
 
+  .jayrr-editor-add-recording.Dialog--fullscreen .Island {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .jayrr-editor-add-recording.Dialog--fullscreen .Dialog__content {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+    max-height: none;
+  }
+
   .jayrr-editor-add-recording .Dialog__chrome {
     margin-bottom: 0.75rem;
     padding-bottom: 0;
@@ -39,6 +52,11 @@
     min-height: 0;
   }
 
+  .jayrr-editor-add-recording.Dialog--fullscreen
+    .jayrr-editor-add-recording__form {
+    flex: 1;
+  }
+
   .jayrr-editor-add-recording__folder-bar {
     display: flex;
     align-items: center;
@@ -63,6 +81,17 @@
     min-height: 12rem;
     max-height: min(26rem, 52vh);
     overflow: auto;
+  }
+
+  .jayrr-editor-add-recording.Dialog--fullscreen
+    .jayrr-editor-add-recording__body {
+    flex: 1;
+    max-height: none;
+  }
+
+  .jayrr-editor-add-recording .jayrr-present__recordings-list,
+  .jayrr-editor-add-recording .jayrr-scene-grid {
+    grid-template-columns: repeat(auto-fill, minmax(14.5rem, 1fr));
   }
 
   .jayrr-editor-add-recording

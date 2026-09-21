@@ -43,8 +43,11 @@ import {
   canCutAtTime,
   clipAtTimeAcrossLanes,
   clipHasReturnableAudio,
+  clipHasControllableAudio,
+  clipAudioIsOff,
   clipLaneId,
   clipLayerMoveAvailability,
+  clipVolumeValue,
   collectLaneOverlaps,
   EDITOR_CUT_MIN_MS,
   EDITOR_PX_PER_SECOND_OPTIONS,
@@ -61,7 +64,9 @@ import {
   restoreEditorClipEdge,
   SEQUENCE_LANE_ID,
   setClipsBlendMode,
+  setClipsLabel,
   setClipsRemoveBg,
+  setClipAudioMix,
   setClipsTransition,
   type EditorBlendMode,
   type EditorClip,
@@ -308,6 +313,7 @@ export const JayrrEditorPanel = () => {
     blendMode: EditorBlendMode;
   } | null>(null);
   const [menuClipId, setMenuClipId] = useState<string | null>(null);
+  const [renamingClipId, setRenamingClipId] = useState<string | null>(null);
 
   const selectedIdSet = useMemo(
     () => new Set(selectedClipIds),
@@ -537,6 +543,9 @@ export const JayrrEditorPanel = () => {
     return [];
   }, [clips, playheadClip, selectedIdSet]);
   const canReturnAudio = returnTargets.length > 0;
+  const canControlAudio = Boolean(
+    menuClip && clipHasControllableAudio(menuClip),
+  );
 
   const mergeSelected = useCallback(() => {
     const group = getMergeableClips(clips, selectedIdSet);
@@ -642,6 +651,23 @@ export const JayrrEditorPanel = () => {
     persist(next);
   }, [clips, persist, removeBgOn, removeBgTargets]);
 
+  const setMenuClipAudio = useCallback(
+    (volume: number, muted: boolean) => {
+      if (!menuClipId) {
+        return;
+      }
+      const next = setClipAudioMix(clips, menuClipId, {
+        volume,
+        audioMuted: muted,
+      });
+      if (!next) {
+        return;
+      }
+      persist(next);
+    },
+    [clips, menuClipId, persist],
+  );
+
   const selectClip = useCallback(
     (clip: EditorClip, opts?: { toggle?: boolean }) => {
       if (opts?.toggle) {
@@ -705,6 +731,22 @@ export const JayrrEditorPanel = () => {
   const setBlendMode = useCallback(
     (clipIds: readonly string[], blendMode: EditorBlendMode) => {
       const next = setClipsBlendMode(clips, clipIds, blendMode);
+      if (!next) {
+        return;
+      }
+      persist(next);
+    },
+    [clips, persist],
+  );
+
+  const startRenameClip = useCallback((clipId: string) => {
+    setRenamingClipId(clipId);
+  }, []);
+
+  const renameClip = useCallback(
+    (clipId: string, label: string) => {
+      setRenamingClipId(null);
+      const next = setClipsLabel(clips, [clipId], label);
       if (!next) {
         return;
       }
@@ -1041,6 +1083,9 @@ export const JayrrEditorPanel = () => {
                 onMoveClip={moveClip}
                 onResizeClip={resizeClip}
                 onRestoreClipEdge={restoreClipEdge}
+                renamingClipId={renamingClipId}
+                onRenameClip={renameClip}
+                onCancelRenameClip={() => setRenamingClipId(null)}
                 onSetTransition={setTransition}
                 onOpenBlend={(args) => {
                   window.setTimeout(() => setBlendPicker(args), 0);
@@ -1108,6 +1153,17 @@ export const JayrrEditorPanel = () => {
                   onSelect={cutAtPlayhead}
                 >
                   Cut
+                </ContextMenu.Item>
+              ) : null}
+              {menuOnClip && menuClip ? (
+                <ContextMenu.Item
+                  className="jayrr-editor-menu__item"
+                  onSelect={() => {
+                    const clipId = menuClip.id;
+                    window.setTimeout(() => startRenameClip(clipId), 0);
+                  }}
+                >
+                  Rename
                 </ContextMenu.Item>
               ) : null}
               {menuOnClip ? null : (
