@@ -29,13 +29,13 @@ import "../../components/ui/JayrrLibraryMenu.scss";
 import {
   canCutAtTime,
   clipAtTimeAcrossLanes,
+  clipHasReturnableAudio,
   EDITOR_CUT_MIN_MS,
   EDITOR_PX_PER_SECOND,
   EDITOR_PX_PER_SECOND_OPTIONS,
   editorLanes,
   formatEditorClock,
   getMergeableClips,
-  isEditorAudioClip,
   isEditorVideoClip,
   mergeProjectClips,
   moveEditorClip,
@@ -230,22 +230,17 @@ export const JayrrEditorPanel = () => {
   }, [clips, playheadClip, selectedIdSet]);
   const canSeparateAudio = separateTargets.length > 0;
   const returnTargets = useMemo(() => {
-    const selected = clips.filter((clip) => {
-      if (!selectedIdSet.has(clip.id)) {
-        return false;
-      }
-      if (isEditorAudioClip(clip)) {
-        return true;
-      }
-      return isEditorVideoClip(clip) && clip.muted === true;
-    });
+    const selected = clips.filter(
+      (clip) =>
+        selectedIdSet.has(clip.id) && clipHasReturnableAudio(clips, clip),
+    );
     if (selected.length > 0) {
       return selected;
     }
-    if (playheadClip && isEditorAudioClip(playheadClip)) {
-      return [playheadClip];
+    if (selectedIdSet.size > 0) {
+      return [];
     }
-    if (playheadClip && isEditorVideoClip(playheadClip) && playheadClip.muted) {
+    if (playheadClip && clipHasReturnableAudio(clips, playheadClip)) {
       return [playheadClip];
     }
     return [];
@@ -627,6 +622,14 @@ export const JayrrEditorPanel = () => {
               data-prevent-outside-click
               style={{ maxHeight: "none" }}
             >
+              {canCut ? (
+                <ContextMenu.Item
+                  className="jayrr-editor-menu__item"
+                  onSelect={cutAtPlayhead}
+                >
+                  Cut
+                </ContextMenu.Item>
+              ) : null}
               <ContextMenu.Item
                 className="jayrr-editor-menu__item"
                 onSelect={() => setAddRecordingOpen(true)}
@@ -639,14 +642,6 @@ export const JayrrEditorPanel = () => {
               >
                 Add sound
               </ContextMenu.Item>
-              {canCut ? (
-                <ContextMenu.Item
-                  className="jayrr-editor-menu__item"
-                  onSelect={cutAtPlayhead}
-                >
-                  Cut
-                </ContextMenu.Item>
-              ) : null}
               {canSeparateAudio ? (
                 <ContextMenu.Item
                   className="jayrr-editor-menu__item"

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildEditorTimeline,
   clipAtTimeAcrossLanes,
+  clipHasReturnableAudio,
   collectLaneOverlaps,
   collectOverlapBands,
   collectSnapPointsMs,
@@ -459,5 +460,40 @@ describe("returnClipsAudio", () => {
     expect(returned?.clips).toEqual([
       expect.objectContaining({ id: "a", type: "clip" }),
     ]);
+  });
+
+  it("does nothing for unpaired audio", () => {
+    const video = clip("a", 800, { laneStartMs: 0 });
+    const orphan = {
+      id: "sound-audio",
+      type: "audio" as const,
+      recordingId: "rec-other" as Id<"presentRecordings">,
+      url: "https://example.com/other.mp4",
+      posterUrl: null,
+      label: "ui-move",
+      durationMs: 400,
+      laneId: "stack-1",
+      laneStartMs: 0,
+    };
+    expect(returnClipsAudio([video, orphan], [orphan.id])).toBeNull();
+    expect(clipHasReturnableAudio([video, orphan], orphan)).toBe(false);
+    expect(clipHasReturnableAudio([video, orphan], video)).toBe(false);
+  });
+
+  it("detects split audio that can be returned", () => {
+    const split = separateClipsAudio(
+      [clip("a", 800, { laneStartMs: 0 })],
+      ["a"],
+      ["stack-1"],
+    );
+    const video = split?.clips[0];
+    const audio = split?.clips[1];
+    expect(video).toBeTruthy();
+    expect(audio).toBeTruthy();
+    if (!video || !audio) {
+      return;
+    }
+    expect(clipHasReturnableAudio(split?.clips ?? [], video)).toBe(true);
+    expect(clipHasReturnableAudio(split?.clips ?? [], audio)).toBe(true);
   });
 });

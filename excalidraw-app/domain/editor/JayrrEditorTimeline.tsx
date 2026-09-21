@@ -1076,10 +1076,6 @@ const ClipFace = ({
         sliceCount,
         frames,
         clip.type === "clip" ? clip.posterUrl : null,
-
-        sliceCount,
-        frames,
-        clip.type === "clip" ? clip.posterUrl : null,
       );
   const top = packed ? undefined : TRACK_PAD_PX + msToPx(clip.startMs, pxPerMs);
   const mergedStyle: CSSProperties = {

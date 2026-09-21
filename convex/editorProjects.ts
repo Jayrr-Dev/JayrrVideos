@@ -24,6 +24,7 @@ const projectDoc = v.object({
   name: v.string(),
   clipsJson: v.string(),
   stackLanesJson: v.string(),
+  stateJson: v.union(v.string(), v.null()),
   durationMs: v.number(),
   clipCount: v.number(),
   updatedAt: v.number(),
@@ -40,11 +41,16 @@ const normalizeName = (name: string) => {
   return trimmed;
 };
 
-const requirePayload = (clipsJson: string, stackLanesJson: string) => {
+const requirePayload = (
+  clipsJson: string,
+  stackLanesJson: string,
+  stateJson?: string,
+) => {
   if (!clipsJson) {
     throw new Error("Project is empty");
   }
-  if (clipsJson.length + stackLanesJson.length > MAX_PAYLOAD_BYTES) {
+  const extra = stateJson?.length ?? 0;
+  if (clipsJson.length + stackLanesJson.length + extra > MAX_PAYLOAD_BYTES) {
     throw new Error("Project is too large to save.");
   }
 };
@@ -158,6 +164,7 @@ export const get = query({
       name: project.name,
       clipsJson: project.clipsJson,
       stackLanesJson: project.stackLanesJson,
+      stateJson: project.stateJson ?? null,
       durationMs: project.durationMs,
       clipCount: project.clipCount,
       updatedAt: project.updatedAt,
@@ -171,13 +178,14 @@ export const save = mutation({
     folderId: v.optional(v.id("editorProjectFolders")),
     clipsJson: v.string(),
     stackLanesJson: v.string(),
+    stateJson: v.optional(v.string()),
     durationMs: v.number(),
     clipCount: v.number(),
   },
   returns: v.id("editorProjects"),
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
-    requirePayload(args.clipsJson, args.stackLanesJson);
+    requirePayload(args.clipsJson, args.stackLanesJson, args.stateJson);
     let folderId: Id<"editorProjectFolders"> | undefined;
     if (args.folderId) {
       const folder = await getOwnedFolder(ctx, args.folderId, user._id);
@@ -189,6 +197,7 @@ export const save = mutation({
       name: normalizeName(args.name),
       clipsJson: args.clipsJson,
       stackLanesJson: args.stackLanesJson,
+      ...(args.stateJson ? { stateJson: args.stateJson } : {}),
       durationMs: Math.max(0, Math.round(args.durationMs)),
       clipCount: Math.max(0, Math.round(args.clipCount)),
       updatedAt: Date.now(),

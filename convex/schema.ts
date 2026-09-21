@@ -106,6 +106,7 @@ export default defineSchema({
     name: v.string(),
     clipsJson: v.string(),
     stackLanesJson: v.string(),
+    stateJson: v.optional(v.string()),
     durationMs: v.number(),
     clipCount: v.number(),
     updatedAt: v.number(),

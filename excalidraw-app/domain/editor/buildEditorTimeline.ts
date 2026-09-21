@@ -963,7 +963,8 @@ export const separateClipsAudio = (
 } | null => {
   const wanted = new Set(clipIds);
   const sources = clips.filter(
-    (clip) => wanted.has(clip.id) && isEditorVideoClip(clip),
+    (clip): clip is EditorVideoClip =>
+      wanted.has(clip.id) && isEditorVideoClip(clip),
   );
   if (sources.length === 0) {
     return null;
@@ -972,8 +973,8 @@ export const separateClipsAudio = (
   const nextLanes = stackLaneIds.includes(audioLaneId)
     ? [...stackLaneIds]
     : stackLaneIds.length >= MAX_STACK_LANES
-      ? [...stackLaneIds]
-      : [...stackLaneIds, audioLaneId];
+    ? [...stackLaneIds]
+    : [...stackLaneIds, audioLaneId];
   const laneId = nextLanes[0] ?? audioLaneId;
   const audioIds: string[] = [];
   const mutedIds = new Set(sources.map((clip) => clip.id));
@@ -1031,6 +1032,23 @@ const audioBelongsToVideo = (
   return rangesOverlap(audio, video);
 };
 
+export const clipHasReturnableAudio = (
+  clips: readonly EditorProjectClip[],
+  clip: EditorProjectClip,
+): boolean => {
+  if (isEditorAudioClip(clip)) {
+    return clips.some(
+      (other) => isEditorVideoClip(other) && audioBelongsToVideo(clip, other),
+    );
+  }
+  if (!isEditorVideoClip(clip) || clip.muted !== true) {
+    return false;
+  }
+  return clips.some(
+    (other) => isEditorAudioClip(other) && audioBelongsToVideo(other, clip),
+  );
+};
+
 export const returnClipsAudio = (
   clips: readonly EditorProjectClip[],
   clipIds: readonly string[],
@@ -1043,6 +1061,9 @@ export const returnClipsAudio = (
   const removeAudio = new Set<string>();
   const unmuteVideo = new Set<string>();
   for (const clip of selected) {
+    if (!clipHasReturnableAudio(clips, clip)) {
+      continue;
+    }
     if (isEditorAudioClip(clip)) {
       removeAudio.add(clip.id);
       for (const other of clips) {

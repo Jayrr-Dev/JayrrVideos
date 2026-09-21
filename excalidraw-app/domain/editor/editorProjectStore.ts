@@ -1,7 +1,11 @@
+import { jayrrLocalSoundUrl } from "../../sounds/jayrrSoundPlayback";
+
 import {
   clipLaneId,
   EDITOR_AUDIO_TYPE,
   EDITOR_CLIP_TYPE,
+  EDITOR_PX_PER_SECOND,
+  EDITOR_PX_PER_SECOND_OPTIONS,
   EDITOR_SOUND_TYPE,
   isEditorAudioType,
   isEditorBlendMode,
@@ -12,12 +16,34 @@ import {
   SEQUENCE_LANE_ID,
   type EditorProjectClip,
 } from "./buildEditorTimeline";
-import { jayrrLocalSoundUrl } from "../../sounds/jayrrSoundPlayback";
 
 import type { Id } from "../../../convex/_generated/dataModel";
 
 export const EDITOR_CLIPS_STORAGE_KEY = "jayrr-editor-recording-clips-v1";
 export const EDITOR_STACK_LANES_KEY = "jayrr-editor-stack-lanes-v1";
+export const EDITOR_VIEW_STORAGE_KEY = "jayrr-editor-view-v1";
+
+export type EditorZoomMode = "fit" | "fixed";
+
+export type StoredEditorView = {
+  zoomMode: EditorZoomMode;
+  pxPerSecond: number;
+  currentTimeMs: number;
+  selectedClipIds: string[];
+  previewElementId: string | null;
+  volume: number;
+  muted: boolean;
+};
+
+export const DEFAULT_EDITOR_VIEW: StoredEditorView = {
+  zoomMode: "fit",
+  pxPerSecond: EDITOR_PX_PER_SECOND,
+  currentTimeMs: 0,
+  selectedClipIds: [],
+  previewElementId: null,
+  volume: 1,
+  muted: false,
+};
 
 export type StoredEditorClip = {
   id: string;
@@ -69,6 +95,11 @@ export const parseStoredEditorClips = (parsed: unknown): StoredEditorClip[] => {
     }
     const durationRaw = readFiniteMs(Reflect.get(item, "durationMs"));
     const offsetRaw = readFiniteMs(Reflect.get(item, "sourceOffsetMs"));
+    const labelRaw = Reflect.get(item, "label");
+    const storedLabel =
+      typeof labelRaw === "string" && labelRaw.trim()
+        ? labelRaw.trim()
+        : undefined;
     const laneRaw = Reflect.get(item, "laneId");
     const laneStartRaw = readFiniteMs(Reflect.get(item, "laneStartMs"));
     const transitionRaw = Reflect.get(item, "transitionKind");
@@ -99,14 +130,13 @@ export const parseStoredEditorClips = (parsed: unknown): StoredEditorClip[] => {
         continue;
       }
       const url = Reflect.get(item, "url");
-      const label = Reflect.get(item, "label");
       out.push({
         ...placement,
         type: EDITOR_SOUND_TYPE,
         soundId,
         path,
         ...(typeof url === "string" && url ? { url } : {}),
-        ...(typeof label === "string" && label ? { label } : {}),
+        ...(storedLabel ? { label: storedLabel } : {}),
       });
       continue;
     }
@@ -118,6 +148,7 @@ export const parseStoredEditorClips = (parsed: unknown): StoredEditorClip[] => {
       ...placement,
       type: isEditorAudioType(typeRaw) ? EDITOR_AUDIO_TYPE : EDITOR_CLIP_TYPE,
       recordingId,
+      ...(storedLabel ? { label: storedLabel } : {}),
     });
   }
   return out;
@@ -130,6 +161,7 @@ export const clipsToStoredEditor = (
     const shared: StoredEditorClip = {
       id: clip.id,
       type: clip.type,
+      ...(clip.label ? { label: clip.label } : {}),
       durationMs: clip.durationMs,
       sourceOffsetMs: clip.sourceOffsetMs ?? 0,
       ...(clip.laneId ? { laneId: clip.laneId } : {}),
@@ -210,6 +242,67 @@ export const writeStoredStackLanes = (laneIds: readonly string[]) => {
   localStorage.setItem(EDITOR_STACK_LANES_KEY, JSON.stringify(laneIds));
 };
 
+const isEditorZoomMode = (value: unknown): value is EditorZoomMode =>
+  value === "fit" || value === "fixed";
+
+const clampUnit = (value: number) => Math.min(1, Math.max(0, value));
+
+export const parseStoredEditorView = (parsed: unknown): StoredEditorView => {
+  if (!parsed || typeof parsed !== "object") {
+    return { ...DEFAULT_EDITOR_VIEW };
+  }
+  const zoomRaw = Reflect.get(parsed, "zoomMode");
+  const pxRaw = Reflect.get(parsed, "pxPerSecond");
+  const timeRaw = readFiniteMs(Reflect.get(parsed, "currentTimeMs"));
+  const selectedRaw = Reflect.get(parsed, "selectedClipIds");
+  const previewRaw = Reflect.get(parsed, "previewElementId");
+  const volumeRaw = Reflect.get(parsed, "volume");
+  const mutedRaw = Reflect.get(parsed, "muted");
+  const selectedClipIds: string[] = [];
+  if (Array.isArray(selectedRaw)) {
+    for (const id of selectedRaw) {
+      if (typeof id === "string" && id) {
+        selectedClipIds.push(id);
+      }
+    }
+  }
+  const pxAllowed = (EDITOR_PX_PER_SECOND_OPTIONS as readonly number[]).includes(
+    typeof pxRaw === "number" ? pxRaw : NaN,
+  );
+  return {
+    zoomMode: isEditorZoomMode(zoomRaw) ? zoomRaw : DEFAULT_EDITOR_VIEW.zoomMode,
+    pxPerSecond: pxAllowed ? (pxRaw as number) : DEFAULT_EDITOR_VIEW.pxPerSecond,
+    currentTimeMs: timeRaw ?? 0,
+    selectedClipIds,
+    previewElementId:
+      typeof previewRaw === "string" && previewRaw ? previewRaw : null,
+    volume:
+      typeof volumeRaw === "number" && Number.isFinite(volumeRaw)
+        ? clampUnit(volumeRaw)
+        : DEFAULT_EDITOR_VIEW.volume,
+    muted: mutedRaw === true,
+  };
+};
+
+export const readStoredEditorView = (): StoredEditorView => {
+  try {
+    const raw = localStorage.getItem(EDITOR_VIEW_STORAGE_KEY);
+    if (!raw) {
+      return { ...DEFAULT_EDITOR_VIEW };
+    }
+    return parseStoredEditorView(JSON.parse(raw));
+  } catch {
+    return { ...DEFAULT_EDITOR_VIEW };
+  }
+};
+
+export const writeStoredEditorView = (view: StoredEditorView) => {
+  localStorage.setItem(EDITOR_VIEW_STORAGE_KEY, JSON.stringify(view));
+};
+
+export const serializeEditorView = (view: StoredEditorView) =>
+  JSON.stringify(view);
+
 export const recordingIdsFromStored = (stored: readonly StoredEditorClip[]) => {
   const ids: Id<"presentRecordings">[] = [];
   const seen = new Set<string>();
@@ -266,7 +359,7 @@ export const restoreProjectClips = (
       recordingId: row._id,
       url: row.url,
       posterUrl: row.posterUrl,
-      label: row.name?.trim() || "Recording",
+      label: item.label?.trim() || row.name?.trim() || "Recording",
       durationMs: Math.max(
         1,
         Math.min(maxDuration, item.durationMs ?? maxDuration),

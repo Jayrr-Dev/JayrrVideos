@@ -60,7 +60,10 @@ export const JayrrEditorBlendModeDialog = ({
       >
         <div className="jayrr-editor-blend-mode__body">
           {EDITOR_BLEND_GROUPS.map((group) => (
-            <fieldset key={group.label} className="jayrr-editor-blend-mode__group">
+            <fieldset
+              key={group.label}
+              className="jayrr-editor-blend-mode__group"
+            >
               <legend>{group.label}</legend>
               {group.options.map((option) => (
                 <label
