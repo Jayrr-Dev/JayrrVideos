@@ -25,6 +25,7 @@ import {
 import { Button } from "../../components/ui/Button";
 import { Dialog, Tooltip } from "../../components/ui/editor";
 import { convexSiteUrl } from "../../convexClient";
+
 import { isCreateEditorClipInput } from "./applyEditorClipTool";
 import {
   compositionDurationMs,
@@ -328,10 +329,7 @@ export const JayrrEditorAiDialog = ({ onClose }: JayrrEditorAiDialogProps) => {
       <p id={descriptionId} className="visually-hidden">
         {INFO}
       </p>
-      <div
-        className="jayrr-editor-ai__body"
-        aria-describedby={descriptionId}
-      >
+      <div className="jayrr-editor-ai__body" aria-describedby={descriptionId}>
         <div
           ref={scroller}
           className="jayrr-editor-ai__transcript"

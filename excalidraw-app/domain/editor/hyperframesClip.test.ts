@@ -26,9 +26,11 @@ describe("hyperframesClip", () => {
       durationMs: 2000,
       label: "Hi",
     });
-    expect(wrapped).toContain("data-composition-id=\"jayrr\"");
+    expect(wrapped).toContain('data-composition-id="jayrr"');
     expect(wrapped).toContain("window.__jayrrSeek");
     expect(wrapped).not.toContain("alert(1)");
-    expect(sanitizeCompositionHtml(`<p onclick="x()">ok</p>`)).toBe("<p>ok</p>");
+    expect(sanitizeCompositionHtml(`<p onclick="x()">ok</p>`)).toBe(
+      "<p>ok</p>",
+    );
   });
 });

@@ -48,8 +48,21 @@
     overflow: auto;
   }
 
+  .jayrr-editor-add-stock
+    .jayrr-present__recording.is-selected
+    .jayrr-present__recording-thumb {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 1px var(--color-primary);
+  }
+
   .jayrr-editor-add-stock .jayrr-present__recording-thumb {
-    cursor: default;
+    cursor: pointer;
+  }
+
+  .jayrr-editor-add-stock__error {
+    margin: 0;
+    font-size: 0.8rem;
+    color: var(--color-danger);
   }
 
   .jayrr-editor-add-stock__empty {

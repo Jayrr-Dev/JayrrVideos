@@ -9,8 +9,10 @@ export type EditorRecordingSource = {
   posterUrl: string | null;
   label: string;
   durationMs: number;
-  /** Offset into the source recording (ms). Used after Cut. */
+  /** Offset into the source recording (ms). Used after Cut or edge trim. */
   sourceOffsetMs?: number;
+  /** Full source media length (ms). Caps how far an edge can be dragged out. */
+  sourceDurationMs?: number;
 };
 
 export const SEQUENCE_LANE_ID = "sequence";
@@ -165,8 +167,10 @@ export type EditorSoundSource = {
   url: string;
   label: string;
   durationMs: number;
-  /** Offset into the source file (ms). Used after Cut. */
+  /** Offset into the source file (ms). Used after Cut or edge trim. */
   sourceOffsetMs?: number;
+  /** Full source media length (ms). Caps how far an edge can be dragged out. */
+  sourceDurationMs?: number;
 };
 
 type EditorItemPlacement = {
@@ -186,6 +190,8 @@ export type EditorVideoClip = EditorRecordingSource &
     type: typeof EDITOR_CLIP_TYPE;
     /** Picture-only after Separate Audio. */
     muted?: boolean;
+    /** Live person cutout using the camera cutout engine. */
+    removeBg?: boolean;
   };
 
 export type EditorSoundClip = EditorSoundSource &
@@ -206,6 +212,7 @@ export type EditorHtmlClip = EditorItemPlacement & {
   label: string;
   durationMs: number;
   sourceOffsetMs?: number;
+  sourceDurationMs?: number;
   width?: number;
   height?: number;
 };
@@ -441,6 +448,145 @@ export const snapClipStart = ({
   return { startMs: bestStart, guideMs: bestGuide };
 };
 
+export const snapTimeMs = ({
+  timeMs,
+  snapPoints,
+  thresholdMs,
+}: {
+  timeMs: number;
+  snapPoints: readonly number[];
+  thresholdMs: number;
+}): { timeMs: number; guideMs: number | null } => {
+  const proposed = Math.round(timeMs);
+  const threshold = Math.max(0, thresholdMs);
+  if (threshold <= 0 || snapPoints.length === 0) {
+    return { timeMs: proposed, guideMs: null };
+  }
+  let bestDelta = Infinity;
+  let bestTime = proposed;
+  let bestGuide: number | null = null;
+  for (const point of snapPoints) {
+    const delta = Math.abs(proposed - point);
+    if (delta > threshold || delta > bestDelta) {
+      continue;
+    }
+    if (delta === bestDelta && bestGuide !== null && point >= bestGuide) {
+      continue;
+    }
+    bestDelta = delta;
+    bestGuide = Math.round(point);
+    bestTime = bestGuide;
+  }
+  return { timeMs: bestTime, guideMs: bestGuide };
+};
+
+export type EditorClipEdge = "start" | "end";
+
+export const clipSourceDurationMs = (clip: EditorProjectClip) => {
+  if (
+    typeof clip.sourceDurationMs === "number" &&
+    Number.isFinite(clip.sourceDurationMs) &&
+    clip.sourceDurationMs > 0
+  ) {
+    return Math.max(1, Math.round(clip.sourceDurationMs));
+  }
+  return Math.max(1, (clip.sourceOffsetMs ?? 0) + clipDurationMs(clip));
+};
+
+export const resolveClipResize = ({
+  clip,
+  startMs,
+  edge,
+  edgeMs,
+}: {
+  clip: EditorProjectClip;
+  startMs: number;
+  edge: EditorClipEdge;
+  edgeMs: number;
+}): {
+  startMs: number;
+  durationMs: number;
+  sourceOffsetMs: number;
+} => {
+  const origin = Math.max(0, Math.round(startMs));
+  const durationMs = clipDurationMs(clip);
+  const sourceOffsetMs = Math.max(0, Math.round(clip.sourceOffsetMs ?? 0));
+  const endMs = origin + durationMs;
+  const minDuration = EDITOR_CUT_MIN_MS;
+  const unbounded = isEditorHtmlClip(clip);
+  const sourceDurationMs = unbounded
+    ? Number.POSITIVE_INFINITY
+    : clipSourceDurationMs(clip);
+  const wanted = Math.round(edgeMs);
+
+  if (edge === "start") {
+    const minStart = Math.max(0, origin - sourceOffsetMs);
+    const maxStart = Math.max(minStart, endMs - minDuration);
+    const nextStart = Math.min(maxStart, Math.max(minStart, wanted));
+    const delta = nextStart - origin;
+    return {
+      startMs: nextStart,
+      durationMs: Math.max(minDuration, durationMs - delta),
+      sourceOffsetMs: Math.max(0, sourceOffsetMs + delta),
+    };
+  }
+
+  const minEnd = origin + minDuration;
+  const maxEnd = unbounded
+    ? Number.POSITIVE_INFINITY
+    : origin + Math.max(minDuration, sourceDurationMs - sourceOffsetMs);
+  const nextEnd = Math.max(minEnd, Math.min(maxEnd, Math.max(0, wanted)));
+  return {
+    startMs: origin,
+    durationMs: Math.max(minDuration, nextEnd - origin),
+    sourceOffsetMs,
+  };
+};
+
+export const resizeEditorClip = ({
+  clips,
+  clipId,
+  edge,
+  edgeMs,
+}: {
+  clips: readonly EditorProjectClip[];
+  clipId: string;
+  edge: EditorClipEdge;
+  edgeMs: number;
+}): EditorProjectClip[] | null => {
+  const frozen = withFrozenStarts(clips);
+  const current = frozen.find((clip) => clip.id === clipId);
+  if (!current) {
+    return null;
+  }
+  const startMs = current.laneStartMs ?? 0;
+  const next = resolveClipResize({
+    clip: current,
+    startMs,
+    edge,
+    edgeMs,
+  });
+  if (
+    next.startMs === startMs &&
+    next.durationMs === clipDurationMs(current) &&
+    next.sourceOffsetMs === Math.round(current.sourceOffsetMs ?? 0)
+  ) {
+    return null;
+  }
+  const updated: EditorProjectClip = {
+    ...current,
+    durationMs: next.durationMs,
+    sourceOffsetMs: next.sourceOffsetMs,
+    laneStartMs: next.startMs,
+    ...(typeof current.sourceDurationMs === "number"
+      ? { sourceDurationMs: current.sourceDurationMs }
+      : isEditorHtmlClip(current)
+      ? {}
+      : { sourceDurationMs: clipSourceDurationMs(current) }),
+  };
+  return frozen.map((clip) => (clip.id === clipId ? updated : clip));
+};
+
 export const moveEditorClip = ({
   clips,
   clipId,
@@ -483,136 +629,221 @@ const laneIndexIn = (laneOrder: readonly string[], laneId: string) => {
   return index;
 };
 
-/** Which layer moves can change at least one selected clip. */
+/** Which layer moves can change stacking for at least one selected overlap. */
 export const clipLayerMoveAvailability = ({
   clips,
   clipIds,
   stackLaneIds,
+  peerClipIds,
 }: {
-  clips: readonly { id: string; laneId?: string }[];
+  clips: readonly EditorProjectClip[];
   clipIds: readonly string[];
   stackLaneIds: readonly string[];
-}): Record<EditorLayerDirection, boolean> => {
-  const none = {
-    back: false,
-    backward: false,
-    forward: false,
-    front: false,
-  };
-  const selected = new Set(clipIds);
-  if (selected.size === 0) {
-    return none;
-  }
-  const laneOrder = laneOrderFor(stackLaneIds);
-  const lastIndex = laneOrder.length - 1;
-  const indexes: number[] = [];
-  for (const clip of clips) {
-    if (!selected.has(clip.id)) {
-      continue;
+  peerClipIds?: readonly string[];
+}): Record<EditorLayerDirection, boolean> => ({
+  back:
+    moveClipsByLayer({
+      clips,
+      clipIds,
+      stackLaneIds,
+      direction: "back",
+      peerClipIds,
+    }) !== null,
+  backward:
+    moveClipsByLayer({
+      clips,
+      clipIds,
+      stackLaneIds,
+      direction: "backward",
+      peerClipIds,
+    }) !== null,
+  forward:
+    moveClipsByLayer({
+      clips,
+      clipIds,
+      stackLaneIds,
+      direction: "forward",
+      peerClipIds,
+    }) !== null,
+  front:
+    moveClipsByLayer({
+      clips,
+      clipIds,
+      stackLaneIds,
+      direction: "front",
+      peerClipIds,
+    }) !== null,
+});
+
+const overlapPeerIds = (overlaps: readonly LaneOverlap[], clipId: string) => {
+  const ids: string[] = [];
+  for (const overlap of overlaps) {
+    let other: string | null = null;
+    if (overlap.leftClipId === clipId) {
+      other = overlap.rightClipId;
+    } else if (overlap.rightClipId === clipId) {
+      other = overlap.leftClipId;
     }
-    indexes.push(laneIndexIn(laneOrder, clipLaneId(clip)));
-  }
-  if (indexes.length === 0) {
-    return none;
-  }
-  let aboveBack = false;
-  let belowFront = false;
-  let onFront = false;
-  for (const index of indexes) {
-    if (index > 0) {
-      aboveBack = true;
-    }
-    if (index < lastIndex) {
-      belowFront = true;
-    }
-    if (index === lastIndex) {
-      onFront = true;
+    if (other && !ids.includes(other)) {
+      ids.push(other);
     }
   }
-  let forward = belowFront;
-  if (!forward && onFront && stackLaneIds.length < MAX_STACK_LANES) {
-    forward = true;
+  return ids;
+};
+
+const compareOverlapLayer = (
+  laneOrder: readonly string[],
+  a: EditorProjectClip,
+  b: EditorProjectClip,
+) => {
+  const laneDelta =
+    laneIndexIn(laneOrder, clipLaneId(a)) -
+    laneIndexIn(laneOrder, clipLaneId(b));
+  if (laneDelta !== 0) {
+    return laneDelta;
   }
-  return {
-    back: aboveBack,
-    backward: aboveBack,
-    forward,
-    front: belowFront,
-  };
+  const startDelta = (a.laneStartMs ?? 0) - (b.laneStartMs ?? 0);
+  if (startDelta !== 0) {
+    return startDelta;
+  }
+  return a.id.localeCompare(b.id);
 };
 
 /**
- * Move selected clips across columns. Left is back, right is front.
- * Forward past the last column adds one column when a slot remains.
- * Start times stay put.
+ * Change which overlapping clip is in front. Left is behind, right is in front.
+ * Swaps columns with the overlapping neighbor. Does not move clips that do not
+ * overlap, and does not add a column.
  */
 export const moveClipsByLayer = ({
   clips,
   clipIds,
   stackLaneIds,
   direction,
+  peerClipIds,
 }: {
   clips: readonly EditorProjectClip[];
   clipIds: readonly string[];
   stackLaneIds: readonly string[];
   direction: EditorLayerDirection;
+  /** When set, only these clips count as the overlap group. */
+  peerClipIds?: readonly string[];
 }): { clips: EditorProjectClip[]; stackLaneIds: string[] } | null => {
-  const selected = new Set(clipIds);
-  if (selected.size === 0) {
+  if (clipIds.length === 0) {
     return null;
   }
-  const frozen = withFrozenStarts(clips);
   const laneOrder = laneOrderFor(stackLaneIds);
-  const lastIndex = laneOrder.length - 1;
-  let nextStackLaneIds = [...stackLaneIds];
-  let addedLaneId: string | null = null;
+  const allowedPeers = peerClipIds ? new Set(peerClipIds) : null;
+  let next = withFrozenStarts(clips);
+  const touched = new Set<string>();
+  let changed = false;
 
-  const destinationLane = (laneId: string) => {
-    const index = laneIndexIn(laneOrder, laneId);
+  const orderedIds = [...clipIds].sort((a, b) => {
+    const clipA = next.find((clip) => clip.id === a);
+    const clipB = next.find((clip) => clip.id === b);
+    if (!clipA || !clipB) {
+      return a.localeCompare(b);
+    }
+    const delta = compareOverlapLayer(laneOrder, clipA, clipB);
+    if (direction === "forward" || direction === "front") {
+      return -delta;
+    }
+    return delta;
+  });
+
+  const shiftSameLane = (
+    current: EditorProjectClip[],
+    focus: EditorProjectClip,
+  ) => {
+    const index = laneIndexIn(laneOrder, clipLaneId(focus));
+    let destIndex = index;
     if (direction === "back") {
-      return SEQUENCE_LANE_ID;
+      destIndex = 0;
+    } else if (direction === "backward") {
+      destIndex = index - 1;
+    } else if (direction === "forward") {
+      destIndex = index + 1;
+    } else {
+      destIndex = laneOrder.length - 1;
     }
-    if (direction === "backward") {
-      return laneOrder[Math.max(0, index - 1)] ?? SEQUENCE_LANE_ID;
+    if (destIndex === index || destIndex < 0 || destIndex >= laneOrder.length) {
+      return null;
     }
-    if (direction === "front") {
-      return laneOrder[lastIndex] ?? SEQUENCE_LANE_ID;
+    const destLane = laneOrder[destIndex];
+    if (!destLane) {
+      return null;
     }
-    if (index < lastIndex) {
-      return laneOrder[index + 1] ?? laneId;
-    }
-    if (addedLaneId) {
-      return addedLaneId;
-    }
-    if (nextStackLaneIds.length >= MAX_STACK_LANES) {
-      return laneId;
-    }
-    addedLaneId = newEditorLaneId();
-    nextStackLaneIds = [...nextStackLaneIds, addedLaneId];
-    return addedLaneId;
+    return current.map((clip) =>
+      clip.id === focus.id ? { ...clip, laneId: destLane } : clip,
+    );
   };
 
-  let changed = false;
-  const nextClips = frozen.map((clip) => {
-    if (!selected.has(clip.id)) {
-      return clip;
+  for (const focusId of orderedIds) {
+    if (touched.has(focusId)) {
+      continue;
     }
-    const fromLane = clipLaneId(clip);
-    const toLane = destinationLane(fromLane);
-    if (toLane === fromLane) {
-      return clip;
+    const timeline = buildEditorTimeline(next);
+    const overlaps = collectLaneOverlaps(editorLanes(timeline, stackLaneIds));
+    let peerIds = overlapPeerIds(overlaps, focusId);
+    if (allowedPeers) {
+      peerIds = peerIds.filter((id) => allowedPeers.has(id));
     }
+    const focus = next.find((clip) => clip.id === focusId);
+    if (!focus || peerIds.length === 0) {
+      continue;
+    }
+    const peers: EditorProjectClip[] = [];
+    for (const peerId of peerIds) {
+      const peer = next.find((clip) => clip.id === peerId);
+      if (peer) {
+        peers.push(peer);
+      }
+    }
+    const group = [focus, ...peers].sort((a, b) =>
+      compareOverlapLayer(laneOrder, a, b),
+    );
+    const index = group.findIndex((clip) => clip.id === focusId);
+    let partner: EditorProjectClip | undefined;
+    if (direction === "back") {
+      partner = group[0];
+    } else if (direction === "front") {
+      partner = group[group.length - 1];
+    } else if (direction === "backward") {
+      partner = group[index - 1];
+    } else {
+      partner = group[index + 1];
+    }
+    if (!partner || partner.id === focusId) {
+      continue;
+    }
+    let updated: EditorProjectClip[] | null = null;
+    if (clipLaneId(partner) !== clipLaneId(focus)) {
+      const focusLane = clipLaneId(focus);
+      const partnerLane = clipLaneId(partner);
+      updated = next.map((clip) => {
+        if (clip.id === focus.id) {
+          return { ...clip, laneId: partnerLane };
+        }
+        if (clip.id === partner.id) {
+          return { ...clip, laneId: focusLane };
+        }
+        return clip;
+      });
+      touched.add(partner.id);
+    } else {
+      updated = shiftSameLane(next, focus);
+    }
+    if (!updated) {
+      continue;
+    }
+    touched.add(focusId);
+    next = updated;
     changed = true;
-    return {
-      ...clip,
-      laneId: toLane,
-      laneStartMs: clip.laneStartMs ?? 0,
-    };
-  });
+  }
+
   if (!changed) {
     return null;
   }
-  return { clips: nextClips, stackLaneIds: nextStackLaneIds };
+  return { clips: next, stackLaneIds: [...stackLaneIds] };
 };
 
 /** Drop a stack column and fold its clips onto the column to its left. */
@@ -679,6 +910,28 @@ export const setClipsBlendMode = (
   return frozen.map((clip) =>
     update.has(clip.id) ? { ...clip, blendMode } : clip,
   );
+};
+
+export const setClipsRemoveBg = (
+  clips: readonly EditorProjectClip[],
+  clipIds: readonly string[],
+  removeBg: boolean,
+): EditorProjectClip[] | null => {
+  const frozen = withFrozenStarts(clips);
+  const update = new Set(clipIds);
+  if (!frozen.some((clip) => update.has(clip.id) && isEditorVideoClip(clip))) {
+    return null;
+  }
+  return frozen.map((clip) => {
+    if (!update.has(clip.id) || !isEditorVideoClip(clip)) {
+      return clip;
+    }
+    if (removeBg) {
+      return { ...clip, removeBg: true };
+    }
+    const { removeBg: _removeBg, ...rest } = clip;
+    return rest;
+  });
 };
 
 export type LaneOverlap = {
@@ -807,6 +1060,30 @@ export const collectLaneOverlaps = (
     }
   }
   return out;
+};
+
+export const overlapParticipantIds = (
+  overlaps: readonly LaneOverlap[],
+  joinMs: number,
+  laneIds: readonly string[],
+) => {
+  const lanes = new Set(laneIds);
+  const ids: string[] = [];
+  for (const overlap of overlaps) {
+    if (Math.abs(overlap.startMs - joinMs) > EDITOR_EDGE_ALIGN_MS) {
+      continue;
+    }
+    if (!lanes.has(overlap.leftLaneId) || !lanes.has(overlap.rightLaneId)) {
+      continue;
+    }
+    if (!ids.includes(overlap.leftClipId)) {
+      ids.push(overlap.leftClipId);
+    }
+    if (!ids.includes(overlap.rightClipId)) {
+      ids.push(overlap.rightClipId);
+    }
+  }
+  return ids;
 };
 
 export type OverlapBand = {

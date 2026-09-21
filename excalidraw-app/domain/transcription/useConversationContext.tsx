@@ -131,7 +131,7 @@ export const ConversationIndicators = ({
   const result = latest ? context.results.get(latest.id) : undefined;
   return (
     <div
-      className="jayrr-called-embed__stack"
+      className="jayrr-called-embed__stack jayrr-called-embed__stack--compact"
       aria-label="Conversation context"
     >
       <label className="jayrr-called-embed__field">

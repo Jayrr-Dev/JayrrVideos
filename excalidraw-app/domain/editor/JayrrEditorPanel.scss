@@ -39,31 +39,6 @@
     flex-shrink: 0;
   }
 
-  .jayrr-editor-panel__ai {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 1.75rem;
-    height: 1.75rem;
-    padding: 0;
-    border: none;
-    background: none;
-    color: var(--icon-fill-color);
-    cursor: pointer;
-    border-radius: var(--border-radius-md);
-    flex-shrink: 0;
-  }
-
-  .jayrr-editor-panel__ai:hover {
-    color: var(--color-primary);
-    background: var(--color-surface-mid);
-  }
-
-  .jayrr-editor-panel__ai svg {
-    width: 1.125rem;
-    height: 1.125rem;
-  }
-
   .jayrr-editor-panel__save:hover:not(:disabled) {
     color: var(--color-primary);
     background: var(--color-surface-mid);
@@ -260,38 +235,6 @@
     margin-left: 0.15rem;
   }
 
-  .jayrr-editor-panel__layers {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.15rem;
-    margin-left: 0.2rem;
-  }
-
-  .jayrr-editor-panel__layer-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 1.7rem;
-    height: 1.7rem;
-    padding: 0.15rem;
-    border: 1px solid var(--default-border-color);
-    background: var(--color-surface-low);
-    color: var(--text-primary-color);
-    border-radius: var(--border-radius-md);
-    cursor: pointer;
-
-    svg {
-      width: 1.15rem;
-      height: 1.15rem;
-      display: block;
-    }
-
-    &:disabled {
-      opacity: 0.35;
-      cursor: default;
-    }
-  }
-
   .jayrr-editor-panel__zoom {
     margin-left: auto;
     display: inline-flex;
@@ -343,6 +286,53 @@
 
   .jayrr-editor-menu--sub {
     min-width: 16rem;
+  }
+
+  .jayrr-editor-menu__header {
+    display: flex;
+    align-items: center;
+    gap: 0.08rem;
+    width: 100%;
+  }
+
+  .jayrr-editor-menu__icon {
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 1 1 0;
+    width: 1.9rem;
+    min-width: 1.9rem;
+    height: 1.9rem;
+    margin: 0;
+    padding: 0;
+    border: none;
+    border-radius: var(--border-radius-md);
+    background: transparent;
+    color: var(--text-primary-color);
+    cursor: pointer;
+    outline: none;
+
+    svg {
+      width: 1.05rem;
+      height: 1.05rem;
+    }
+
+    &[data-highlighted],
+    &:hover {
+      background: var(--button-hover-bg);
+    }
+
+    &[data-disabled] {
+      opacity: 0.45;
+      cursor: default;
+      pointer-events: none;
+    }
+  }
+
+  .jayrr-editor-menu__icon--danger[data-highlighted],
+  .jayrr-editor-menu__icon--danger:hover {
+    color: var(--color-danger);
   }
 
   .jayrr-editor-menu__item {
@@ -796,6 +786,83 @@
   .jayrr-editor-clip.is-hidden {
     opacity: 0;
     pointer-events: none;
+  }
+
+  .jayrr-editor-clip-shell {
+    position: relative;
+    width: 100%;
+    z-index: 1;
+    flex-shrink: 0;
+  }
+
+  .jayrr-editor-clip-shell--overlay {
+    position: absolute;
+    left: 0.2rem;
+    right: 0.2rem;
+    width: auto;
+  }
+
+  .jayrr-editor-clip-shell.is-hidden {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .jayrr-editor-clip-shell.is-resizing {
+    z-index: 5;
+  }
+
+  .jayrr-editor-clip-shell .jayrr-editor-clip {
+    width: 100%;
+    height: 100%;
+  }
+
+  .jayrr-editor-clip__edge {
+    position: absolute;
+    left: 0;
+    right: 0;
+    z-index: 4;
+    height: 10px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: ns-resize;
+    touch-action: none;
+  }
+
+  .jayrr-editor-clip__edge--start {
+    top: 0;
+  }
+
+  .jayrr-editor-clip__edge--end {
+    bottom: 0;
+  }
+
+  .jayrr-editor-clip__edge::after {
+    content: "";
+    position: absolute;
+    left: 16%;
+    right: 16%;
+    height: 3px;
+    border-radius: 99px;
+    background: #f8fafc;
+    box-shadow: 0 0 0 1px rgb(15 23 42 / 35%);
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .jayrr-editor-clip-shell:hover .jayrr-editor-clip__edge::after,
+  .jayrr-editor-clip-shell.is-selected .jayrr-editor-clip__edge::after,
+  .jayrr-editor-clip-shell.is-resizing .jayrr-editor-clip__edge::after {
+    opacity: 0.95;
+  }
+
+  .jayrr-editor-clip__edge--start::after {
+    top: 3px;
+  }
+
+  .jayrr-editor-clip__edge--end::after {
+    bottom: 3px;
   }
 
   .jayrr-editor-clip--overlay {

@@ -132,7 +132,7 @@ type EditorSessionValue = {
   stackLaneIds: readonly string[];
   addStackLane: () => void;
   removeStackLane: (laneId: string) => void;
-  moveSelectedByLayer: (direction: EditorLayerDirection) => void;
+  moveSelectedByLayer: (direction: EditorLayerDirection) => boolean;
   zoomMode: EditorZoomMode;
   setZoomMode: (mode: EditorZoomMode) => void;
   pxPerSecond: number;
@@ -472,12 +472,10 @@ export const JayrrEditorSession = ({ children }: { children: ReactNode }) => {
         direction,
       });
       if (!next) {
-        return;
+        return false;
       }
       persist(next.clips);
-      stackLaneIdsRef.current = next.stackLaneIds;
-      setStackLaneIds(next.stackLaneIds);
-      writeStoredStackLanes(next.stackLaneIds);
+      return true;
     },
     [persist, selectedClipIds],
   );
@@ -560,6 +558,7 @@ export const JayrrEditorSession = ({ children }: { children: ReactNode }) => {
         posterUrl: row.posterUrl,
         label: row.name?.trim() || "Recording",
         durationMs: Math.max(1, row.durationMs),
+        sourceDurationMs: Math.max(1, row.durationMs),
         laneId: SEQUENCE_LANE_ID,
         laneStartMs: sequenceEndMs(frozen),
       };
@@ -586,6 +585,7 @@ export const JayrrEditorSession = ({ children }: { children: ReactNode }) => {
         url: row.url || jayrrLocalSoundUrl(row.path),
         label: row.name.trim() || "Sound",
         durationMs,
+        sourceDurationMs: durationMs,
         laneId: SEQUENCE_LANE_ID,
         laneStartMs: sequenceEndMs(frozen),
       };

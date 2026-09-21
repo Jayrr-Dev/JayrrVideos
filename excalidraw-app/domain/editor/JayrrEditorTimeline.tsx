@@ -27,9 +27,13 @@ import {
 } from "react";
 
 import {
+  BringForwardIcon,
+  BringToFrontIcon,
   checkIcon,
   CloseIcon,
   PlusIcon,
+  SendBackwardIcon,
+  SendToBackIcon,
 } from "@excalidraw/excalidraw/components/icons";
 import { DropdownMenu } from "radix-ui";
 
@@ -45,10 +49,14 @@ import {
   formatEditorClock,
   isEditorHtmlClip,
   MAX_STACK_LANES,
+  resolveClipResize,
   SEQUENCE_LANE_ID,
   snapClipStart,
+  snapTimeMs,
   type EditorBlendMode,
   type EditorClip,
+  type EditorClipEdge,
+  type EditorLayerDirection,
   type EditorTimeline,
   type EditorTransitionKind,
   type OverlapBand,
@@ -74,6 +82,15 @@ type DragPlacement = {
   durationMs: number;
 };
 
+type TrimDraft = {
+  clipId: string;
+  startMs: number;
+  durationMs: number;
+  sourceOffsetMs: number;
+  guideMs: number | null;
+  edgeMs: number;
+};
+
 type JayrrEditorTimelineProps = {
   timeline: EditorTimeline;
   currentTimeMs: number;
@@ -91,6 +108,11 @@ type JayrrEditorTimelineProps = {
     toLaneId: string;
     startMs: number;
   }) => void;
+  onResizeClip: (args: {
+    clipId: string;
+    edge: EditorClipEdge;
+    edgeMs: number;
+  }) => void;
   onSetTransition: (
     clipIds: readonly string[],
     kind: EditorTransitionKind,
@@ -99,6 +121,13 @@ type JayrrEditorTimelineProps = {
     clipIds: readonly string[];
     blendMode: EditorBlendMode;
   }) => void;
+  overlapLayerMoves: (
+    band: OverlapBand,
+  ) => Record<EditorLayerDirection, boolean>;
+  onReorderOverlap: (
+    band: OverlapBand,
+    direction: EditorLayerDirection,
+  ) => void;
   onAddStackLane: () => void;
   onRemoveStackLane: (laneId: string) => void;
   menuContainer?: HTMLElement | null;
@@ -147,8 +176,11 @@ export const JayrrEditorTimeline = ({
   onSeek,
   onSelectClip,
   onMoveClip,
+  onResizeClip,
   onSetTransition,
   onOpenBlend,
+  overlapLayerMoves,
+  onReorderOverlap,
   onAddStackLane,
   onRemoveStackLane,
   menuContainer,
@@ -158,9 +190,15 @@ export const JayrrEditorTimeline = ({
   const skipClickRef = useRef(false);
   const altHeldRef = useRef(false);
   const placementRef = useRef<DragPlacement | null>(null);
+  const trimRef = useRef<TrimDraft | null>(null);
+  const trimSessionRef = useRef<{
+    clip: EditorClip;
+    edge: EditorClipEdge;
+  } | null>(null);
   const [bodyHeight, setBodyHeight] = useState(360);
   const [activeClipId, setActiveClipId] = useState<string | null>(null);
   const [placement, setPlacement] = useState<DragPlacement | null>(null);
+  const [trimDraft, setTrimDraft] = useState<TrimDraft | null>(null);
   const [hoveredStackId, setHoveredStackId] = useState<string | null>(null);
 
   const clipsById = useMemo(() => {
@@ -273,7 +311,7 @@ export const JayrrEditorTimeline = ({
   }, [timeline.totalMs]);
 
   const timeFromClientY = useCallback(
-    (clientY: number) => {
+    (clientY: number, clampToTimeline = true) => {
       const body = bodyRef.current;
       if (!body) {
         return 0;
@@ -281,6 +319,9 @@ export const JayrrEditorTimeline = ({
       const rect = body.getBoundingClientRect();
       const y = clientY - rect.top + body.scrollTop - TRACK_PAD_PX;
       const ms = y / pxPerMs;
+      if (!clampToTimeline) {
+        return Math.max(0, ms);
+      }
       return Math.max(0, Math.min(Math.max(timeline.totalMs, 1), ms));
     },
     [pxPerMs, timeline.totalMs],
@@ -559,6 +600,122 @@ export const JayrrEditorTimeline = ({
     clearPlacement();
   };
 
+  const updateTrimDraft = useCallback((next: TrimDraft | null) => {
+    trimRef.current = next;
+    setTrimDraft(next);
+  }, []);
+
+  const draftFromPointer = useCallback(
+    (
+      clip: EditorClip,
+      edge: EditorClipEdge,
+      clientY: number,
+      altKey: boolean,
+    ) => {
+      const rawMs = timeFromClientY(clientY, false);
+      const snapPoints = collectSnapPointsMs({
+        timeline,
+        excludeClipId: clip.id,
+        playheadMs: currentTimeMs,
+      });
+      let edgeMs = rawMs;
+      let guideMs: number | null = null;
+      if (!altKey) {
+        const snapped = snapTimeMs({
+          timeMs: rawMs,
+          snapPoints,
+          thresholdMs: snapThresholdMs,
+        });
+        edgeMs = snapped.timeMs;
+        guideMs = snapped.guideMs;
+      }
+      const next = resolveClipResize({
+        clip,
+        startMs: clip.startMs,
+        edge,
+        edgeMs,
+      });
+      const appliedEdge =
+        edge === "start" ? next.startMs : next.startMs + next.durationMs;
+      if (guideMs != null && appliedEdge !== guideMs) {
+        guideMs = null;
+      }
+      return {
+        clipId: clip.id,
+        startMs: next.startMs,
+        durationMs: next.durationMs,
+        sourceOffsetMs: next.sourceOffsetMs,
+        guideMs,
+        edgeMs: appliedEdge,
+      };
+    },
+    [currentTimeMs, snapThresholdMs, timeFromClientY, timeline],
+  );
+
+  const onResizePointerDown = useCallback(
+    (
+      clip: EditorClip,
+      edge: EditorClipEdge,
+      event: PointerEvent<HTMLButtonElement>,
+    ) => {
+      if (disabled) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      skipClickRef.current = true;
+      trimSessionRef.current = { clip, edge };
+      const draft = draftFromPointer(clip, edge, event.clientY, event.altKey);
+      updateTrimDraft(draft);
+      onSeek(draft.edgeMs);
+      const doc = event.currentTarget.ownerDocument;
+      const pointerId = event.pointerId;
+      event.currentTarget.setPointerCapture(pointerId);
+
+      const onMove = (moveEvent: globalThis.PointerEvent) => {
+        if (moveEvent.pointerId !== pointerId) {
+          return;
+        }
+        const session = trimSessionRef.current;
+        if (!session) {
+          return;
+        }
+        const next = draftFromPointer(
+          session.clip,
+          session.edge,
+          moveEvent.clientY,
+          moveEvent.altKey,
+        );
+        updateTrimDraft(next);
+        onSeek(next.edgeMs);
+      };
+      const onUp = (upEvent: globalThis.PointerEvent) => {
+        if (upEvent.pointerId !== pointerId) {
+          return;
+        }
+        doc.removeEventListener("pointermove", onMove);
+        doc.removeEventListener("pointerup", onUp);
+        doc.removeEventListener("pointercancel", onUp);
+        const session = trimSessionRef.current;
+        const next = trimRef.current;
+        trimSessionRef.current = null;
+        updateTrimDraft(null);
+        if (!session || !next || next.clipId !== session.clip.id) {
+          return;
+        }
+        onResizeClip({
+          clipId: session.clip.id,
+          edge: session.edge,
+          edgeMs: next.edgeMs,
+        });
+      };
+      doc.addEventListener("pointermove", onMove);
+      doc.addEventListener("pointerup", onUp);
+      doc.addEventListener("pointercancel", onUp);
+    },
+    [disabled, draftFromPointer, onResizeClip, onSeek, updateTrimDraft],
+  );
+
   const canAddStackLane = stackLaneIds.length < MAX_STACK_LANES;
   const laneCountStyle = {
     ["--jayrr-editor-lanes" as string]: String(1 + stackLaneIds.length),
@@ -573,13 +730,11 @@ export const JayrrEditorTimeline = ({
     placement != null
       ? Math.max(18, msToPx(placement.durationMs, pxPerMs))
       : null;
+  const snapGuideMs = placement?.guideMs ?? trimDraft?.guideMs ?? null;
   const snapLineTop =
-    placement?.guideMs != null
-      ? TRACK_PAD_PX + msToPx(placement.guideMs, pxPerMs)
-      : null;
+    snapGuideMs != null ? TRACK_PAD_PX + msToPx(snapGuideMs, pxPerMs) : null;
   const snapIsPlayhead =
-    placement?.guideMs != null &&
-    Math.abs(placement.guideMs - currentTimeMs) < 0.5;
+    snapGuideMs != null && Math.abs(snapGuideMs - currentTimeMs) < 0.5;
 
   return (
     <div className="jayrr-editor-timeline" style={laneCountStyle}>
@@ -645,11 +800,15 @@ export const JayrrEditorTimeline = ({
               {timeline.sequence.map((clip) => (
                 <TimelineClip
                   key={clip.id}
-                  clip={clip}
+                  clip={visibleClip(clip, trimDraft)}
                   pxPerMs={pxPerMs}
                   selected={selectedClipIds.has(clip.id)}
                   playhead={playheadClipId === clip.id}
                   hidden={activeClipId === clip.id}
+                  resizing={trimDraft?.clipId === clip.id}
+                  onResizePointerDown={(edge, event) =>
+                    onResizePointerDown(clip, edge, event)
+                  }
                   onSelect={(toggle) => {
                     if (skipClickRef.current) {
                       skipClickRef.current = false;
@@ -679,11 +838,15 @@ export const JayrrEditorTimeline = ({
                 {(overlaysByLane.get(laneId) ?? []).map((clip) => (
                   <TimelineClip
                     key={clip.id}
-                    clip={clip}
+                    clip={visibleClip(clip, trimDraft)}
                     pxPerMs={pxPerMs}
                     selected={selectedClipIds.has(clip.id)}
                     playhead={playheadClipId === clip.id}
                     hidden={activeClipId === clip.id}
+                    resizing={trimDraft?.clipId === clip.id}
+                    onResizePointerDown={(edge, event) =>
+                      onResizePointerDown(clip, edge, event)
+                    }
                     onSelect={(toggle) => {
                       if (skipClickRef.current) {
                         skipClickRef.current = false;
@@ -712,9 +875,11 @@ export const JayrrEditorTimeline = ({
                     blendMode: band.blendMode,
                   })
                 }
+                layerMoves={overlapLayerMoves(band)}
+                onReorder={(direction) => onReorderOverlap(band, direction)}
               />
             ))}
-            {snapLineTop != null && placement?.guideMs != null ? (
+            {snapLineTop != null && snapGuideMs != null ? (
               <div
                 className={`jayrr-editor-timeline__snap-line${
                   snapIsPlayhead ? " is-playhead" : ""
@@ -723,7 +888,7 @@ export const JayrrEditorTimeline = ({
                 aria-hidden
               >
                 <span className="jayrr-editor-timeline__snap-label">
-                  {formatEditorClock(placement.guideMs)}
+                  {formatEditorClock(snapGuideMs ?? 0)}
                 </span>
               </div>
             ) : null}
@@ -853,6 +1018,8 @@ const OverlapHandle = ({
   container,
   onPick,
   onOpenBlend,
+  layerMoves,
+  onReorder,
 }: {
   band: OverlapBand;
   laneIndexById: ReadonlyMap<string, number>;
@@ -860,6 +1027,8 @@ const OverlapHandle = ({
   container?: HTMLElement | null;
   onPick: (kind: EditorTransitionKind) => void;
   onOpenBlend: () => void;
+  layerMoves: Record<EditorLayerDirection, boolean>;
+  onReorder: (direction: EditorLayerDirection) => void;
 }) => {
   const [open, setOpen] = useState(false);
   const indexes = band.laneIds
@@ -905,6 +1074,28 @@ const OverlapHandle = ({
           onPointerDown={(event) => event.stopPropagation()}
           onCloseAutoFocus={(event) => event.preventDefault()}
         >
+          <DropdownMenu.Group className="jayrr-editor-menu__header">
+            {(
+              [
+                ["back", "Send to back", SendToBackIcon],
+                ["backward", "Send backward", SendBackwardIcon],
+                ["forward", "Bring forward", BringForwardIcon],
+                ["front", "Bring to front", BringToFrontIcon],
+              ] as const
+            ).map(([direction, label, icon]) => (
+              <DropdownMenu.Item
+                key={direction}
+                className="jayrr-editor-menu__icon"
+                disabled={!layerMoves[direction]}
+                title={label}
+                aria-label={label}
+                onSelect={() => onReorder(direction)}
+              >
+                {icon}
+              </DropdownMenu.Item>
+            ))}
+          </DropdownMenu.Group>
+          <DropdownMenu.Separator className="jayrr-editor-menu__separator" />
           {EDITOR_TRANSITION_OPTIONS.map((option) => {
             const selected = band.transitionKind === option.id;
             return (
@@ -974,7 +1165,12 @@ const useClipFilmstripFrames = (
   useEffect(() => {
     let cancelled = false;
     setFrames(null);
-    if (isEditorHtmlClip(clip) || !clip.url || !ownerDocument || sliceCount < 1) {
+    if (
+      isEditorHtmlClip(clip) ||
+      !clip.url ||
+      !ownerDocument ||
+      sliceCount < 1
+    ) {
       return;
     }
     void getClipFilmstrip({
@@ -991,11 +1187,7 @@ const useClipFilmstripFrames = (
     return () => {
       cancelled = true;
     };
-  }, [
-    clip,
-    ownerDocument,
-    sliceCount,
-  ]);
+  }, [clip, ownerDocument, sliceCount]);
 
   return frames;
 };
@@ -1124,6 +1316,18 @@ const ClipFace = ({
   );
 };
 
+const visibleClip = (clip: EditorClip, draft: TrimDraft | null): EditorClip => {
+  if (!draft || draft.clipId !== clip.id) {
+    return clip;
+  }
+  return {
+    ...clip,
+    startMs: draft.startMs,
+    durationMs: draft.durationMs,
+    sourceOffsetMs: draft.sourceOffsetMs,
+  };
+};
+
 const TimelineClip = ({
   clip,
   pxPerMs,
@@ -1131,7 +1335,9 @@ const TimelineClip = ({
   playhead,
   packed,
   hidden,
+  resizing,
   onSelect,
+  onResizePointerDown,
 }: {
   clip: EditorClip;
   pxPerMs: number;
@@ -1139,23 +1345,59 @@ const TimelineClip = ({
   playhead: boolean;
   packed?: boolean;
   hidden?: boolean;
+  resizing?: boolean;
   onSelect: (toggle: boolean) => void;
+  onResizePointerDown?: (
+    edge: EditorClipEdge,
+    event: PointerEvent<HTMLButtonElement>,
+  ) => void;
 }) => {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: clip.id,
   });
+  const heightPx = Math.max(18, msToPx(clip.durationMs, pxPerMs));
+  const top = packed ? undefined : TRACK_PAD_PX + msToPx(clip.startMs, pxPerMs);
 
   return (
-    <ClipFace
-      clip={clip}
-      pxPerMs={pxPerMs}
-      selected={selected}
-      playhead={playhead}
-      packed={packed}
-      hidden={hidden || isDragging}
-      buttonRef={setNodeRef}
-      draggableProps={{ ...attributes, ...listeners }}
-      onSelect={onSelect}
-    />
+    <div
+      className={`jayrr-editor-clip-shell${
+        packed ? "" : " jayrr-editor-clip-shell--overlay"
+      }${selected ? " is-selected" : ""}${
+        hidden || isDragging ? " is-hidden" : ""
+      }${resizing ? " is-resizing" : ""}`}
+      style={{
+        height: heightPx,
+        ...(top === undefined ? {} : { top }),
+      }}
+    >
+      <ClipFace
+        clip={clip}
+        pxPerMs={pxPerMs}
+        selected={selected}
+        playhead={playhead}
+        packed
+        dragging={isDragging}
+        buttonRef={setNodeRef}
+        draggableProps={{ ...attributes, ...listeners }}
+        onSelect={onSelect}
+        style={{ height: "100%" }}
+      />
+      {onResizePointerDown ? (
+        <>
+          <button
+            type="button"
+            className="jayrr-editor-clip__edge jayrr-editor-clip__edge--start"
+            aria-label="Trim start"
+            onPointerDown={(event) => onResizePointerDown("start", event)}
+          />
+          <button
+            type="button"
+            className="jayrr-editor-clip__edge jayrr-editor-clip__edge--end"
+            aria-label="Trim end"
+            onPointerDown={(event) => onResizePointerDown("end", event)}
+          />
+        </>
+      ) : null}
+    </div>
   );
 };

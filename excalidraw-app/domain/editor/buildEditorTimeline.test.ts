@@ -10,6 +10,7 @@ import {
   editorLanes,
   moveClipsByLayer,
   moveEditorClip,
+  resizeEditorClip,
   removeStackLane,
   returnClipsAudio,
   separateClipsAudio,
@@ -156,8 +157,80 @@ describe("moveEditorClip", () => {
   });
 });
 
+describe("resizeEditorClip", () => {
+  it("shortens from the start without splitting and keeps the source tail", () => {
+    const clips = [
+      clip("a", 2000, {
+        laneStartMs: 0,
+        sourceOffsetMs: 0,
+        sourceDurationMs: 2000,
+      }),
+    ];
+    const next = resizeEditorClip({
+      clips,
+      clipId: "a",
+      edge: "start",
+      edgeMs: 500,
+    });
+    expect(next?.[0]).toEqual(
+      expect.objectContaining({
+        id: "a",
+        laneStartMs: 500,
+        durationMs: 1500,
+        sourceOffsetMs: 500,
+        sourceDurationMs: 2000,
+      }),
+    );
+  });
+
+  it("shortens from the end without changing the in-point", () => {
+    const clips = [
+      clip("a", 2000, {
+        laneStartMs: 100,
+        sourceOffsetMs: 0,
+        sourceDurationMs: 2000,
+      }),
+    ];
+    const next = resizeEditorClip({
+      clips,
+      clipId: "a",
+      edge: "end",
+      edgeMs: 900,
+    });
+    expect(next?.[0]).toEqual(
+      expect.objectContaining({
+        laneStartMs: 100,
+        durationMs: 800,
+        sourceOffsetMs: 0,
+      }),
+    );
+  });
+
+  it("restores trimmed media when the end is dragged back out", () => {
+    const clips = [
+      clip("a", 800, {
+        laneStartMs: 0,
+        sourceOffsetMs: 200,
+        sourceDurationMs: 2000,
+      }),
+    ];
+    const next = resizeEditorClip({
+      clips,
+      clipId: "a",
+      edge: "end",
+      edgeMs: 5000,
+    });
+    expect(next?.[0]).toEqual(
+      expect.objectContaining({
+        durationMs: 1800,
+        sourceOffsetMs: 200,
+      }),
+    );
+  });
+});
+
 describe("moveClipsByLayer", () => {
-  it("steps one column and keeps the start time", () => {
+  it("swaps columns with the overlapping clip and keeps start times", () => {
     const clips = [
       clip("a", 1000, { laneStartMs: 200 }),
       clip("b", 400, { laneId: "stack-1", laneStartMs: 500 }),
@@ -172,13 +245,7 @@ describe("moveClipsByLayer", () => {
     expect(forward?.clips.find((item) => item.id === "a")).toEqual(
       expect.objectContaining({ laneId: "stack-1", laneStartMs: 200 }),
     );
-    const backward = moveClipsByLayer({
-      clips,
-      clipIds: ["b"],
-      stackLaneIds: ["stack-1"],
-      direction: "backward",
-    });
-    expect(backward?.clips.find((item) => item.id === "b")).toEqual(
+    expect(forward?.clips.find((item) => item.id === "b")).toEqual(
       expect.objectContaining({
         laneId: SEQUENCE_LANE_ID,
         laneStartMs: 500,
@@ -186,7 +253,7 @@ describe("moveClipsByLayer", () => {
     );
   });
 
-  it("sends to the back and front columns", () => {
+  it("swaps across a gap instead of stepping into an empty column", () => {
     const clips = [
       clip("a", 800, { laneId: "stack-2", laneStartMs: 100 }),
       clip("b", 800, { laneStartMs: 0 }),
@@ -198,43 +265,46 @@ describe("moveClipsByLayer", () => {
       stackLaneIds: lanes,
       direction: "back",
     });
+    expect(back?.stackLaneIds).toEqual(lanes);
     expect(back?.clips.find((item) => item.id === "a")?.laneId).toBe(
       SEQUENCE_LANE_ID,
     );
-    const front = moveClipsByLayer({
+    expect(back?.clips.find((item) => item.id === "b")?.laneId).toBe("stack-2");
+  });
+
+  it("moves the front overlapping clip back one, not past the group", () => {
+    const clips = [
+      clip("a", 1000, { laneStartMs: 0 }),
+      clip("b", 400, { laneId: "stack-1", laneStartMs: 200 }),
+      clip("c", 400, { laneId: "stack-2", laneStartMs: 200 }),
+    ];
+    const lanes = ["stack-1", "stack-2"];
+    const backward = moveClipsByLayer({
       clips,
-      clipIds: ["b"],
+      clipIds: ["c"],
       stackLaneIds: lanes,
-      direction: "front",
+      direction: "backward",
     });
-    expect(front?.clips.find((item) => item.id === "b")?.laneId).toBe(
+    expect(
+      backward?.clips.find((item) => item.id === "a")?.laneId ??
+        SEQUENCE_LANE_ID,
+    ).toBe(SEQUENCE_LANE_ID);
+    expect(backward?.clips.find((item) => item.id === "b")?.laneId).toBe(
       "stack-2",
     );
-    expect(front?.stackLaneIds).toEqual(lanes);
+    expect(backward?.clips.find((item) => item.id === "c")?.laneId).toBe(
+      "stack-1",
+    );
   });
 
-  it("adds a column when bringing the front clip forward", () => {
-    const clips = [clip("a", 800, { laneId: "stack-1", laneStartMs: 40 })];
-    const next = moveClipsByLayer({
-      clips,
-      clipIds: ["a"],
-      stackLaneIds: ["stack-1"],
-      direction: "forward",
-    });
-    expect(next?.stackLaneIds).toHaveLength(2);
-    expect(next?.stackLaneIds[0]).toBe("stack-1");
-    expect(next?.clips[0]?.laneId).toBe(next?.stackLaneIds[1]);
-    expect(next?.clips[0]?.laneStartMs).toBe(40);
-  });
-
-  it("does nothing when the clip is already on that edge", () => {
+  it("does nothing when the clip does not overlap another", () => {
     const clips = [clip("a", 800, { laneStartMs: 0 })];
     expect(
       moveClipsByLayer({
         clips,
         clipIds: ["a"],
         stackLaneIds: ["stack-1"],
-        direction: "back",
+        direction: "forward",
       }),
     ).toBeNull();
     expect(
@@ -243,8 +313,8 @@ describe("moveClipsByLayer", () => {
         clipIds: ["a"],
         stackLaneIds: ["stack-1"],
         direction: "front",
-      })?.clips[0]?.laneId,
-    ).toBe("stack-1");
+      }),
+    ).toBeNull();
   });
 });
 

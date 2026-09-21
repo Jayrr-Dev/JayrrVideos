@@ -58,11 +58,13 @@ export type StoredEditorClip = {
   label?: string;
   durationMs?: number;
   sourceOffsetMs?: number;
+  sourceDurationMs?: number;
   laneId?: string;
   laneStartMs?: number;
   transitionKind?: EditorProjectClip["transitionKind"];
   blendMode?: EditorProjectClip["blendMode"];
   muted?: boolean;
+  removeBg?: boolean;
   sourceClipId?: string;
   width?: number;
   height?: number;
@@ -100,6 +102,9 @@ export const parseStoredEditorClips = (parsed: unknown): StoredEditorClip[] => {
     }
     const durationRaw = readFiniteMs(Reflect.get(item, "durationMs"));
     const offsetRaw = readFiniteMs(Reflect.get(item, "sourceOffsetMs"));
+    const sourceDurationRaw = readFiniteMs(
+      Reflect.get(item, "sourceDurationMs"),
+    );
     const labelRaw = Reflect.get(item, "label");
     const storedLabel =
       typeof labelRaw === "string" && labelRaw.trim()
@@ -110,6 +115,7 @@ export const parseStoredEditorClips = (parsed: unknown): StoredEditorClip[] => {
     const transitionRaw = Reflect.get(item, "transitionKind");
     const blendRaw = Reflect.get(item, "blendMode");
     const mutedRaw = Reflect.get(item, "muted");
+    const removeBgRaw = Reflect.get(item, "removeBg");
     const sourceClipRaw = Reflect.get(item, "sourceClipId");
     const placement = {
       id,
@@ -117,6 +123,9 @@ export const parseStoredEditorClips = (parsed: unknown): StoredEditorClip[] => {
         ? { durationMs: Math.max(1, durationRaw) }
         : {}),
       ...(offsetRaw != null ? { sourceOffsetMs: offsetRaw } : {}),
+      ...(sourceDurationRaw != null && sourceDurationRaw > 0
+        ? { sourceDurationMs: Math.max(1, sourceDurationRaw) }
+        : {}),
       ...(typeof laneRaw === "string" && laneRaw ? { laneId: laneRaw } : {}),
       ...(laneStartRaw != null ? { laneStartMs: laneStartRaw } : {}),
       ...(isEditorTransitionKind(transitionRaw)
@@ -124,6 +133,7 @@ export const parseStoredEditorClips = (parsed: unknown): StoredEditorClip[] => {
         : {}),
       ...(isEditorBlendMode(blendRaw) ? { blendMode: blendRaw } : {}),
       ...(mutedRaw === true ? { muted: true } : {}),
+      ...(removeBgRaw === true ? { removeBg: true } : {}),
       ...(typeof sourceClipRaw === "string" && sourceClipRaw
         ? { sourceClipId: sourceClipRaw }
         : {}),
@@ -190,6 +200,9 @@ export const clipsToStoredEditor = (
       ...(clip.label ? { label: clip.label } : {}),
       durationMs: clip.durationMs,
       sourceOffsetMs: clip.sourceOffsetMs ?? 0,
+      ...(typeof clip.sourceDurationMs === "number" && clip.sourceDurationMs > 0
+        ? { sourceDurationMs: clip.sourceDurationMs }
+        : {}),
       ...(clip.laneId ? { laneId: clip.laneId } : {}),
       ...(typeof clip.laneStartMs === "number"
         ? { laneStartMs: clip.laneStartMs }
@@ -372,6 +385,10 @@ export const restoreProjectClips = (
         label: item.label?.trim() || "Sound",
         durationMs: Math.max(1, item.durationMs ?? 1000),
         sourceOffsetMs: item.sourceOffsetMs ?? 0,
+        ...(typeof item.sourceDurationMs === "number" &&
+        item.sourceDurationMs > 0
+          ? { sourceDurationMs: Math.max(1, item.sourceDurationMs) }
+          : {}),
         ...(item.laneId ? { laneId: item.laneId } : {}),
         ...(typeof item.laneStartMs === "number"
           ? { laneStartMs: item.laneStartMs }
@@ -423,6 +440,7 @@ export const restoreProjectClips = (
         Math.min(maxDuration, item.durationMs ?? maxDuration),
       ),
       sourceOffsetMs,
+      sourceDurationMs: Math.max(1, row.durationMs),
       ...(item.laneId ? { laneId: item.laneId } : {}),
       ...(typeof item.laneStartMs === "number"
         ? { laneStartMs: item.laneStartMs }

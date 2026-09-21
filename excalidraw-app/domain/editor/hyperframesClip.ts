@@ -129,7 +129,8 @@ export const wrapHyperframeComposition = ({
   durationMs: number;
   label: string;
 }) => {
-  const inner = sanitizeCompositionHtml(html) ||
+  const inner =
+    sanitizeCompositionHtml(html) ||
     defaultTitleCardHtml(label, durationMs / 1000);
   const w = width && width > 0 ? Math.round(width) : 1920;
   const h = height && height > 0 ? Math.round(height) : 1080;
@@ -180,7 +181,7 @@ ${extraCss}
 </style>
 </head>
 <body>
-<div id="stage" data-composition-id="jayrr" data-start="0" data-duration="${durationSec}" data-width="${w}" data-height="${h}">
+<div id="stage" data-composition-id="jayrr" data-duration="${durationSec}" data-width="${w}" data-height="${h}">
 ${inner}
 </div>
 ${SEEK_RUNTIME}

@@ -14,7 +14,7 @@ import {
   SendBackwardIcon,
   SendToBackIcon,
   settingsIcon,
-  aiIcon,
+  TrashIcon,
 } from "@excalidraw/excalidraw/components/icons";
 import { useMutation } from "convex/react";
 import { ContextMenu, Popover } from "radix-ui";
@@ -26,7 +26,7 @@ import {
   useState,
   type KeyboardEvent,
   type MouseEvent,
-  type ReactElement,
+  type ReactNode,
 } from "react";
 
 import { appJotaiStore } from "../../app-jotai";
@@ -42,7 +42,9 @@ import {
   canCutAtTime,
   clipAtTimeAcrossLanes,
   clipHasReturnableAudio,
+  clipLaneId,
   clipLayerMoveAvailability,
+  collectLaneOverlaps,
   EDITOR_CUT_MIN_MS,
   EDITOR_PX_PER_SECOND_OPTIONS,
   editorLanes,
@@ -50,15 +52,21 @@ import {
   getMergeableClips,
   isEditorVideoClip,
   mergeProjectClips,
+  moveClipsByLayer,
   moveEditorClip,
   newEditorClipId,
+  overlapParticipantIds,
+  resizeEditorClip,
+  SEQUENCE_LANE_ID,
   setClipsBlendMode,
   setClipsTransition,
   type EditorBlendMode,
   type EditorClip,
+  type EditorClipEdge,
   type EditorLayerDirection,
   type EditorProjectClip,
   type EditorTransitionKind,
+  type OverlapBand,
 } from "./buildEditorTimeline";
 import { findEditorTargetVideo } from "./editorPreviewModel";
 import { clipsToStoredEditor, serializeEditorView } from "./editorProjectStore";
@@ -157,7 +165,7 @@ const SaveGlyph = (
 const LAYER_MOVE_ACTIONS: readonly {
   direction: EditorLayerDirection;
   label: string;
-  icon: ReactElement;
+  icon: ReactNode;
 }[] = [
   { direction: "back", label: "Send to back", icon: SendToBackIcon },
   { direction: "backward", label: "Send backward", icon: SendBackwardIcon },
@@ -231,10 +239,85 @@ export const JayrrEditorPanel = () => {
       }),
     [clips, selectedClipIds, stackLaneIds],
   );
-
   const lanes = useMemo(
     () => editorLanes(timeline, stackLaneIds),
     [stackLaneIds, timeline],
+  );
+
+  const laneOverlaps = useMemo(() => collectLaneOverlaps(lanes), [lanes]);
+
+  const overlapFocus = useCallback(
+    (band: OverlapBand) => {
+      const participantIds = overlapParticipantIds(
+        laneOverlaps,
+        band.joinMs,
+        band.laneIds,
+      );
+      const selected = participantIds.find((id) => selectedIdSet.has(id));
+      if (selected) {
+        return { participantIds, focusId: selected };
+      }
+      const laneOrder = [SEQUENCE_LANE_ID, ...stackLaneIds];
+      let focusId: string | null = null;
+      let bestIndex = -1;
+      for (const id of participantIds) {
+        const clip = clips.find((item) => item.id === id);
+        if (!clip) {
+          continue;
+        }
+        const index = laneOrder.indexOf(clipLaneId(clip));
+        const rank = index < 0 ? 0 : index;
+        if (rank < bestIndex) {
+          continue;
+        }
+        bestIndex = rank;
+        focusId = id;
+      }
+      return { participantIds, focusId };
+    },
+    [clips, laneOverlaps, selectedIdSet, stackLaneIds],
+  );
+
+  const overlapLayerMoves = useCallback(
+    (band: OverlapBand) => {
+      const { participantIds, focusId } = overlapFocus(band);
+      if (!focusId) {
+        return {
+          back: false,
+          backward: false,
+          forward: false,
+          front: false,
+        };
+      }
+      return clipLayerMoveAvailability({
+        clips,
+        clipIds: [focusId],
+        stackLaneIds,
+        peerClipIds: participantIds,
+      });
+    },
+    [clips, overlapFocus, stackLaneIds],
+  );
+
+  const reorderOverlap = useCallback(
+    (band: OverlapBand, direction: EditorLayerDirection) => {
+      const { participantIds, focusId } = overlapFocus(band);
+      if (!focusId) {
+        return;
+      }
+      const next = moveClipsByLayer({
+        clips,
+        clipIds: [focusId],
+        stackLaneIds,
+        direction,
+        peerClipIds: participantIds,
+      });
+      if (!next) {
+        return;
+      }
+      persist(next.clips);
+    },
+    [clips, overlapFocus, persist, stackLaneIds],
   );
 
   const playheadClip = useMemo(
@@ -424,6 +507,17 @@ export const JayrrEditorPanel = () => {
     [clips, persist],
   );
 
+  const resizeClip = useCallback(
+    (args: { clipId: string; edge: EditorClipEdge; edgeMs: number }) => {
+      const next = resizeEditorClip({ clips, ...args });
+      if (!next) {
+        return;
+      }
+      persist(next);
+    },
+    [clips, persist],
+  );
+
   const setTransition = useCallback(
     (clipIds: readonly string[], kind: EditorTransitionKind) => {
       const next = setClipsTransition(clips, clipIds, kind);
@@ -524,9 +618,11 @@ export const JayrrEditorPanel = () => {
       if (!direction) {
         return;
       }
+      if (!moveSelectedByLayer(direction)) {
+        return;
+      }
       event.preventDefault();
       event.stopImmediatePropagation();
-      moveSelectedByLayer(direction);
     };
     doc.defaultView?.addEventListener("keydown", onEditorHistoryKey, true);
     return () => {
@@ -585,15 +681,6 @@ export const JayrrEditorPanel = () => {
         <div className="jayrr-editor-panel__header-actions">
           <button
             type="button"
-            className="jayrr-editor-panel__ai"
-            aria-label="Editor AI"
-            title="Editor AI"
-            onClick={() => setAiOpen(true)}
-          >
-            {aiIcon}
-          </button>
-          <button
-            type="button"
             className="jayrr-editor-panel__save"
             disabled={!canQuery || clips.length === 0 || saveBusy}
             aria-label="Save project"
@@ -633,27 +720,6 @@ export const JayrrEditorPanel = () => {
             {formatEditorClock(currentTimeMs)} /{" "}
             {formatEditorClock(timeline.totalMs)}
           </span>
-          {selectedClipIds.length > 0 ? (
-            <div
-              className="jayrr-editor-panel__layers"
-              role="group"
-              aria-label="Layers"
-            >
-              {LAYER_MOVE_ACTIONS.map((action) => (
-                <button
-                  key={action.direction}
-                  type="button"
-                  className="jayrr-editor-panel__layer-btn"
-                  aria-label={action.label}
-                  title={action.label}
-                  disabled={!layerMoves[action.direction]}
-                  onClick={() => moveSelectedByLayer(action.direction)}
-                >
-                  {action.icon}
-                </button>
-              ))}
-            </div>
-          ) : null}
           <div
             className="jayrr-editor-panel__zoom"
             role="group"
@@ -757,10 +823,13 @@ export const JayrrEditorPanel = () => {
                 onSeek={seek}
                 onSelectClip={selectClip}
                 onMoveClip={moveClip}
+                onResizeClip={resizeClip}
                 onSetTransition={setTransition}
                 onOpenBlend={(args) => {
                   window.setTimeout(() => setBlendPicker(args), 0);
                 }}
+                overlapLayerMoves={overlapLayerMoves}
+                onReorderOverlap={reorderOverlap}
                 onAddStackLane={addStackLane}
                 onRemoveStackLane={removeStackLane}
                 menuContainer={container}
@@ -783,6 +852,39 @@ export const JayrrEditorPanel = () => {
               data-prevent-outside-click
               style={{ maxHeight: "none" }}
             >
+              {menuOnClip || selectedClipIds.length > 0 ? (
+                <>
+                  <ContextMenu.Group className="jayrr-editor-menu__header">
+                    {menuOnClip
+                      ? LAYER_MOVE_ACTIONS.map((action) => (
+                          <ContextMenu.Item
+                            key={action.direction}
+                            className="jayrr-editor-menu__icon"
+                            disabled={!layerMoves[action.direction]}
+                            title={action.label}
+                            aria-label={action.label}
+                            onSelect={() =>
+                              moveSelectedByLayer(action.direction)
+                            }
+                          >
+                            {action.icon}
+                          </ContextMenu.Item>
+                        ))
+                      : null}
+                    {selectedClipIds.length > 0 ? (
+                      <ContextMenu.Item
+                        className="jayrr-editor-menu__icon jayrr-editor-menu__icon--danger"
+                        title="Remove"
+                        aria-label="Remove"
+                        onSelect={removeSelected}
+                      >
+                        {TrashIcon}
+                      </ContextMenu.Item>
+                    ) : null}
+                  </ContextMenu.Group>
+                  <ContextMenu.Separator className="jayrr-editor-menu__separator" />
+                </>
+              ) : null}
               {canCut ? (
                 <ContextMenu.Item
                   className="jayrr-editor-menu__item"
@@ -809,6 +911,12 @@ export const JayrrEditorPanel = () => {
               >
                 Add stock
               </ContextMenu.Item>
+              <ContextMenu.Item
+                className="jayrr-editor-menu__item"
+                onSelect={() => setAiOpen(true)}
+              >
+                Add AI Clip
+              </ContextMenu.Item>
               {canSeparateAudio ? (
                 <ContextMenu.Item
                   className="jayrr-editor-menu__item"
@@ -825,35 +933,12 @@ export const JayrrEditorPanel = () => {
                   Return Audio
                 </ContextMenu.Item>
               ) : null}
-              {menuOnClip ? (
-                <>
-                  <ContextMenu.Separator className="jayrr-editor-menu__separator" />
-                  {LAYER_MOVE_ACTIONS.map((action) => (
-                    <ContextMenu.Item
-                      key={action.direction}
-                      className="jayrr-editor-menu__item"
-                      disabled={!layerMoves[action.direction]}
-                      onSelect={() => moveSelectedByLayer(action.direction)}
-                    >
-                      {action.label}
-                    </ContextMenu.Item>
-                  ))}
-                </>
-              ) : null}
               {canMerge ? (
                 <ContextMenu.Item
                   className="jayrr-editor-menu__item"
                   onSelect={mergeSelected}
                 >
                   Merge
-                </ContextMenu.Item>
-              ) : null}
-              {selectedClipIds.length > 0 ? (
-                <ContextMenu.Item
-                  className="jayrr-editor-menu__item jayrr-editor-menu__item--danger"
-                  onSelect={removeSelected}
-                >
-                  Remove
                 </ContextMenu.Item>
               ) : null}
             </ContextMenu.Content>
@@ -926,6 +1011,11 @@ export const JayrrEditorPanel = () => {
         <JayrrEditorAddStockDialog
           canQuery={canQuery}
           onClose={() => setAddStockOpen(false)}
+          onPick={(row) => {
+            const clipId = addRecording(row);
+            setSelectedClipIds([clipId]);
+            setAddStockOpen(false);
+          }}
         />
       ) : null}
       {aiOpen ? <JayrrEditorAiDialog onClose={() => setAiOpen(false)} /> : null}
