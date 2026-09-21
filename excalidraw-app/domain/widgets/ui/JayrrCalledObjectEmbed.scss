@@ -66,6 +66,7 @@
     align-items: center;
     gap: 0.28rem;
     min-width: 0;
+    flex: 1 1 auto;
   }
 
   .jayrr-called-embed__title-actions {
@@ -85,12 +86,71 @@
     min-width: 0;
     align-self: stretch;
     flex: 0 0 auto;
-    padding: 0.55rem 0.7rem;
-    border-radius: 0.75rem;
+    padding: 0.7rem 0.75rem 0.65rem;
+    border-radius: 1rem;
     border: 1px solid var(--sidebar-border-color);
     background: var(--island-bg-color);
-    box-shadow: 0 0 0 1px var(--color-surface-lowest);
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
     overflow: hidden;
+  }
+
+  .jayrr-called-embed__card-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.42rem;
+    min-width: 0;
+  }
+
+  .jayrr-called-embed__card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.28rem;
+    min-width: 0;
+  }
+
+  .jayrr-called-embed__card-head .jayrr-called-embed__label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .jayrr-called-embed__switch-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    min-width: 0;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-primary-color);
+  }
+
+  .jayrr-called-embed__card-tools {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    min-width: 0;
+  }
+
+  .jayrr-called-embed__card-tools .jayrr-called-embed__select--show {
+    flex: 1 1 auto;
+    width: auto;
+    max-width: none;
+  }
+
+  .jayrr-called-embed__settings {
+    z-index: 21;
+    display: flex;
+    flex-direction: column;
+    gap: 0.42rem;
+    width: 10.5rem;
+    padding: 0.6rem 0.65rem;
+    border-radius: 0.85rem;
+    border: 1px solid var(--sidebar-border-color);
+    background: var(--island-bg-color);
+    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.16);
   }
 
   .jayrr-called-embed__cards {
@@ -262,23 +322,41 @@
     }
   }
 
+  .jayrr-called-embed__active {
+    flex: 0 0 auto;
+    width: 0.95rem;
+    height: 0.95rem;
+    margin: 0;
+    accent-color: var(--color-primary);
+    cursor: pointer;
+  }
+
   .jayrr-called-embed__legend {
     z-index: 20;
     display: flex;
     flex-direction: column;
-    gap: 0.35rem;
-    width: min(12.5rem, calc(100% - 1.4rem));
-    max-width: min(12.5rem, calc(100% - 1.4rem));
-    padding: 0.4rem;
-    border-radius: 0.6rem;
+    gap: 0.45rem;
+    width: min(17.5rem, calc(100% - 1.4rem));
+    max-width: min(17.5rem, calc(100% - 1.4rem));
+    padding: 0.7rem 0.75rem 0.65rem;
+    border-radius: 1rem;
     border: 1px solid var(--sidebar-border-color);
     background: var(--island-bg-color);
-    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.16);
+    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.16);
+  }
+
+  .jayrr-called-embed__legend-title {
+    margin: 0;
+    font-size: 0.92rem;
+    font-weight: 800;
+    color: var(--color-primary);
+    line-height: 1.2;
   }
 
   .jayrr-called-embed__legend .jayrr-called-embed__bands {
     display: flex;
     flex-wrap: wrap;
+    gap: 0.28rem;
     width: 100%;
     max-width: 100%;
     justify-content: flex-start;
@@ -299,7 +377,10 @@
   }
 
   .jayrr-called-embed__legend .jayrr-called-embed__hint {
-    max-width: 16rem;
+    max-width: none;
+    font-size: 0.82rem;
+    line-height: 1.35;
+    color: var(--color-gray-70);
   }
 
   .jayrr-called-embed__who-row {
@@ -495,6 +576,14 @@
 
   .jayrr-called-embed__bands--ennea {
     grid-template-columns: repeat(9, minmax(1.35rem, auto));
+  }
+
+  .jayrr-called-embed__bands--house {
+    grid-template-columns: repeat(4, minmax(2.4rem, auto));
+  }
+
+  .jayrr-called-embed__bands--gender {
+    grid-template-columns: repeat(7, minmax(2.1rem, auto));
   }
 
   .jayrr-called-embed__bands--emotion {
@@ -764,6 +853,80 @@
     background: #dcfce7;
     color: #166534;
     border-color: #86efac;
+  }
+
+  .jayrr-called-embed__house {
+    letter-spacing: 0.01em;
+  }
+
+  .jayrr-called-embed__house--gryffindor {
+    background: #fee2e2;
+    color: #991b1b;
+    border-color: #fca5a5;
+  }
+
+  .jayrr-called-embed__house--hufflepuff {
+    background: #fef9c3;
+    color: #854d0e;
+    border-color: #fde047;
+  }
+
+  .jayrr-called-embed__house--ravenclaw {
+    background: #dbeafe;
+    color: #1e3a8a;
+    border-color: #93c5fd;
+  }
+
+  .jayrr-called-embed__house--slytherin {
+    background: #dcfce7;
+    color: #166534;
+    border-color: #86efac;
+  }
+
+  .jayrr-called-embed__gender {
+    letter-spacing: 0.01em;
+  }
+
+  .jayrr-called-embed__gender--feminine {
+    background: #fce7f3;
+    color: #9d174d;
+    border-color: #f9a8d4;
+  }
+
+  .jayrr-called-embed__gender--womanly {
+    background: #fbcfe8;
+    color: #9d174d;
+    border-color: #f472b6;
+  }
+
+  .jayrr-called-embed__gender--girly {
+    background: #fce7f3;
+    color: #be185d;
+    border-color: #f9a8d4;
+  }
+
+  .jayrr-called-embed__gender--neutral {
+    background: #f4f4f5;
+    color: #52525b;
+    border-color: #d4d4d8;
+  }
+
+  .jayrr-called-embed__gender--boyish {
+    background: #e0f2fe;
+    color: #075985;
+    border-color: #7dd3fc;
+  }
+
+  .jayrr-called-embed__gender--manly {
+    background: #dbeafe;
+    color: #1e3a8a;
+    border-color: #93c5fd;
+  }
+
+  .jayrr-called-embed__gender--masculine {
+    background: #e0e7ff;
+    color: #312e81;
+    border-color: #a5b4fc;
   }
 
   .jayrr-called-embed__smart {
@@ -1170,7 +1333,13 @@
   }
 
   .jayrr-called-embed--transcribe .jayrr-called-embed__cards {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.4rem;
     flex: 1 1 auto;
+    align-content: start;
+    min-height: 0;
+    overflow: auto;
   }
 
   .jayrr-called-embed__body {
@@ -1254,6 +1423,8 @@
   .jayrr-called-embed__now-row .jayrr-called-embed__mbti,
   .jayrr-called-embed__now-row .jayrr-called-embed__fn,
   .jayrr-called-embed__now-row .jayrr-called-embed__ennea,
+  .jayrr-called-embed__now-row .jayrr-called-embed__house,
+  .jayrr-called-embed__now-row .jayrr-called-embed__gender,
   .jayrr-called-embed__now-row .jayrr-called-embed__hype,
   .jayrr-called-embed__now-row .jayrr-called-embed__energy,
   .jayrr-called-embed__now-row .jayrr-called-embed__online,
@@ -1353,6 +1524,13 @@
       font-weight: 500;
       color: var(--text-primary-color);
       line-height: 1.45;
+    }
+
+    .jayrr-called-embed__legend .jayrr-called-embed__hint {
+      font-size: 0.82rem;
+      font-weight: 500;
+      color: var(--color-gray-70);
+      line-height: 1.35;
     }
 
     .jayrr-called-embed__chat {

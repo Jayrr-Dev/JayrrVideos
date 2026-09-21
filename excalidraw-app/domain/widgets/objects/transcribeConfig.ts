@@ -13,6 +13,8 @@ export const JEV_SHOW_KEYS = [
   "mbti",
   "mbtiAdvance",
   "enneagram",
+  "hogwarts",
+  "genderStyle",
   "emotion",
   "truth",
 ] as const;
@@ -44,6 +46,8 @@ export const DEFAULT_JEV_TOP: Record<JevTopKey, number> = {
   mbti: 1,
   mbtiAdvance: 2,
   enneagram: 1,
+  hogwarts: 1,
+  genderStyle: 1,
   emotion: 3,
   truth: 1,
 };
@@ -56,6 +60,8 @@ export type TranscribeConfig = {
   jevMbti: boolean;
   jevMbtiAdvance: boolean;
   jevEnneagram: boolean;
+  jevHogwarts: boolean;
+  jevGenderStyle: boolean;
   jevHype: boolean;
   jevEnergy: boolean;
   jevOnline: boolean;
@@ -77,6 +83,8 @@ export const DEFAULT_TRANSCRIBE: TranscribeConfig = {
   jevMbti: false,
   jevMbtiAdvance: false,
   jevEnneagram: false,
+  jevHogwarts: false,
+  jevGenderStyle: false,
   jevHype: false,
   jevEnergy: false,
   jevOnline: false,
@@ -191,6 +199,9 @@ export const readTranscribeConfig = (
     jevMbtiAdvance:
       (bag as { jevMbtiAdvance?: unknown }).jevMbtiAdvance === true,
     jevEnneagram: (bag as { jevEnneagram?: unknown }).jevEnneagram === true,
+    jevHogwarts: (bag as { jevHogwarts?: unknown }).jevHogwarts === true,
+    jevGenderStyle:
+      (bag as { jevGenderStyle?: unknown }).jevGenderStyle === true,
     jevHype: (bag as { jevHype?: unknown }).jevHype === true,
     jevEnergy: (bag as { jevEnergy?: unknown }).jevEnergy === true,
     jevOnline: (bag as { jevOnline?: unknown }).jevOnline === true,
@@ -224,6 +235,8 @@ export const writeTranscribeConfig = (
   bag.jevMbti = config.jevMbti;
   bag.jevMbtiAdvance = config.jevMbtiAdvance;
   bag.jevEnneagram = config.jevEnneagram;
+  bag.jevHogwarts = config.jevHogwarts;
+  bag.jevGenderStyle = config.jevGenderStyle;
   bag.jevHype = config.jevHype;
   bag.jevEnergy = config.jevEnergy;
   bag.jevOnline = config.jevOnline;
