@@ -27,6 +27,7 @@ export const GENDER_BANDS: readonly GenderStyleDef[] = [
     id: "feminine",
     name: "Feminine",
     what: "Soft, elegant, and feeling-aware. Warm wording and attention to presentation.",
+    example: "That color is so pretty on you. How are you feeling about it?",
     option: [
       "Feminine. Core style: soft, elegant, expressive, caring, and highly aware of feelings and presentation.",
       "Traits: gentle, graceful, caring, emotionally open, warm, polite, socially aware, patient, supportive, creative, romantic, detail-focused, sensitive to mood, interested in beauty, careful with presentation.",
@@ -39,6 +40,7 @@ export const GENDER_BANDS: readonly GenderStyleDef[] = [
     id: "womanly",
     name: "Womanly",
     what: "Mature, composed, and practical. Care with boundaries, not helplessness.",
+    example: "I can help, and I also need that boundary respected.",
     option: [
       "Womanly. Core style: mature, composed, caring, confident, and practical.",
       "Traits: mature, calm, responsible, protective, self-respecting, dependable, patient, caring, emotionally steady, practical, confident, well-spoken, organized, strong-minded, good at setting boundaries.",
@@ -51,6 +53,7 @@ export const GENDER_BANDS: readonly GenderStyleDef[] = [
     id: "girly",
     name: "Girly",
     what: "Cute, bubbly, and youthful. Playful feminine talk, trends, and open reactions.",
+    example: "Oh my god, that is adorable. We have to go.",
     option: [
       "Girly. Core style: cute, playful, expressive, youthful, and openly interested in feminine things.",
       "Traits: bubbly, playful, social, expressive, cheerful, trend-aware, affectionate, excitable, friendly, cute, romantic, talkative, emotionally reactive, fun-loving, interested in appearance.",
@@ -63,6 +66,7 @@ export const GENDER_BANDS: readonly GenderStyleDef[] = [
     id: "neutral",
     name: "Neutral",
     what: "Balanced and casual. Interests first; not strongly feminine or masculine.",
+    example: "Either works. I just want the version that is easier to use.",
     option: [
       "Neutral. Core style: balanced, flexible, moderate, and not strongly feminine or masculine.",
       "Traits: adaptable, calm, practical, moderate, independent, cooperative, open-minded, casual, emotionally balanced, easygoing, situation-aware, comfortable with different groups, neither highly soft nor highly tough, more focused on interests than gender roles.",
@@ -75,6 +79,7 @@ export const GENDER_BANDS: readonly GenderStyleDef[] = [
     id: "boyish",
     name: "Boyish",
     what: "Casual, playful, and a bit competitive. Youthful masculine energy, not command.",
+    example: "Bet. Race you. Last one buys snacks.",
     option: [
       "Boyish. Core style: casual, active, playful, competitive, and slightly masculine.",
       "Traits: energetic, playful, adventurous, casual, competitive, mischievous, direct, independent, restless, curious, physically active, less concerned with appearance, comfortable taking risks, friendly through teasing, easily bored by formal situations.",
@@ -87,6 +92,7 @@ export const GENDER_BANDS: readonly GenderStyleDef[] = [
     id: "manly",
     name: "Manly",
     what: "Tough, protective, and practical. Fixes problems; shows care through action.",
+    example: "Stay here. I’ll handle it.",
     option: [
       "Manly. Core style: tough, protective, capable, steady, and traditionally male.",
       "Traits: strong, protective, brave, dependable, practical, tough, loyal, calm under pressure, hands-on, duty-focused, physically confident, hardworking, quietly caring, willing to take responsibility, uncomfortable appearing helpless.",
@@ -99,6 +105,7 @@ export const GENDER_BANDS: readonly GenderStyleDef[] = [
     id: "masculine",
     name: "Masculine",
     what: "Direct, independent, and results-first. Commands, competes, and stays in control.",
+    example: "Decide now. Who owns this, and what is the outcome?",
     option: [
       "Masculine. Core style: direct, independent, disciplined, competitive, commanding, and strongly focused on results.",
       "Traits: assertive, decisive, independent, ambitious, competitive, strategic, disciplined, confident, controlled, goal-focused, strong-willed, risk-tolerant, status-aware, comfortable leading, focused on competence, unwilling to be controlled, protective of personal freedom.",

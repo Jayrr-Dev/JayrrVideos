@@ -1,5 +1,14 @@
 import { JEV_SHARED_EVIDENCE } from "../../transcription/jevSharedState";
 
+import {
+  averageScore,
+  rankedScore,
+  scoreFromAnswers,
+  scoreQuestion,
+  type ScoreBand,
+  type ScoreResult,
+} from "./jevScoreScale";
+
 const UTTERANCE_SCOPE = `Judge only the claim in \`utterance\`. ${JEV_SHARED_EVIDENCE} Score how well that claim matches known facts and available evidence. Do not score whether the speaker meant to lie.`;
 
 export type TruthId =
@@ -11,12 +20,7 @@ export type TruthId =
   | "supported"
   | "proven";
 
-export type TruthBand = {
-  id: TruthId;
-  label: string;
-  what: string;
-  example: string;
-};
+export type TruthBand = ScoreBand<TruthId>;
 
 export const TRUTH_BANDS: readonly TruthBand[] = [
   {
@@ -70,95 +74,28 @@ export const TRUTH_BANDS: readonly TruthBand[] = [
 ];
 
 export const TRUTH_QUESTION_ID = "truth";
-const TRUTH_TOP = TRUTH_BANDS.length - 1;
 
-export const TRUTH_QUESTION = {
-  id: TRUTH_QUESTION_ID,
-  type: "score" as const,
-  instructions: `How well does the claim in \`utterance\` match known facts and available evidence? Judge the claim itself, not whether the speaker meant to lie. Scale: Fabricated (invented), False (directly disproven), Misleading (some truth, wrong impression), Neutral (not enough to decide), Plausible (fits known facts, evidence thin), Supported (good evidence, open to correction), Proven (strong independent checkable evidence). Prefer Neutral over guessing. Do not pick Proven unless the evidence is direct and checkable. ${UTTERANCE_SCOPE}`,
-  levels: TRUTH_BANDS.map((band) => ({
-    what: `${band.label}. ${band.what}`,
-    examples: [band.example],
-  })),
-};
+export const TRUTH_QUESTION = scoreQuestion(
+  TRUTH_QUESTION_ID,
+  `How well does the claim in \`utterance\` match known facts and available evidence? Judge the claim itself, not whether the speaker meant to lie. Scale: Fabricated (invented), False (directly disproven), Misleading (some truth, wrong impression), Neutral (not enough to decide), Plausible (fits known facts, evidence thin), Supported (good evidence, open to correction), Proven (strong independent checkable evidence). Prefer Neutral over guessing. Do not pick Proven unless the evidence is direct and checkable. ${UTTERANCE_SCOPE}`,
+  TRUTH_BANDS,
+);
 
-export type TruthResult = {
-  id: TruthId;
-  label: string;
-  score: number;
-  confidence: number;
-};
-
-type ScoreAnswer = {
-  id: string;
-  type: "score";
-  score: number;
-  confidence?: number;
-};
-
-const clampScore = (value: number) =>
-  Math.min(TRUTH_TOP, Math.max(0, Math.round(value)));
-
-const resultFromScore = (
-  score: number,
-  confidence: number,
-): TruthResult | null => {
-  const index = clampScore(score);
-  const band = TRUTH_BANDS[index];
-  if (!band) {
-    return null;
-  }
-  return {
-    id: band.id,
-    label: band.label,
-    score: index,
-    confidence,
-  };
-};
+export type TruthResult = ScoreResult<TruthId>;
 
 export const truthFromAnswers = (
   answers: ReadonlyArray<{ id: string; type: string }>,
-): TruthResult | null => {
-  const answer = answers.find(
-    (row): row is ScoreAnswer =>
-      row.id === TRUTH_QUESTION_ID && row.type === "score",
+): TruthResult | null =>
+  scoreFromAnswers(
+    answers,
+    TRUTH_QUESTION_ID,
+    TRUTH_BANDS,
+    "Jev omitted the truth score.",
   );
-  if (!answer) {
-    throw new Error("Jev omitted the truth score.");
-  }
-  return resultFromScore(
-    answer.score,
-    typeof answer.confidence === "number" ? answer.confidence : 0,
-  );
-};
 
-export const rankedTruth = (row: TruthResult, count: number): TruthResult[] => {
-  const picked: TruthResult[] = [];
-  for (let dist = 0; picked.length < count && dist <= TRUTH_TOP; dist += 1) {
-    const candidates =
-      dist === 0 ? [row.score] : [row.score + dist, row.score - dist];
-    for (const next of candidates) {
-      const mapped = resultFromScore(next, row.confidence);
-      if (!mapped || picked.some((item) => item.id === mapped.id)) {
-        continue;
-      }
-      picked.push(mapped);
-      if (picked.length >= count) {
-        break;
-      }
-    }
-  }
-  return picked;
-};
+export const rankedTruth = (row: TruthResult, count: number): TruthResult[] =>
+  rankedScore(TRUTH_BANDS, row, count);
 
 export const averageTruth = (
   rows: readonly TruthResult[],
-): TruthResult | null => {
-  if (rows.length === 0) {
-    return null;
-  }
-  const score = rows.reduce((sum, row) => sum + row.score, 0) / rows.length;
-  const confidence =
-    rows.reduce((sum, row) => sum + row.confidence, 0) / rows.length;
-  return resultFromScore(score, confidence);
-};
+): TruthResult | null => averageScore(TRUTH_BANDS, rows);

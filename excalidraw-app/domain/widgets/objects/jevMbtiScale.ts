@@ -10,21 +10,58 @@ export type MbtiBand = {
   letter: MbtiLetter;
   pair: MbtiPairId;
   what: string;
+  example: string;
 };
 
 export const MBTI_BANDS: readonly MbtiBand[] = [
-  { letter: "E", pair: "ei", what: "Gets energy from people and action." },
+  {
+    letter: "E",
+    pair: "ei",
+    what: "Gets energy from people and action.",
+    example: "Let’s talk it through together and try it now.",
+  },
   {
     letter: "I",
     pair: "ei",
     what: "Gets energy from thinking things through.",
+    example: "I need a minute to think before I answer.",
   },
-  { letter: "S", pair: "sn", what: "Trusts facts and what is here now." },
-  { letter: "N", pair: "sn", what: "Trusts ideas and what could be." },
-  { letter: "T", pair: "tf", what: "Decides with logic." },
-  { letter: "F", pair: "tf", what: "Decides with people and values." },
-  { letter: "J", pair: "jp", what: "Likes plans and finishing things." },
-  { letter: "P", pair: "jp", what: "Likes options and staying flexible." },
+  {
+    letter: "S",
+    pair: "sn",
+    what: "Trusts facts and what is here now.",
+    example: "What actually happened, in order, with the numbers?",
+  },
+  {
+    letter: "N",
+    pair: "sn",
+    what: "Trusts ideas and what could be.",
+    example: "The interesting part is where this could go next.",
+  },
+  {
+    letter: "T",
+    pair: "tf",
+    what: "Decides with logic.",
+    example: "Ignore how it feels. Which option is more consistent?",
+  },
+  {
+    letter: "F",
+    pair: "tf",
+    what: "Decides with people and values.",
+    example: "I care more about how this lands on people than the score.",
+  },
+  {
+    letter: "J",
+    pair: "jp",
+    what: "Likes plans and finishing things.",
+    example: "Let’s decide, put it on the calendar, and close it.",
+  },
+  {
+    letter: "P",
+    pair: "jp",
+    what: "Likes options and staying flexible.",
+    example: "Keep it open. We can change it if something better shows up.",
+  },
 ];
 
 export const MBTI_PAIRS: readonly {
@@ -185,29 +222,82 @@ const pairProb = (row: MbtiResult, pairId: MbtiPairId, letter: MbtiLetter) => {
   return 0;
 };
 
-const MBTI_TYPE_WHAT: Record<string, string> = {
-  INTJ: "Plans the future with inner vision and logic.",
-  INTP: "Builds mental models and questions how things work.",
-  ENTJ: "Directs people and plans to get results.",
-  ENTP: "Plays with ideas and debates possibilities.",
-  INFJ: "Follows an inner vision while caring about people.",
-  INFP: "Stays true to personal values and meaning.",
-  ENFJ: "Rallies people around a shared feeling or cause.",
-  ENFP: "Connects people and possibilities with warmth.",
-  ISTJ: "Relies on proven methods, facts, and duty.",
-  ISFJ: "Cares for people through practical, reliable help.",
-  ESTJ: "Organizes work and people to get things done.",
-  ESFJ: "Takes care of the group and keeps things running smoothly.",
-  ISTP: "Fixes problems in the moment with calm logic.",
-  ISFP: "Follows personal taste and stays true to what feels right.",
-  ESTP: "Acts on what is happening now and makes things happen.",
-  ESFP: "Brings energy to the moment and reads people.",
+const MBTI_TYPE_COPY: Record<string, { what: string; example: string }> = {
+  INTJ: {
+    what: "Plans the future with inner vision and logic.",
+    example: "This only works if we commit to the long path now.",
+  },
+  INTP: {
+    what: "Builds mental models and questions how things work.",
+    example: "How do we know that, and what follows if it is true?",
+  },
+  ENTJ: {
+    what: "Directs people and plans to get results.",
+    example: "Here is the plan. Who owns each piece?",
+  },
+  ENTP: {
+    what: "Plays with ideas and debates possibilities.",
+    example: "Okay, but what if the opposite is also true?",
+  },
+  INFJ: {
+    what: "Follows an inner vision while caring about people.",
+    example: "I can see where this is heading, and people will get hurt.",
+  },
+  INFP: {
+    what: "Stays true to personal values and meaning.",
+    example: "That may work, but it doesn’t feel like the right thing.",
+  },
+  ENFJ: {
+    what: "Rallies people around a shared feeling or cause.",
+    example: "We can do this together. Everyone has a place here.",
+  },
+  ENFP: {
+    what: "Connects people and possibilities with warmth.",
+    example: "You would love this. It opens so many doors.",
+  },
+  ISTJ: {
+    what: "Relies on proven methods, facts, and duty.",
+    example: "We already have a process. Follow it and check the facts.",
+  },
+  ISFJ: {
+    what: "Cares for people through practical, reliable help.",
+    example: "I already packed extras so nobody is left without one.",
+  },
+  ESTJ: {
+    what: "Organizes work and people to get things done.",
+    example: "Stop debating. Assign it and finish it today.",
+  },
+  ESFJ: {
+    what: "Takes care of the group and keeps things running smoothly.",
+    example: "Did everyone eat? I’ll make sure the plan works for us.",
+  },
+  ISTP: {
+    what: "Fixes problems in the moment with calm logic.",
+    example: "Hand me that. I can see why it jammed.",
+  },
+  ISFP: {
+    what: "Follows personal taste and stays true to what feels right.",
+    example: "I don’t want that look. This one feels more like me.",
+  },
+  ESTP: {
+    what: "Acts on what is happening now and makes things happen.",
+    example: "Forget the plan. Jump in before we miss it.",
+  },
+  ESFP: {
+    what: "Brings energy to the moment and reads people.",
+    example: "This room is dead. Let’s make it fun.",
+  },
 };
 
 export const mbtiLetterWhat = (letter: MbtiLetter) =>
   MBTI_BANDS.find((band) => band.letter === letter)?.what;
 
-export const mbtiTypeWhat = (type: string) => MBTI_TYPE_WHAT[type];
+export const mbtiLetterExample = (letter: MbtiLetter) =>
+  MBTI_BANDS.find((band) => band.letter === letter)?.example;
+
+export const mbtiTypeWhat = (type: string) => MBTI_TYPE_COPY[type]?.what;
+
+export const mbtiTypeExample = (type: string) => MBTI_TYPE_COPY[type]?.example;
 
 export const rankedMbti = (row: MbtiResult, count: number): MbtiResult[] => {
   const lettersFor = {

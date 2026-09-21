@@ -11,12 +11,14 @@ export type ChoiceBand<Id extends string> = {
   name: string;
   what: string;
   option: string;
+  example?: string;
 };
 
 export type ChoiceResult<Id extends string> = {
   id: Id;
   name: string;
   what: string;
+  example?: string;
   label: string;
   confidence: number;
   probabilities: Record<Id, number>;
@@ -89,6 +91,7 @@ export const resultFromChoice = <Id extends string>(
     id,
     name: def.name,
     what: def.what,
+    example: def.example,
     label: def.name,
     confidence: probabilities[id] ?? 0,
     probabilities,

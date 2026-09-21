@@ -35,6 +35,7 @@ export type EnergyBand = {
   zone: EnergyZone;
   name: string;
   what: string;
+  example: string;
 };
 
 export const ENERGY_BANDS: readonly EnergyBand[] = [
@@ -44,6 +45,7 @@ export const ENERGY_BANDS: readonly EnergyBand[] = [
     zone: "low",
     name: "Guilt",
     what: "Something feels deeply wrong with them. Shame says “I am bad”; guilt says “I did something bad.” They may hide, punish themselves, expect rejection, or believe they do not deserve help. Attention stays on faults, mistakes, and fear of being exposed.",
+    example: "This is my fault. I don’t deserve help.",
   },
   {
     id: "50",
@@ -51,6 +53,7 @@ export const ENERGY_BANDS: readonly EnergyBand[] = [
     zone: "low",
     name: "Apathy",
     what: "Very little drive. They may believe nothing can improve, so they do not fight the situation. Daily care, work, relationships, and health may be ignored. Unlike peaceful acceptance, there is little interest, hope, or willingness to act.",
+    example: "Whatever. Nothing changes anyway.",
   },
   {
     id: "80",
@@ -58,6 +61,7 @@ export const ENERGY_BANDS: readonly EnergyBand[] = [
     zone: "low",
     name: "Grief",
     what: "Life is viewed through loss, regret, and past failure. They can still feel strongly, unlike apathy, but most of that feeling is pain. They replay what happened, focus on what is gone, and struggle to imagine a better future. Self-pity appears when they feel singled out and want the suffering recognized.",
+    example: "I keep thinking about what I lost. It’s never coming back.",
   },
   {
     id: "100",
@@ -65,6 +69,7 @@ export const ENERGY_BANDS: readonly EnergyBand[] = [
     zone: "low",
     name: "Fear",
     what: "The world feels unsafe. Attention stays on threats. They may avoid risks, people, decisions, or new experiences because they expect harm, failure, or embarrassment. They seek safety and certainty before acting. More energy than apathy because they want protection, but action is still limited.",
+    example: "What if this hurts me? I’m not doing it.",
   },
   {
     id: "120",
@@ -72,6 +77,7 @@ export const ENERGY_BANDS: readonly EnergyBand[] = [
     zone: "low",
     name: "Craving",
     what: "They strongly want something outside themselves: money, attention, food, status, sex, entertainment, or approval. The mind says they need this before they can feel good. Motivation is stronger, but satisfaction usually does not last. One want is replaced by another.",
+    example: "I need that first. Then I’ll be okay.",
   },
   {
     id: "160",
@@ -79,6 +85,7 @@ export const ENERGY_BANDS: readonly EnergyBand[] = [
     zone: "low",
     name: "Anger",
     what: "Frustration turns into force. They are more willing to act than someone controlled by fear, but the action may involve threats, blame, pressure, or domination. Anger can stop powerlessness, yet it damages judgment and relationships when it is the normal state.",
+    example: "Get out of my way. I’ll make this happen.",
   },
   {
     id: "180",
@@ -86,6 +93,7 @@ export const ENERGY_BANDS: readonly EnergyBand[] = [
     zone: "low",
     name: "Conflict",
     what: "They clearly see what they dislike but spend more energy attacking problems than solving them. They may argue, find faults, complain, and hold others responsible. Unlike direct anger, this can look like constant negativity, bitterness, resistance, or dissatisfaction.",
+    example: "This whole setup is trash. Someone else caused it.",
   },
   {
     id: "190",
@@ -93,6 +101,7 @@ export const ENERGY_BANDS: readonly EnergyBand[] = [
     zone: "low",
     name: "Pride",
     what: "Self-worth comes from feeling better, smarter, stronger, richer, or more moral than other people. They may appear confident, but confidence depends on comparison and outside respect. Disagreement feels like a personal attack because an error threatens the identity they built.",
+    example: "I’m clearly ahead of them. Don’t question me.",
   },
   {
     id: "200",
@@ -100,6 +109,7 @@ export const ENERGY_BANDS: readonly EnergyBand[] = [
     zone: "mid",
     name: "Contentment",
     what: "The major change from emotional struggle to basic stability. They can work, follow routines, meet responsibilities, and manage ordinary life. Life may feel plain, repetitive, or lacking passion. Nothing is seriously wrong, but there may be little excitement, growth, or deeper purpose.",
+    example: "I’m fine. I’ll go to work and handle it.",
   },
   {
     id: "275",
@@ -107,6 +117,7 @@ export const ENERGY_BANDS: readonly EnergyBand[] = [
     zone: "mid",
     name: "Courage",
     what: "Willing to face uncertainty and try something new. Problems look manageable instead of threatening. They can act without a guaranteed result and recover more easily when something fails. Relaxation here means acting without being controlled by fear or pressure.",
+    example: "I don’t know if it works. Let’s try anyway.",
   },
   {
     id: "320",
@@ -114,6 +125,7 @@ export const ENERGY_BANDS: readonly EnergyBand[] = [
     zone: "mid",
     name: "Willingness",
     what: "Life becomes active and constructive. They want to learn, help, work, improve, and take responsibility. They generally expect effort to produce useful results. Optimism is connected to action: they participate in improving life, not only hope it improves.",
+    example: "I’ll take the next step. We can make this better.",
   },
   {
     id: "400",
@@ -121,6 +133,7 @@ export const ENERGY_BANDS: readonly EnergyBand[] = [
     zone: "mid",
     name: "Acceptance",
     what: "They can look at reality without quickly rejecting or judging it. They listen, study, and consider different views. Acceptance does not mean agreeing with everything. It means seeing what is present before deciding how to respond. Neutrality makes them less defensive.",
+    example: "That’s how it is. Let’s look at it before we fight it.",
   },
   {
     id: "450",
@@ -128,6 +141,7 @@ export const ENERGY_BANDS: readonly EnergyBand[] = [
     zone: "mid",
     name: "Intelligence",
     what: "Thinking is the main tool for understanding life. They value facts, logic, learning, planning, and clear explanations. They can study complex ideas and question weak beliefs. The risk is relying too much on the mind while ignoring emotion, intuition, or relationships.",
+    example: "Walk me through the evidence. The argument has a hole.",
   },
   {
     id: "475",
@@ -135,6 +149,7 @@ export const ENERGY_BANDS: readonly EnergyBand[] = [
     zone: "high",
     name: "Joy",
     what: "A strong desire to create, explore, express, and contribute. Work may feel meaningful rather than forced. Ideas arise easily, and they enjoy turning them into art, solutions, inventions, or useful experiences. Joy here is active and productive, not only pleasant comfort.",
+    example: "I want to build this. It feels worth putting into the world.",
   },
   {
     id: "505",
@@ -142,6 +157,8 @@ export const ENERGY_BANDS: readonly EnergyBand[] = [
     zone: "high",
     name: "Beauty",
     what: "They see beauty and possibility in ordinary things. Imagination is clearer and less limited by fear or social approval. They can form ideas that feel original, complete, and meaningful. Creation comes from inspiration rather than a need to prove personal worth.",
+    example:
+      "Even this small thing is beautiful. I can see a better shape for it.",
   },
   {
     id: "510",
@@ -149,6 +166,7 @@ export const ENERGY_BANDS: readonly EnergyBand[] = [
     zone: "high",
     name: "Power",
     what: "The ability to act clearly and produce results without forcing others. They begin tasks, keep their word, and accept responsibility for their choices. Integrity means actions match values. Confidence comes from inner stability rather than status or control.",
+    example: "I’ll do what I said. You don’t have to be pushed.",
   },
   {
     id: "530",
@@ -156,6 +174,7 @@ export const ENERGY_BANDS: readonly EnergyBand[] = [
     zone: "high",
     name: "Love",
     what: "They relate to life through care and gratitude rather than need. They value people without constantly asking what they can receive. Intuition matters more: they notice feelings, patterns, and subtle signals that pure logic may miss. Appreciation makes ordinary experiences feel valuable.",
+    example: "I’m glad you’re here. I don’t need anything back for that.",
   },
   {
     id: "540",
@@ -163,6 +182,7 @@ export const ENERGY_BANDS: readonly EnergyBand[] = [
     zone: "high",
     name: "Humour",
     what: "Happiness is less dependent on perfect conditions. They can see the lighter side of difficulties without denying them. Humour is warm rather than cruel, and it connects people instead of placing someone beneath others. Life feels enjoyable, open, and less controlled by fear.",
+    example: "This is messy, and we can still laugh without punching down.",
   },
   {
     id: "550",
@@ -170,6 +190,7 @@ export const ENERGY_BANDS: readonly EnergyBand[] = [
     zone: "high",
     name: "Unconditional",
     what: "Love is no longer reserved only for people who behave as expected. They care without always demanding agreement, reward, or repayment. This does not mean accepting abuse or losing boundaries. Another person’s value is not removed because they are difficult, flawed, or different.",
+    example: "You don’t have to earn being treated as a person.",
   },
   {
     id: "570",
@@ -177,6 +198,7 @@ export const ENERGY_BANDS: readonly EnergyBand[] = [
     zone: "high",
     name: "Ecstasy",
     what: "Intense wonder, love, gratitude, or spiritual connection. Ordinary self-concern becomes much weaker. Life can feel unusually vivid and meaningful. This is a rare state that may appear for a short time rather than remain as a normal baseline.",
+    example: "Everything feels lit up. I can’t reduce this to a goal.",
   },
   {
     id: "600",
@@ -184,6 +206,7 @@ export const ENERGY_BANDS: readonly EnergyBand[] = [
     zone: "high",
     name: "Bliss",
     what: "Inner conflict becomes very quiet. They do not feel a strong need to fight reality, gain approval, or control every outcome. Peace is stable and comes from within rather than from getting everything they want. Problems may still exist, but they create less fear and resistance.",
+    example: "The problem is still here, and I’m not at war with it.",
   },
   {
     id: "700",
@@ -191,6 +214,7 @@ export const ENERGY_BANDS: readonly EnergyBand[] = [
     zone: "high",
     name: "Oneness",
     what: "The usual division between “me” and “everything else” begins to disappear. Life is experienced as one connected whole rather than separate people and objects competing. Personal identity and private desires become less important. Deep spiritual awareness sits in this range.",
+    example: "It doesn’t feel like me against the world anymore.",
   },
   {
     id: "1000",
@@ -198,6 +222,7 @@ export const ENERGY_BANDS: readonly EnergyBand[] = [
     zone: "high",
     name: "Infinity",
     what: "Complete unity with existence, without a separate personal self, private desire, fear, or resistance. Not an ordinary emotion or personality. An extremely rare ideal of total awareness.",
+    example: "There is no separate me left to defend.",
   },
 ];
 

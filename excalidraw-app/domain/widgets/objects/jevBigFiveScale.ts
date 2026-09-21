@@ -8,6 +8,7 @@ export type BigFiveBand = {
   id: BigFiveId;
   name: string;
   what: string;
+  example: string;
 };
 
 const LEVELS = [
@@ -38,26 +39,31 @@ export const BIG5_BANDS: readonly BigFiveBand[] = [
     id: "O",
     name: "Openness",
     what: "Creativity, curiosity, and willingness to entertain new ideas. High: imagination, unusual ideas, art, emotion, adventure, variety. Low: pragmatic, data-driven, prefers the familiar, can sound closed-minded.",
+    example: "What if we try a totally different frame for this?",
   },
   {
     id: "C",
     name: "Conscientiousness",
     what: "Self-control, diligence, and attention to detail. High: prepared, dutiful, planned, exacting. Low: flexible and spontaneous, or messy and unreliable.",
+    example: "I already listed the steps. Let’s finish them in order.",
   },
   {
     id: "E",
     name: "Extraversion",
     what: "Boldness, energy, and social interactivity. High: talkative, enthusiastic, action-oriented, externally engaged. Low: quieter, reserved, independent of the social scene, needs less stimulation.",
+    example: "Let’s get everyone in the room and bounce this around.",
   },
   {
     id: "A",
     name: "Agreeableness",
     what: "Kindness, helpfulness, and willingness to cooperate. High: getting along, considerate, trusting, compromise. Low: self-interest first, competitive, skeptical, can sound unfriendly.",
+    example: "I can flex on this if it makes the group okay.",
   },
   {
     id: "N",
     name: "Neuroticism",
     what: "Depression, irritability, and proneness to anxiety. High: easily upset, worry, mood swings, stress. Low: calm, emotionally stable, less reactive. Low neuroticism is not the same as extraverted cheer.",
+    example: "This is stressing me out and I can’t shake it.",
   },
 ];
 

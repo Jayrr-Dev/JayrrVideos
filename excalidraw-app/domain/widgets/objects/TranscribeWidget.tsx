@@ -9,6 +9,7 @@ import { ContextMenu, Popover, Tooltip } from "radix-ui";
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -76,6 +77,7 @@ import {
   EMOTION_BANDS,
   EMOTION_QUESTION,
   averageEmotions,
+  emotionCopy,
   emotionLabelsForTone,
   emotionsFromAnswers,
   type EmotionPick,
@@ -127,6 +129,7 @@ import {
   averageIqComposite,
   buildIqState,
   compositeFromAnswers,
+  iqExample,
   iqFromComposite,
   iqWhat,
   rankedIqComposites,
@@ -139,6 +142,7 @@ import {
   COG_QUESTION,
   advanceFromAnswers,
   averageAdvance,
+  cogExample,
   cogWhat,
   rankedAdvanceFns,
   type CogFn,
@@ -150,6 +154,7 @@ import {
   MBTI_QUESTIONS,
   averageMbti,
   mbtiFromAnswers,
+  mbtiTypeExample,
   mbtiTypeWhat,
   rankedMbti,
   type MbtiResult,
@@ -601,6 +606,37 @@ const nextSpeakerId = (turns: ChatTurn[], names: Record<number, string>) => {
   return max + 1;
 };
 
+const splitSpoken = (text: string) => text.match(/\S+\s*/g) ?? [];
+
+const FadingTurnText = ({ text }: { text: string }) => {
+  const prevRef = useRef("");
+  const words = splitSpoken(text);
+  const prev = prevRef.current;
+  const from = text.startsWith(prev) ? splitSpoken(prev).length : 0;
+  useLayoutEffect(() => {
+    prevRef.current = text;
+  }, [text]);
+  if (words.length === 0) {
+    return null;
+  }
+  return (
+    <span className="jayrr-called-embed__words">
+      {words.map((word, index) => (
+        <span
+          key={`${index}:${word}`}
+          className={
+            index >= from
+              ? "jayrr-called-embed__word is-new"
+              : "jayrr-called-embed__word"
+          }
+        >
+          {word}
+        </span>
+      ))}
+    </span>
+  );
+};
+
 const TranscriptTurnMenu = ({
   turn,
   speakers,
@@ -816,14 +852,18 @@ type JevTipRow = { key: string; label: string; mark?: string };
 const jevTipBody = (
   definition?: ReactNode,
   rows?: readonly JevTipRow[],
+  example?: string,
 ): ReactNode => {
   const list = rows?.filter((row) => row.label) ?? [];
-  if (!definition && list.length === 0) {
+  const hasDefinition =
+    definition !== undefined && definition !== null && definition !== "";
+  if (!hasDefinition && list.length === 0 && !example) {
     return undefined;
   }
   return (
     <>
       {typeof definition === "string" ? <p>{definition}</p> : definition}
+      {example ? <p>Example: {example}</p> : null}
       {list.length > 0 ? (
         <ul>
           {list.map((row) => (
@@ -1042,7 +1082,7 @@ const IqBadge = ({
   return (
     <JevTip
       title={`Verbal IQ ${iqFromComposite(composite)}`}
-      body={iqWhat(composite)}
+      body={jevTipBody(iqWhat(composite), undefined, iqExample(composite))}
     >
       <span
         className={`jayrr-called-embed__iq jayrr-called-embed__iq--${shade}`}
@@ -1065,7 +1105,7 @@ const SmartBadge = ({
   return (
     <JevTip
       title={band ? band.label : smart.label}
-      body={band ? band.what : undefined}
+      body={jevTipBody(band?.what, undefined, band?.example)}
     >
       <span
         className={`jayrr-called-embed__iq jayrr-called-embed__smart jayrr-called-embed__smart--${smart.id}`}
@@ -1085,27 +1125,32 @@ const EmotionBadge = ({
   emotion: EmotionPick;
   showScore?: boolean;
   all?: readonly EmotionPick[];
-}) => (
-  <JevTip
-    title={`${emotion.label} · ${emotion.cluster}`}
-    body={jevTipBody(
-      EMOTION_BANDS.find((band) => band.tone === emotion.tone)?.what ??
-        emotion.cluster,
-      (all ?? [emotion]).map((row) => ({
-        key: row.id,
-        label: row.label,
-        mark: percentText(row.confidence),
-      })),
-    )}
-  >
-    <span
-      className={`jayrr-called-embed__emo jayrr-called-embed__emo--${emotion.tone}`}
+}) => {
+  const copy = emotionCopy(emotion.id);
+  return (
+    <JevTip
+      title={`${emotion.label} · ${emotion.cluster}`}
+      body={jevTipBody(
+        copy?.what ??
+          EMOTION_BANDS.find((band) => band.tone === emotion.tone)?.what ??
+          emotion.cluster,
+        (all ?? [emotion]).map((row) => ({
+          key: row.id,
+          label: row.label,
+          mark: percentText(row.confidence),
+        })),
+        copy?.example,
+      )}
     >
-      {emotion.label}
-      {jevScoreMark(!!showScore, emotion.confidence)}
-    </span>
-  </JevTip>
-);
+      <span
+        className={`jayrr-called-embed__emo jayrr-called-embed__emo--${emotion.tone}`}
+      >
+        {emotion.label}
+        {jevScoreMark(!!showScore, emotion.confidence)}
+      </span>
+    </JevTip>
+  );
+};
 
 const MbtiBadge = ({
   mbti,
@@ -1128,6 +1173,7 @@ const MbtiBadge = ({
           )}`,
         };
       }),
+      mbtiTypeExample(mbti.type),
     )}
   >
     <span className="jayrr-called-embed__iq jayrr-called-embed__mbti">
@@ -1158,6 +1204,7 @@ const CogBadge = ({
             (id) => id,
           )
         : undefined,
+      cogExample(fn),
     )}
   >
     <span
@@ -1187,6 +1234,7 @@ const EnneaBadge = ({
           return band ? `${band.id} ${band.name}` : id;
         },
       ),
+      ennea.example,
     )}
   >
     <span
@@ -1213,6 +1261,7 @@ const HouseBadge = ({
         HOUSE_BANDS.map((band) => [band.id, house.probabilities[band.id] ?? 0]),
         (id) => HOUSE_BANDS.find((row) => row.id === id)?.name ?? id,
       ),
+      house.example,
     )}
   >
     <span
@@ -1242,6 +1291,7 @@ const GenderBadge = ({
         ]),
         (id) => GENDER_BANDS.find((row) => row.id === id)?.name ?? id,
       ),
+      gender.example,
     )}
   >
     <span
@@ -1264,7 +1314,7 @@ const HypeBadge = ({
   return (
     <JevTip
       title={band ? band.label : hype.label}
-      body={band ? band.what : undefined}
+      body={jevTipBody(band?.what, undefined, band?.example)}
     >
       <span
         className={`jayrr-called-embed__iq jayrr-called-embed__hype jayrr-called-embed__hype--${hype.id}`}
@@ -1298,6 +1348,7 @@ const EnergyBadge = ({
             label: sibling ? `${sibling.level} ${sibling.name}` : id,
           };
         }),
+        band?.example,
       )}
     >
       <span
@@ -1321,14 +1372,7 @@ const OnlineBadge = ({
   return (
     <JevTip
       title={band ? band.label : online.label}
-      body={
-        band ? (
-          <>
-            <p>{band.what}</p>
-            <p>Example: {band.example}</p>
-          </>
-        ) : undefined
-      }
+      body={jevTipBody(band?.what, undefined, band?.example)}
     >
       <span
         className={`jayrr-called-embed__iq jayrr-called-embed__online jayrr-called-embed__online--${online.id}`}
@@ -1351,14 +1395,7 @@ const TruthBadge = ({
   return (
     <JevTip
       title={band ? band.label : truth.label}
-      body={
-        band ? (
-          <>
-            <p>{band.what}</p>
-            <p>Example: {band.example}</p>
-          </>
-        ) : undefined
-      }
+      body={jevTipBody(band?.what, undefined, band?.example)}
     >
       <span
         className={`jayrr-called-embed__iq jayrr-called-embed__truth jayrr-called-embed__truth--${truth.id}`}
@@ -1391,6 +1428,7 @@ const SocionBadge = ({
           return band ? `${band.id} ${band.code4}` : id;
         },
       ),
+      socion.example,
     )}
   >
     <span
@@ -1446,6 +1484,7 @@ const BigFiveTraitBadge = ({
     body={jevTipBody(
       BIG5_BANDS.find((band) => band.id === trait.id)?.what,
       all ? bigFiveTraitRows(all) : undefined,
+      BIG5_BANDS.find((band) => band.id === trait.id)?.example,
     )}
   >
     <span
@@ -1683,6 +1722,8 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
   const editor = useExcalidrawAPI();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const logRef = useRef<HTMLDivElement | null>(null);
+  const lastTurnIdRef = useRef<string | null>(null);
+  const holdScrollRef = useRef(false);
   const sessionRef = useRef<TranscriptSession | null>(null);
   const micRef = useRef<MediaStream | null>(null);
   const tabRef = useRef<{ id: string; stream: MediaStream } | null>(null);
@@ -1972,6 +2013,25 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
   useEffect(() => {
     const log = logRef.current;
     if (!log) {
+      return;
+    }
+    const ownerWindow = log.ownerDocument.defaultView;
+    if (!ownerWindow) {
+      return;
+    }
+    const last = turns[turns.length - 1];
+    const lastId = last?.id ?? null;
+    const speakerChanged = lastId !== lastTurnIdRef.current;
+    lastTurnIdRef.current = lastId;
+    if (speakerChanged) {
+      holdScrollRef.current = true;
+      const timer = ownerWindow.setTimeout(() => {
+        holdScrollRef.current = false;
+        log.scrollTo({ top: log.scrollHeight, behavior: "smooth" });
+      }, 900);
+      return () => ownerWindow.clearTimeout(timer);
+    }
+    if (holdScrollRef.current) {
       return;
     }
     log.scrollTop = log.scrollHeight;
@@ -2996,7 +3056,7 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
               <JevTip
                 key={band.label}
                 title={`Verbal IQ ${band.label}`}
-                body={band.what}
+                body={jevTipBody(band.what, undefined, band.example)}
               >
                 <span
                   className={`jayrr-called-embed__iq jayrr-called-embed__iq--${band.shade}`}
@@ -3031,7 +3091,11 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
           </div>
           <div className="jayrr-called-embed__bands jayrr-called-embed__bands--hype">
             {SMART_BANDS.map((band) => (
-              <JevTip key={band.id} title={band.label} body={band.what}>
+              <JevTip
+                key={band.id}
+                title={band.label}
+                body={jevTipBody(band.what, undefined, band.example)}
+              >
                 <span
                   className={`jayrr-called-embed__iq jayrr-called-embed__smart jayrr-called-embed__smart--${band.id}`}
                 >
@@ -3065,7 +3129,11 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
           </div>
           <div className="jayrr-called-embed__bands jayrr-called-embed__bands--hype">
             {HYPE_BANDS.map((band) => (
-              <JevTip key={band.id} title={band.label} body={band.what}>
+              <JevTip
+                key={band.id}
+                title={band.label}
+                body={jevTipBody(band.what, undefined, band.example)}
+              >
                 <span
                   className={`jayrr-called-embed__iq jayrr-called-embed__hype jayrr-called-embed__hype--${band.id}`}
                 >
@@ -3111,6 +3179,7 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
                       label: sibling ? `${sibling.level} ${sibling.name}` : id,
                     };
                   }),
+                  band.example,
                 )}
               >
                 <span
@@ -3149,12 +3218,7 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
               <JevTip
                 key={band.id}
                 title={band.label}
-                body={
-                  <>
-                    <p>{band.what}</p>
-                    <p>Example: {band.example}</p>
-                  </>
-                }
+                body={jevTipBody(band.what, undefined, band.example)}
               >
                 <span
                   className={`jayrr-called-embed__iq jayrr-called-embed__online jayrr-called-embed__online--${band.id}`}
@@ -3193,12 +3257,7 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
               <JevTip
                 key={band.id}
                 title={band.label}
-                body={
-                  <>
-                    <p>{band.what}</p>
-                    <p>Example: {band.example}</p>
-                  </>
-                }
+                body={jevTipBody(band.what, undefined, band.example)}
               >
                 <span
                   className={`jayrr-called-embed__iq jayrr-called-embed__truth jayrr-called-embed__truth--${band.id}`}
@@ -3236,7 +3295,7 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
               <JevTip
                 key={band.id}
                 title={`${band.id} ${band.code4} · ${band.nick} · ${band.ego}`}
-                body={band.what}
+                body={jevTipBody(band.what, undefined, band.example)}
               >
                 <span
                   className={`jayrr-called-embed__iq jayrr-called-embed__socion jayrr-called-embed__socion--${
@@ -3273,7 +3332,11 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
           </div>
           <div className="jayrr-called-embed__bands jayrr-called-embed__bands--big5">
             {BIG5_BANDS.map((band) => (
-              <JevTip key={band.id} title={band.name} body={band.what}>
+              <JevTip
+                key={band.id}
+                title={band.name}
+                body={jevTipBody(band.what, undefined, band.example)}
+              >
                 <span
                   className={`jayrr-called-embed__iq jayrr-called-embed__big5 jayrr-called-embed__big5--${band.id.toLowerCase()}`}
                 >
@@ -3320,6 +3383,7 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
                       mark: row.what,
                     }),
                   ),
+                  band.example,
                 )}
               >
                 <span
@@ -3359,7 +3423,11 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
           </div>
           <div className="jayrr-called-embed__bands jayrr-called-embed__bands--pairs">
             {COG_BANDS.map((fn) => (
-              <JevTip key={fn} title={fn} body={cogWhat(fn)}>
+              <JevTip
+                key={fn}
+                title={fn}
+                body={jevTipBody(cogWhat(fn), undefined, cogExample(fn))}
+              >
                 <span
                   className={`jayrr-called-embed__iq jayrr-called-embed__fn jayrr-called-embed__fn--${fn.toLowerCase()}`}
                 >
@@ -3399,7 +3467,7 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
               <JevTip
                 key={band.id}
                 title={`Type ${band.id} · The ${band.name}`}
-                body={band.what}
+                body={jevTipBody(band.what, undefined, band.example)}
               >
                 <span
                   className={`jayrr-called-embed__iq jayrr-called-embed__ennea jayrr-called-embed__ennea--${band.id}`}
@@ -3437,7 +3505,11 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
           </div>
           <div className="jayrr-called-embed__bands jayrr-called-embed__bands--house">
             {HOUSE_BANDS.map((band) => (
-              <JevTip key={band.id} title={band.name} body={band.what}>
+              <JevTip
+                key={band.id}
+                title={band.name}
+                body={jevTipBody(band.what, undefined, band.example)}
+              >
                 <span
                   className={`jayrr-called-embed__iq jayrr-called-embed__house jayrr-called-embed__house--${band.id}`}
                 >
@@ -3474,7 +3546,11 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
           </div>
           <div className="jayrr-called-embed__bands jayrr-called-embed__bands--gender">
             {GENDER_BANDS.map((band) => (
-              <JevTip key={band.id} title={band.name} body={band.what}>
+              <JevTip
+                key={band.id}
+                title={band.name}
+                body={jevTipBody(band.what, undefined, band.example)}
+              >
                 <span
                   className={`jayrr-called-embed__iq jayrr-called-embed__gender jayrr-called-embed__gender--${band.id}`}
                 >
@@ -3517,6 +3593,7 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
                     key: label,
                     label,
                   })),
+                  band.example,
                 )}
               >
                 <span
@@ -3614,6 +3691,7 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
                     const prev = turns[index - 1];
                     const follow =
                       prev !== undefined && prev.speaker === turn.speaker;
+                    const isTail = index === turns.length - 1;
                     return (
                       <TranscriptTurnMenu
                         key={turn.id}
@@ -3635,7 +3713,9 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
                         <div
                           className={`jayrr-called-embed__msg jayrr-called-embed__msg--${side}${
                             turn.isFinal ? "" : " is-draft"
-                          }${follow ? " is-follow" : ""}`}
+                          }${follow ? " is-follow" : ""}${
+                            isTail ? " is-tail" : ""
+                          }`}
                           style={speakerHueStyle(turn.speaker, speakers)}
                           onContextMenu={(event) => {
                             event.stopPropagation();
@@ -3676,13 +3756,20 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
                               house={house}
                               gender={gender}
                             />
-                            {turn.text}
+                            {isTail ? (
+                              <FadingTurnText text={turn.text} />
+                            ) : (
+                              turn.text
+                            )}
                           </div>
                         </div>
                       </TranscriptTurnMenu>
                     );
                   })
                 )}
+                {turns.length > 0 ? (
+                  <div className="jayrr-called-embed__chat-pad" aria-hidden />
+                ) : null}
               </div>
             </div>
             <aside

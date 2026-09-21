@@ -10,6 +10,7 @@ type CogDef = {
   axis: "perceive" | "judge";
   family: "S" | "N" | "T" | "F";
   what: string;
+  example: string;
   option: string;
 };
 
@@ -20,6 +21,7 @@ export const COG_FUNCTIONS: readonly CogDef[] = [
     axis: "perceive",
     family: "S",
     what: "Notices and acts on what is happening right now.",
+    example: "Look at that. Let’s try it before we overthink it.",
     option:
       "Extraverted Sensing. Immersed in the present, acts on what is here now, improvises, seizes chances. Adventurous, realistic, sensory.",
   },
@@ -29,6 +31,7 @@ export const COG_FUNCTIONS: readonly CogDef[] = [
     axis: "perceive",
     family: "S",
     what: "Uses past experience, details, and what already works.",
+    example: "Last time this failed at step three. Keep the same checklist.",
     option:
       "Introverted Sensing. Compares now with memory, prefers the familiar, details, routines, what has worked. Reliable, meticulous, traditional.",
   },
@@ -38,6 +41,7 @@ export const COG_FUNCTIONS: readonly CogDef[] = [
     axis: "perceive",
     family: "N",
     what: "Spots new possibilities and connections between ideas.",
+    example: "That reminds me of three other ways this could go.",
     option:
       "Extraverted Intuition. Generates alternatives and connections, plays with ideas, sees potential everywhere. Creative, curious, scattered if stretched.",
   },
@@ -47,6 +51,7 @@ export const COG_FUNCTIONS: readonly CogDef[] = [
     axis: "perceive",
     family: "N",
     what: "Follows one inner hunch about where things are heading.",
+    example: "I don’t have the proof yet, but this is where it ends up.",
     option:
       "Introverted Intuition. One inner vision, hidden pattern, forecast. Insightful, strategic, converges instead of branching.",
   },
@@ -56,6 +61,7 @@ export const COG_FUNCTIONS: readonly CogDef[] = [
     axis: "judge",
     family: "T",
     what: "Organizes people and plans to get a result.",
+    example: "Assign owners, set the deadline, then measure the output.",
     option:
       "Extraverted Thinking. Organizes the outer world for results, plans, metrics, efficiency. Decisive, pragmatic, systems and execution.",
   },
@@ -65,6 +71,7 @@ export const COG_FUNCTIONS: readonly CogDef[] = [
     axis: "judge",
     family: "T",
     what: "Builds an inner logic and checks if it holds.",
+    example: "That definition is sloppy. If A is true, B cannot also be true.",
     option:
       "Introverted Thinking. Internal logic, precise models, finds the flaw. Independent, accuracy over harmony, challenges assumptions.",
   },
@@ -74,6 +81,7 @@ export const COG_FUNCTIONS: readonly CogDef[] = [
     axis: "judge",
     family: "F",
     what: "Reads the room and cares about group mood.",
+    example: "Everyone went quiet. Let’s slow down so nobody feels shut out.",
     option:
       "Extraverted Feeling. Reads the room, group values, mood, belonging. Empathetic, expressive, people over things.",
   },
@@ -83,6 +91,7 @@ export const COG_FUNCTIONS: readonly CogDef[] = [
     axis: "judge",
     family: "F",
     what: "Stays true to personal values and feelings.",
+    example: "I won’t do it that way. It doesn’t sit right with me.",
     option:
       "Introverted Feeling. Personal values and identity, sincere, individual. Ethics over logic, meaning and authenticity.",
   },
@@ -93,6 +102,8 @@ const COG_BY_ID = new Map(COG_FUNCTIONS.map((row) => [row.id, row]));
 export const COG_BANDS: readonly CogFn[] = COG_FUNCTIONS.map((row) => row.id);
 
 export const cogWhat = (fn: CogFn) => COG_BY_ID.get(fn)?.what;
+
+export const cogExample = (fn: CogFn) => COG_BY_ID.get(fn)?.example;
 
 export const COG_QUESTION_ID = "cogfn";
 

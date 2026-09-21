@@ -1968,6 +1968,20 @@
     padding: 0.15rem 0.1rem 0.35rem;
   }
 
+  .jayrr-called-embed__chat-pad {
+    flex: 0 0 8.75rem;
+    min-height: 8.75rem;
+    pointer-events: none;
+  }
+
+  .jayrr-called-embed__msg.is-tail {
+    animation: jayrr-called-embed-msg-in 420ms ease-out;
+  }
+
+  .jayrr-called-embed__word.is-new {
+    animation: jayrr-called-embed-word-in 480ms ease-out;
+  }
+
   .jayrr-called-embed__empty {
     color: var(--color-gray-70);
   }
@@ -2111,5 +2125,25 @@
   to {
     opacity: 1;
     transform: scale(1);
+  }
+}
+
+@keyframes jayrr-called-embed-msg-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes jayrr-called-embed-word-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
   }
 }

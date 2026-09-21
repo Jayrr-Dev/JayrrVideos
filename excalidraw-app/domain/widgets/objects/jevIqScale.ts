@@ -16,6 +16,7 @@ export type IqBand = {
   shade: IqShade;
   label: string;
   what: string;
+  example: string;
 };
 
 // Legend chips only. The rubric Jev sees lives in IQ_DIMENSIONS below.
@@ -24,51 +25,64 @@ export const IQ_BANDS: readonly IqBand[] = [
     shade: "white",
     label: "70",
     what: "Very simple speech with little reasoning.",
+    example: "Yeah. Scary.",
   },
   {
     shade: "white2",
     label: "80",
     what: "Basic statements, usually one idea at a time.",
+    example: "Packages are scary.",
   },
   {
     shade: "yellow",
     label: "90",
     what: "Everyday talk with a little reasoning.",
+    example: "Packages are scary because we use so many.",
   },
   {
     shade: "yellow2",
     label: "100",
     what: "Clear everyday reasoning most people follow.",
+    example: "We trust a lot of packages, and that is getting risky.",
   },
   {
     shade: "yellow3",
     label: "110",
     what: "Clearer than average. Makes a useful distinction.",
+    example: "The risk is not the count of packages. It is unreviewed updates.",
   },
   {
     shade: "orange",
     label: "120",
     what: "Strong reasoning. Weighs more than one idea.",
+    example: "Pinning versions slows us down, but skipping review is worse.",
   },
   {
     shade: "orange2",
     label: "130",
     what: "Very strong reasoning packed into a short line.",
+    example: "Audit the ones that run at install time; the rest can wait.",
   },
   {
     shade: "red",
     label: "140",
     what: "Rarely dense. Several ideas linked with care.",
+    example:
+      "Treat supply chain risk as a budget: fewer high-privilege deps beat a longer allowlist.",
   },
   {
     shade: "red2",
     label: "150",
     what: "Exceptional density and precise wording.",
+    example:
+      "If install scripts can write PATH, version pins without hash checks only delay the same trust failure.",
   },
   {
     shade: "red3",
     label: "160",
     what: "Extremely dense reasoning in a short line.",
+    example:
+      "The unit of trust is the executable surface at install, not the package count, so reduce that surface before adding scanners.",
   },
 ];
 
@@ -358,6 +372,11 @@ export const shadeFromComposite = (composite: number): IqShade => {
 export const iqWhat = (composite: number) => {
   const index = Math.min(IQ_TOP, Math.max(0, Math.round(composite * IQ_TOP)));
   return IQ_BANDS[index]?.what;
+};
+
+export const iqExample = (composite: number) => {
+  const index = Math.min(IQ_TOP, Math.max(0, Math.round(composite * IQ_TOP)));
+  return IQ_BANDS[index]?.example;
 };
 
 export const rankedIqComposites = (

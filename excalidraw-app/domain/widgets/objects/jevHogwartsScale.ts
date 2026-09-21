@@ -11,11 +11,7 @@ import {
 
 const UTTERANCE_SCOPE = `Judge only \`utterance\`. ${JEV_SHARED_EVIDENCE} Score the playful house stereotype this line shows, not a life diagnosis.`;
 
-export type HouseId =
-  | "gryffindor"
-  | "hufflepuff"
-  | "ravenclaw"
-  | "slytherin";
+export type HouseId = "gryffindor" | "hufflepuff" | "ravenclaw" | "slytherin";
 
 export type HouseDef = ChoiceBand<HouseId>;
 
@@ -24,6 +20,7 @@ export const HOUSE_BANDS: readonly HouseDef[] = [
     id: "gryffindor",
     name: "Gryffindor",
     what: "Brave, bold, and ready to act. Stands up for people and treats caution as optional.",
+    example: "Let’s just do it. Someone has to stand up to them.",
     option: [
       "Gryffindor. Main drive: be brave, take action, and stand up for what matters.",
       "Traits: brave, bold, direct, active, confident, competitive, protective, loyal, passionate, impulsive, stubborn, adventurous, honest, emotional, willing to lead, comfortable with risk, quick to defend others, motivated by challenges.",
@@ -37,6 +34,7 @@ export const HOUSE_BANDS: readonly HouseDef[] = [
     id: "hufflepuff",
     name: "Hufflepuff",
     what: "Fair, dependable, and kind. Keeps the group okay and does the work without fuss.",
+    example: "Is everyone okay with that? I’ll take care of it.",
     option: [
       "Hufflepuff. Main drive: be fair, dependable, and good to people.",
       "Traits: kind, loyal, patient, fair, honest, helpful, dependable, friendly, calm, hardworking, humble, cooperative, supportive, forgiving, practical, welcoming, consistent, good at listening.",
@@ -50,6 +48,7 @@ export const HOUSE_BANDS: readonly HouseDef[] = [
     id: "ravenclaw",
     name: "Ravenclaw",
     what: "Curious and idea-first. Asks how we know, then turns a simple point into a longer one.",
+    example: "How do we know that? What exactly do you mean?",
     option: [
       "Ravenclaw. Main drive: understand things, learn, and form original ideas.",
       "Traits: curious, intelligent, creative, observant, independent, analytical, imaginative, logical, thoughtful, open-minded, quiet, unusual, detail-focused, skeptical, self-directed, good at solving problems, interested in complex ideas, comfortable questioning others.",
@@ -63,6 +62,7 @@ export const HOUSE_BANDS: readonly HouseDef[] = [
     id: "slytherin",
     name: "Slytherin",
     what: "Ambitious and strategic. Protects advantage, picks words, and thinks ahead.",
+    example: "What do I get from this? Wait for the right moment.",
     option: [
       "Slytherin. Main drive: succeed, gain control, and protect their interests.",
       "Traits: ambitious, strategic, determined, resourceful, persuasive, private, adaptable, competitive, confident, careful, goal-focused, independent, status-aware, selectively loyal, good at reading people, patient when planning, strong at negotiation, willing to make hard choices.",
@@ -94,8 +94,9 @@ export const houseFromAnswers = (
     "Jev omitted the Hogwarts house scores.",
   );
 
-export const averageHouse = (rows: readonly HouseResult[]): HouseResult | null =>
-  averageChoice(HOUSE_BANDS, rows);
+export const averageHouse = (
+  rows: readonly HouseResult[],
+): HouseResult | null => averageChoice(HOUSE_BANDS, rows);
 
 export const rankedHouse = (row: HouseResult, count: number): HouseResult[] =>
   rankedChoice(HOUSE_BANDS, row, count);

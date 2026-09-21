@@ -1,5 +1,14 @@
 import { JEV_SHARED_EVIDENCE } from "../../transcription/jevSharedState";
 
+import {
+  averageScore,
+  rankedScore,
+  scoreFromAnswers,
+  scoreQuestion,
+  type ScoreBand,
+  type ScoreResult,
+} from "./jevScoreScale";
+
 const UTTERANCE_SCOPE = `Judge only \`utterance\`. ${JEV_SHARED_EVIDENCE} Score how this line treats other people, not whether the topic is serious.`;
 
 export type OnlineId =
@@ -11,12 +20,7 @@ export type OnlineId =
   | "helpful"
   | "wholesome";
 
-export type OnlineBand = {
-  id: OnlineId;
-  label: string;
-  what: string;
-  example: string;
-};
+export type OnlineBand = ScoreBand<OnlineId>;
 
 export const ONLINE_BANDS: readonly OnlineBand[] = [
   {
@@ -66,98 +70,30 @@ export const ONLINE_BANDS: readonly OnlineBand[] = [
 ];
 
 export const ONLINE_QUESTION_ID = "online";
-const ONLINE_TOP = ONLINE_BANDS.length - 1;
 
-export const ONLINE_QUESTION = {
-  id: ONLINE_QUESTION_ID,
-  type: "score" as const,
-  instructions: `How does \`utterance\` treat other people in the talk? Score this line’s online behaviour, not a running speaker mean. Troll bait is for reaction. Toxic believes the anger is justified. Rude is harsh without a large fight. Normal is fair. Friendly is polite. Helpful solves the problem. Wholesome makes people feel welcome. ${UTTERANCE_SCOPE}`,
-  levels: ONLINE_BANDS.map((band) => ({
-    what: `${band.label}. ${band.what}`,
-    examples: [band.example],
-  })),
-};
+export const ONLINE_QUESTION = scoreQuestion(
+  ONLINE_QUESTION_ID,
+  `How does \`utterance\` treat other people in the talk? Score this line’s online behaviour, not a running speaker mean. Troll bait is for reaction. Toxic believes the anger is justified. Rude is harsh without a large fight. Normal is fair. Friendly is polite. Helpful solves the problem. Wholesome makes people feel welcome. ${UTTERANCE_SCOPE}`,
+  ONLINE_BANDS,
+);
 
-export type OnlineResult = {
-  id: OnlineId;
-  label: string;
-  score: number;
-  confidence: number;
-};
-
-type ScoreAnswer = {
-  id: string;
-  type: "score";
-  score: number;
-  confidence?: number;
-};
-
-const clampScore = (value: number) =>
-  Math.min(ONLINE_TOP, Math.max(0, Math.round(value)));
-
-const resultFromScore = (
-  score: number,
-  confidence: number,
-): OnlineResult | null => {
-  const index = clampScore(score);
-  const band = ONLINE_BANDS[index];
-  if (!band) {
-    return null;
-  }
-  return {
-    id: band.id,
-    label: band.label,
-    score: index,
-    confidence,
-  };
-};
+export type OnlineResult = ScoreResult<OnlineId>;
 
 export const onlineFromAnswers = (
   answers: ReadonlyArray<{ id: string; type: string }>,
-): OnlineResult | null => {
-  const answer = answers.find(
-    (row): row is ScoreAnswer =>
-      row.id === ONLINE_QUESTION_ID && row.type === "score",
+): OnlineResult | null =>
+  scoreFromAnswers(
+    answers,
+    ONLINE_QUESTION_ID,
+    ONLINE_BANDS,
+    "Jev omitted the online behaviour score.",
   );
-  if (!answer) {
-    throw new Error("Jev omitted the online behaviour score.");
-  }
-  return resultFromScore(
-    answer.score,
-    typeof answer.confidence === "number" ? answer.confidence : 0,
-  );
-};
 
 export const rankedOnline = (
   row: OnlineResult,
   count: number,
-): OnlineResult[] => {
-  const picked: OnlineResult[] = [];
-  for (let dist = 0; picked.length < count && dist <= ONLINE_TOP; dist += 1) {
-    const candidates =
-      dist === 0 ? [row.score] : [row.score + dist, row.score - dist];
-    for (const next of candidates) {
-      const mapped = resultFromScore(next, row.confidence);
-      if (!mapped || picked.some((item) => item.id === mapped.id)) {
-        continue;
-      }
-      picked.push(mapped);
-      if (picked.length >= count) {
-        break;
-      }
-    }
-  }
-  return picked;
-};
+): OnlineResult[] => rankedScore(ONLINE_BANDS, row, count);
 
 export const averageOnline = (
   rows: readonly OnlineResult[],
-): OnlineResult | null => {
-  if (rows.length === 0) {
-    return null;
-  }
-  const score = rows.reduce((sum, row) => sum + row.score, 0) / rows.length;
-  const confidence =
-    rows.reduce((sum, row) => sum + row.confidence, 0) / rows.length;
-  return resultFromScore(score, confidence);
-};
+): OnlineResult | null => averageScore(ONLINE_BANDS, rows);
