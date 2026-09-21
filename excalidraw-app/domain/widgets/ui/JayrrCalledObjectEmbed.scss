@@ -256,12 +256,39 @@
 
   .jayrr-called-embed__legend {
     z-index: 20;
-    width: min(22rem, calc(100% - 1.4rem));
+    width: min(12.5rem, calc(100% - 1.4rem));
+    max-width: min(12.5rem, calc(100% - 1.4rem));
     padding: 0.4rem;
     border-radius: 0.6rem;
     border: 1px solid var(--sidebar-border-color);
     background: var(--island-bg-color);
     box-shadow: 0 8px 24px rgba(15, 23, 42, 0.16);
+  }
+
+  .jayrr-called-embed__legend .jayrr-called-embed__bands {
+    display: flex;
+    flex-wrap: wrap;
+    width: 100%;
+    max-width: 100%;
+    justify-content: flex-start;
+    justify-items: start;
+  }
+
+  .jayrr-called-embed__legend
+    .jayrr-called-embed__bands
+    .jayrr-called-embed__iq,
+  .jayrr-called-embed__legend
+    .jayrr-called-embed__bands
+    .jayrr-called-embed__emo {
+    width: auto;
+    max-width: 100%;
+    flex: 0 1 auto;
+    overflow: visible;
+    white-space: nowrap;
+  }
+
+  .jayrr-called-embed__legend .jayrr-called-embed__hint {
+    max-width: 16rem;
   }
 
   .jayrr-called-embed__who-row {
@@ -379,45 +406,61 @@
 
   .jayrr-called-embed__bands {
     display: grid;
-    grid-template-columns: repeat(10, minmax(0, 1fr));
+    grid-template-columns: repeat(10, minmax(1.55rem, auto));
     gap: 0.12rem;
     width: 100%;
     min-width: 0;
+    justify-content: center;
   }
 
   .jayrr-called-embed__bands--pairs {
-    grid-template-columns: repeat(8, minmax(0, 1fr));
+    grid-template-columns: repeat(8, minmax(1.55rem, auto));
   }
 
   .jayrr-called-embed__bands--hype {
-    grid-template-columns: repeat(7, minmax(0, 1fr));
+    grid-template-columns: repeat(7, minmax(1.7rem, auto));
+  }
+
+  .jayrr-called-embed__bands--online {
+    display: flex;
+    flex-wrap: wrap;
+    grid-template-columns: none;
+    justify-content: flex-start;
+  }
+
+  .jayrr-called-embed__bands--online .jayrr-called-embed__iq {
+    width: auto;
+    max-width: 100%;
+    flex: 0 1 auto;
+    overflow: visible;
+    white-space: nowrap;
   }
 
   .jayrr-called-embed__bands--energy {
-    grid-template-columns: repeat(8, minmax(0, 1fr));
+    grid-template-columns: repeat(8, minmax(1.45rem, auto));
   }
 
   .jayrr-called-embed__bands--socion {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(1.85rem, auto));
   }
 
   .jayrr-called-embed__bands--big5 {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(1.7rem, auto));
   }
 
   .jayrr-called-embed__bands--ennea {
-    grid-template-columns: repeat(9, minmax(0, 1fr));
+    grid-template-columns: repeat(9, minmax(1.35rem, auto));
   }
 
   .jayrr-called-embed__bands--emotion {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(2.2rem, auto));
   }
 
   .jayrr-called-embed__bands .jayrr-called-embed__emo {
     width: 100%;
     max-width: none;
-    min-width: 0;
-    padding: 0.08rem 0.12rem;
+    min-width: 2.1rem;
+    padding: 0.08rem 0.22rem;
     overflow: hidden;
     text-overflow: ellipsis;
     text-align: center;
@@ -441,10 +484,12 @@
 
   .jayrr-called-embed__bands .jayrr-called-embed__iq {
     width: 100%;
-    min-width: 0;
-    padding: 0.08rem 0;
+    min-width: 1.7rem;
+    padding: 0.1rem 0.28rem;
     overflow: hidden;
     white-space: nowrap;
+    justify-content: center;
+    text-align: center;
     font-size: 0.55rem;
     font-variant-numeric: tabular-nums;
   }
@@ -863,8 +908,8 @@
 
   .jayrr-called-embed__online {
     min-width: 0;
-    padding: 0.12rem 0.14rem;
-    font-size: 0.52rem;
+    padding: 0.12rem 0.32rem;
+    font-size: 0.55rem;
     line-height: 1.15;
     text-align: center;
     border: 1px solid transparent;
@@ -909,8 +954,8 @@
   }
 
   .jayrr-called-embed__socion {
-    min-width: 0;
-    padding: 0.12rem 0.14rem;
+    min-width: 1.85rem;
+    padding: 0.12rem 0.28rem;
     font-size: 0.55rem;
     line-height: 1.15;
     text-align: center;
@@ -998,15 +1043,19 @@
 
   .jayrr-called-embed__switch {
     position: relative;
+    display: inline-flex;
+    align-items: center;
     box-sizing: border-box;
     width: 2.5rem;
-    height: 1.25rem;
+    height: 1.375rem;
     flex: 0 0 auto;
     border: 1px solid var(--color-gray-40);
     border-radius: 999px;
     background: var(--color-gray-40);
     cursor: pointer;
     padding: 0.125rem;
+    line-height: 0;
+    overflow: hidden;
   }
 
   .jayrr-called-embed__switch.is-on {
@@ -1025,7 +1074,7 @@
   }
 
   .jayrr-called-embed__switch.is-on .jayrr-called-embed__knob {
-    transform: translateX(1.25rem);
+    transform: translateX(calc(1.25rem - 2px));
   }
 
   .jayrr-called-embed__die {

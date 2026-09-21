@@ -1,6 +1,7 @@
 import type { Id } from "../../../convex/_generated/dataModel";
 
 export const EDITOR_PX_PER_SECOND = 40;
+export const EDITOR_PX_PER_SECOND_OPTIONS = [10, 20, 40, 80, 160] as const;
 
 export type EditorRecordingSource = {
   recordingId: Id<"presentRecordings">;
@@ -124,18 +125,45 @@ export const isEditorBlendMode = (value: unknown): value is EditorBlendMode =>
   (EDITOR_BLEND_MODES as readonly string[]).includes(value);
 
 export const EDITOR_CLIP_TYPE = "clip" as const;
+export const EDITOR_SOUND_TYPE = "sound" as const;
+export const EDITOR_AUDIO_TYPE = "audio" as const;
 
-export type EditorTimelineItemType = typeof EDITOR_CLIP_TYPE;
+export type EditorTimelineItemType =
+  | typeof EDITOR_CLIP_TYPE
+  | typeof EDITOR_SOUND_TYPE
+  | typeof EDITOR_AUDIO_TYPE;
 
 export const isEditorClipType = (
   value: unknown,
 ): value is typeof EDITOR_CLIP_TYPE => value === EDITOR_CLIP_TYPE;
 
-/** User-ordered clip on the timeline (before layout). */
-export type EditorProjectClip = EditorRecordingSource & {
+export const isEditorSoundType = (
+  value: unknown,
+): value is typeof EDITOR_SOUND_TYPE => value === EDITOR_SOUND_TYPE;
+
+export const isEditorAudioType = (
+  value: unknown,
+): value is typeof EDITOR_AUDIO_TYPE => value === EDITOR_AUDIO_TYPE;
+
+export const isEditorItemType = (
+  value: unknown,
+): value is EditorTimelineItemType =>
+  isEditorClipType(value) ||
+  isEditorSoundType(value) ||
+  isEditorAudioType(value);
+
+export type EditorSoundSource = {
+  soundId: string;
+  path: string;
+  url: string;
+  label: string;
+  durationMs: number;
+  /** Offset into the source file (ms). Used after Cut. */
+  sourceOffsetMs?: number;
+};
+
+type EditorItemPlacement = {
   id: string;
-  /** Discriminator so later items (markers, etc.) can share the track. */
-  type: typeof EDITOR_CLIP_TYPE;
   /** Sequence is the main packed track; any other id is a stack overlay. */
   laneId?: string;
   /** Start time on the clip's lane. Sequence and stacks both keep this. */
@@ -145,6 +173,48 @@ export type EditorProjectClip = EditorRecordingSource & {
   /** Pixel mix while this clip covers the column to its left. */
   blendMode?: EditorBlendMode;
 };
+
+export type EditorVideoClip = EditorRecordingSource &
+  EditorItemPlacement & {
+    type: typeof EDITOR_CLIP_TYPE;
+    /** Picture-only after Separate Audio. */
+    muted?: boolean;
+  };
+
+export type EditorSoundClip = EditorSoundSource &
+  EditorItemPlacement & {
+    type: typeof EDITOR_SOUND_TYPE;
+  };
+
+export type EditorAudioClip = EditorRecordingSource &
+  EditorItemPlacement & {
+    type: typeof EDITOR_AUDIO_TYPE;
+    /** Video clip this audio was split from. */
+    sourceClipId?: string;
+  };
+
+/** User-ordered item on the timeline (before layout). */
+export type EditorProjectClip =
+  | EditorVideoClip
+  | EditorSoundClip
+  | EditorAudioClip;
+
+export const isEditorVideoClip = (
+  clip: EditorProjectClip,
+): clip is EditorVideoClip => clip.type === EDITOR_CLIP_TYPE;
+
+export const isEditorSoundClip = (
+  clip: EditorProjectClip,
+): clip is EditorSoundClip => clip.type === EDITOR_SOUND_TYPE;
+
+export const isEditorAudioClip = (
+  clip: EditorProjectClip,
+): clip is EditorAudioClip => clip.type === EDITOR_AUDIO_TYPE;
+
+export const isEditorAudioLikeClip = (
+  clip: EditorProjectClip,
+): clip is EditorSoundClip | EditorAudioClip =>
+  isEditorSoundClip(clip) || isEditorAudioClip(clip);
 
 export type EditorClip = EditorProjectClip & {
   startMs: number;
@@ -170,7 +240,6 @@ const toLaidClip = (clip: EditorProjectClip, startMs: number): EditorClip => {
   const durationMs = Math.max(1, Math.round(clip.durationMs));
   return {
     ...clip,
-    type: EDITOR_CLIP_TYPE,
     startMs: Math.max(0, Math.round(startMs)),
     durationMs,
     sourceOffsetMs: clip.sourceOffsetMs ?? 0,
@@ -691,8 +760,17 @@ export const baseBlendAtTime = (
   const window = overlapWindow(overlap);
   const span = Math.max(1, window.endMs - window.startMs);
   const t = Math.min(1, Math.max(0, (timeMs - window.startMs) / span));
-  return { opacity: t < 0.5 ? 1 - t * 2 : 0, clipPath: null, mixBlendMode: null };
+  return {
+    opacity: t < 0.5 ? 1 - t * 2 : 0,
+    clipPath: null,
+    mixBlendMode: null,
+  };
 };
+
+export const videoClipAtTime = (
+  clips: readonly EditorClip[],
+  timeMs: number,
+): EditorClip | null => clipAtTime(clips.filter(isEditorVideoClip), timeMs);
 
 export const clipAtTime = (
   clips: readonly EditorClip[],
@@ -818,7 +896,28 @@ export const getMergeableClips = (
     if (!prev || !cur) {
       return null;
     }
-    if (cur.recordingId !== first.recordingId) {
+    if (cur.type !== first.type) {
+      return null;
+    }
+    if (
+      isEditorVideoClip(first) &&
+      isEditorVideoClip(cur) &&
+      cur.recordingId !== first.recordingId
+    ) {
+      return null;
+    }
+    if (
+      isEditorSoundClip(first) &&
+      isEditorSoundClip(cur) &&
+      cur.soundId !== first.soundId
+    ) {
+      return null;
+    }
+    if (
+      isEditorAudioClip(first) &&
+      isEditorAudioClip(cur) &&
+      cur.recordingId !== first.recordingId
+    ) {
       return null;
     }
     const prevEnd = (prev.sourceOffsetMs ?? 0) + prev.durationMs;
@@ -846,19 +945,135 @@ export const mergeProjectClips = (
     durationMs += Math.max(1, Math.round(clip.durationMs));
   }
   return {
-    id: first.id,
-    type: EDITOR_CLIP_TYPE,
-    recordingId: first.recordingId,
-    url: first.url,
-    posterUrl: first.posterUrl,
-    label: first.label,
+    ...first,
     sourceOffsetMs: first.sourceOffsetMs ?? 0,
     durationMs,
-    laneId: first.laneId,
     laneStartMs: first.laneStartMs ?? 0,
-    ...(first.transitionKind ? { transitionKind: first.transitionKind } : {}),
-    ...(first.blendMode && first.blendMode !== DEFAULT_OVERLAP_BLEND
-      ? { blendMode: first.blendMode }
-      : {}),
   };
+};
+
+export const separateClipsAudio = (
+  clips: readonly EditorProjectClip[],
+  clipIds: readonly string[],
+  stackLaneIds: readonly string[],
+): {
+  clips: EditorProjectClip[];
+  stackLaneIds: string[];
+  audioIds: string[];
+} | null => {
+  const wanted = new Set(clipIds);
+  const sources = clips.filter(
+    (clip) => wanted.has(clip.id) && isEditorVideoClip(clip),
+  );
+  if (sources.length === 0) {
+    return null;
+  }
+  const audioLaneId = stackLaneIds[0] ?? newEditorLaneId();
+  const nextLanes = stackLaneIds.includes(audioLaneId)
+    ? [...stackLaneIds]
+    : stackLaneIds.length >= MAX_STACK_LANES
+      ? [...stackLaneIds]
+      : [...stackLaneIds, audioLaneId];
+  const laneId = nextLanes[0] ?? audioLaneId;
+  const audioIds: string[] = [];
+  const mutedIds = new Set(sources.map((clip) => clip.id));
+  const extras: EditorAudioClip[] = sources.map((clip) => {
+    const audioId = newEditorClipId();
+    audioIds.push(audioId);
+    return {
+      id: audioId,
+      type: EDITOR_AUDIO_TYPE,
+      recordingId: clip.recordingId,
+      url: clip.url,
+      posterUrl: clip.posterUrl,
+      label: clip.label,
+      durationMs: clip.durationMs,
+      sourceOffsetMs: clip.sourceOffsetMs ?? 0,
+      laneId,
+      laneStartMs: clip.laneStartMs ?? 0,
+      sourceClipId: clip.id,
+    };
+  });
+  const nextClips = clips.map((clip) => {
+    if (!mutedIds.has(clip.id) || !isEditorVideoClip(clip)) {
+      return clip;
+    }
+    return { ...clip, muted: true };
+  });
+  return {
+    clips: [...nextClips, ...extras],
+    stackLaneIds: nextLanes,
+    audioIds,
+  };
+};
+
+const clipRange = (clip: EditorProjectClip) => {
+  const start = Math.max(0, Math.round(clip.laneStartMs ?? 0));
+  return { start, end: start + Math.max(1, Math.round(clip.durationMs)) };
+};
+
+const rangesOverlap = (a: EditorProjectClip, b: EditorProjectClip) => {
+  const left = clipRange(a);
+  const right = clipRange(b);
+  return left.start < right.end && right.start < left.end;
+};
+
+const audioBelongsToVideo = (
+  audio: EditorAudioClip,
+  video: EditorVideoClip,
+) => {
+  if (audio.sourceClipId === video.id) {
+    return true;
+  }
+  if (audio.recordingId !== video.recordingId) {
+    return false;
+  }
+  return rangesOverlap(audio, video);
+};
+
+export const returnClipsAudio = (
+  clips: readonly EditorProjectClip[],
+  clipIds: readonly string[],
+): { clips: EditorProjectClip[]; videoIds: string[] } | null => {
+  const wanted = new Set(clipIds);
+  const selected = clips.filter((clip) => wanted.has(clip.id));
+  if (selected.length === 0) {
+    return null;
+  }
+  const removeAudio = new Set<string>();
+  const unmuteVideo = new Set<string>();
+  for (const clip of selected) {
+    if (isEditorAudioClip(clip)) {
+      removeAudio.add(clip.id);
+      for (const other of clips) {
+        if (isEditorVideoClip(other) && audioBelongsToVideo(clip, other)) {
+          unmuteVideo.add(other.id);
+        }
+      }
+      continue;
+    }
+    if (!isEditorVideoClip(clip) || !clip.muted) {
+      continue;
+    }
+    unmuteVideo.add(clip.id);
+    for (const other of clips) {
+      if (isEditorAudioClip(other) && audioBelongsToVideo(other, clip)) {
+        removeAudio.add(other.id);
+      }
+    }
+  }
+  if (unmuteVideo.size === 0 && removeAudio.size === 0) {
+    return null;
+  }
+  const next = clips.flatMap((clip) => {
+    if (removeAudio.has(clip.id)) {
+      return [];
+    }
+    if (!unmuteVideo.has(clip.id) || !isEditorVideoClip(clip)) {
+      return [clip];
+    }
+    const { muted: _muted, ...rest } = clip;
+    return [rest];
+  });
+  return { clips: next, videoIds: [...unmuteVideo] };
 };

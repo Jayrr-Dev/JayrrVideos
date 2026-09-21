@@ -96,5 +96,10 @@
     display: flex;
     column-gap: 0.5rem;
     justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+
+  .jayrr-editor-add-recording__buttons > :first-child:nth-last-child(n + 3) {
+    margin-right: auto;
   }
 }

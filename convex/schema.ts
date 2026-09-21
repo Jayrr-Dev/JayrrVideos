@@ -93,6 +93,27 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_user", ["userId"]),
 
+  editorProjectFolders: defineTable({
+    userId: v.id("users"),
+    name: v.string(),
+    projectCount: v.number(),
+    updatedAt: v.number(),
+  }).index("by_user", ["userId"]),
+
+  editorProjects: defineTable({
+    userId: v.id("users"),
+    folderId: v.optional(v.id("editorProjectFolders")),
+    name: v.string(),
+    clipsJson: v.string(),
+    stackLanesJson: v.string(),
+    durationMs: v.number(),
+    clipCount: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_and_updated", ["userId", "updatedAt"])
+    .index("by_folder_and_updated", ["folderId", "updatedAt"]),
+
   featureFlags: defineTable({
     userId: v.id("users"),
     key: v.string(),

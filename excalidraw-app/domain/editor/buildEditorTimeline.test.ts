@@ -9,10 +9,12 @@ import {
   editorLanes,
   moveEditorClip,
   removeStackLane,
+  returnClipsAudio,
+  separateClipsAudio,
   SEQUENCE_LANE_ID,
   snapClipStart,
   stackBlendAtTime,
-  type EditorProjectClip,
+  type EditorVideoClip,
 } from "./buildEditorTimeline";
 
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -22,8 +24,8 @@ const recordingId = "rec1" as Id<"presentRecordings">;
 const clip = (
   id: string,
   durationMs: number,
-  extras: Partial<EditorProjectClip> = {},
-): EditorProjectClip => ({
+  extras: Partial<EditorVideoClip> = {},
+): EditorVideoClip => ({
   id,
   type: "clip",
   recordingId,
@@ -386,5 +388,76 @@ describe("removeStackLane", () => {
         laneStartMs: 200,
       }),
     );
+  });
+});
+
+describe("separateClipsAudio", () => {
+  it("mutes the video clip and adds an audio clip on a stack lane", () => {
+    const source = clip("a", 1000, { laneStartMs: 200 });
+    const result = separateClipsAudio([source], ["a"], []);
+    expect(result).not.toBeNull();
+    expect(result?.clips).toHaveLength(2);
+    expect(result?.clips[0]).toEqual(
+      expect.objectContaining({ id: "a", type: "clip", muted: true }),
+    );
+    expect(result?.clips[1]).toEqual(
+      expect.objectContaining({
+        type: "audio",
+        recordingId,
+        durationMs: 1000,
+        sourceOffsetMs: 0,
+        laneStartMs: 200,
+        sourceClipId: "a",
+      }),
+    );
+    expect(result?.stackLaneIds).toHaveLength(1);
+    expect(result?.clips[1]?.laneId).toBe(result?.stackLaneIds[0]);
+    expect(result?.audioIds).toEqual([result?.clips[1]?.id]);
+  });
+
+  it("reuses the first stack lane", () => {
+    const source = clip("a", 800, { laneStartMs: 0 });
+    const result = separateClipsAudio([source], ["a"], ["stack-1"]);
+    expect(result?.stackLaneIds).toEqual(["stack-1"]);
+    expect(result?.clips[1]?.laneId).toBe("stack-1");
+  });
+
+  it("returns null when no video clips are selected", () => {
+    expect(separateClipsAudio([clip("a", 500)], ["missing"], [])).toBeNull();
+  });
+});
+
+describe("returnClipsAudio", () => {
+  it("unmutes the video and removes the split audio clip", () => {
+    const split = separateClipsAudio(
+      [clip("a", 1000, { laneStartMs: 200 })],
+      ["a"],
+      ["stack-1"],
+    );
+    expect(split).not.toBeNull();
+    const audioId = split?.audioIds[0];
+    expect(audioId).toBeTruthy();
+    const returned = returnClipsAudio(split?.clips ?? [], ["a"]);
+    expect(returned?.clips).toHaveLength(1);
+    expect(returned?.clips[0]).toEqual(
+      expect.objectContaining({ id: "a", type: "clip" }),
+    );
+    expect(returned?.clips[0]?.type === "clip" && returned.clips[0].muted).toBe(
+      undefined,
+    );
+    expect(returned?.videoIds).toEqual(["a"]);
+  });
+
+  it("returns audio when the audio clip is selected", () => {
+    const split = separateClipsAudio(
+      [clip("a", 800, { laneStartMs: 0 })],
+      ["a"],
+      ["stack-1"],
+    );
+    const audioId = split?.audioIds[0] ?? "";
+    const returned = returnClipsAudio(split?.clips ?? [], [audioId]);
+    expect(returned?.clips).toEqual([
+      expect.objectContaining({ id: "a", type: "clip" }),
+    ]);
   });
 });

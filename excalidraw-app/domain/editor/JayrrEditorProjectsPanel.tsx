@@ -5,7 +5,7 @@ import {
   DotsHorizontalIcon,
   TrashIcon,
 } from "@excalidraw/excalidraw/components/icons";
-import { useAction, useMutation, useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import {
   useEffect,
   useRef,
@@ -14,141 +14,39 @@ import {
   type ReactNode,
 } from "react";
 
-import { useAtom } from "../app-jotai";
-import { JayrrConfirmDialog } from "../components/ui";
-import { api as convexApi, isConvexLinked } from "../convexClient";
+import { useAtom } from "../../app-jotai";
+import { JayrrConfirmDialog } from "../../components/ui";
+import { api as convexApi, isConvexLinked } from "../../convexClient";
 import {
   formatRecordingClock,
-  formatRecordingQuality,
-  formatRecordingSize,
   formatRecordingWhen,
-  VideoPreviewDialog,
-} from "../domain/recordings";
+} from "../recordings/formatRecording";
 
-import "../components/ui/JayrrLibraryMenu.scss";
+import "../../components/ui/JayrrLibraryMenu.scss";
+import "../../present/JayrrPresentPanel.scss";
 
-import { JAYRR_RECORDING_DRAG } from "./insertPresentRecording";
+import { useJayrrEditorSession } from "./JayrrEditorSession";
 import {
-  openRecordingFolderIdAtom,
-  persistOpenRecordingFolderId,
-} from "./openRecordingFolder";
+  openEditorProjectFolderIdAtom,
+  persistOpenEditorProjectFolderId,
+} from "./openEditorProjectFolder";
 
-import type { Id } from "../../convex/_generated/dataModel";
+import type { Id } from "../../../convex/_generated/dataModel";
 
-export const JAYRR_RECORDINGS_TAB = "jayrrRecordings";
-
-export const recordingsTabIcon = (
-  <svg aria-hidden="true" focusable="false" viewBox="0 0 20 20">
-    <rect
-      x="4.2"
-      y="3.4"
-      width="9.2"
-      height="12.2"
-      rx="1.3"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.7"
-    />
-    <path
-      d="M7 7.2h4.2M7 10h4.2M7 12.8h2.6"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-    />
-    <path
-      d="M13.4 5.6h1.4c.8 0 1.4.6 1.4 1.4v9.4c0 .8-.6 1.4-1.4 1.4H7.8"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.7"
-      strokeLinecap="round"
-    />
-  </svg>
-);
-
-type RecordingRow = {
-  _id: Id<"presentRecordings">;
-  folderId: Id<"presentRecordingFolders"> | null;
-  url: string;
-  durationMs: number;
-  sizeBytes: number;
-  posterUrl: string | null;
-  width: number | null;
-  height: number | null;
-  name: string | null;
-  createdAt: number;
-};
-
-type FolderRow = {
-  _id: Id<"presentRecordingFolders">;
+type ProjectRow = {
+  _id: Id<"editorProjects">;
+  folderId: Id<"editorProjectFolders"> | null;
   name: string;
-  recordingCount: number;
+  durationMs: number;
+  clipCount: number;
   updatedAt: number;
 };
 
-const recordingLabel = (row: RecordingRow) => {
-  return row.name ?? "Untitled";
-};
-
-const thumbVideoSrc = (url: string) => {
-  return url.includes("#") ? url : `${url}#t=1`;
-};
-
-const thumbSeekTime = (mediaDuration: number, durationHintMs?: number) => {
-  const hinted =
-    durationHintMs != null && durationHintMs > 400 ? durationHintMs / 1000 : 0;
-  const duration =
-    Number.isFinite(mediaDuration) && mediaDuration > 0.4
-      ? mediaDuration
-      : hinted;
-  if (duration > 2) {
-    return Math.min(duration * 0.2, 2);
-  }
-  if (duration > 0.4) {
-    return duration * 0.35;
-  }
-  return 1;
-};
-
-const paintThumbFrame = (
-  video: HTMLVideoElement,
-  onSize?: (video: HTMLVideoElement) => void,
-  durationHintMs?: number,
-) => {
-  onSize?.(video);
-  if (video.readyState < 1) {
-    return;
-  }
-  const seekTo = thumbSeekTime(video.duration, durationHintMs);
-  if (Math.abs(video.currentTime - seekTo) < 0.08) {
-    return;
-  }
-  video.currentTime = seekTo;
-};
-
-const RecordingThumbMedia = ({
-  url,
-  durationMs,
-  onSize,
-}: {
-  url: string;
-  durationMs?: number;
-  onSize?: (video: HTMLVideoElement) => void;
-}) => {
-  return (
-    <video
-      src={thumbVideoSrc(url)}
-      muted
-      playsInline
-      preload="auto"
-      onLoadedMetadata={(event) =>
-        paintThumbFrame(event.currentTarget, onSize, durationMs)
-      }
-      onLoadedData={(event) =>
-        paintThumbFrame(event.currentTarget, onSize, durationMs)
-      }
-    />
-  );
+type FolderRow = {
+  _id: Id<"editorProjectFolders">;
+  name: string;
+  projectCount: number;
+  updatedAt: number;
 };
 
 const openCardMenu = (
@@ -157,11 +55,7 @@ const openCardMenu = (
   menuOpen: boolean,
   onMenuToggle: () => void,
 ) => {
-  if (event.target instanceof HTMLInputElement) {
-    return;
-  }
   event.preventDefault();
-  event.stopPropagation();
   if (renaming || menuOpen) {
     return;
   }
@@ -169,22 +63,18 @@ const openCardMenu = (
 };
 
 const EditGlyph = (
-  <svg
-    aria-hidden="true"
-    focusable="false"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <path d="M12 20h9" />
-    <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />
+  <svg aria-hidden="true" focusable="false" viewBox="0 0 20 20">
+    <path
+      d="M4 14.6 13.4 5.2l2.4 2.4L6.4 17H4z"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinejoin="round"
+    />
   </svg>
 );
 
-const RecordingCard = ({
+const ProjectCard = ({
   row,
   folders,
   menuOpen,
@@ -197,9 +87,9 @@ const RecordingCard = ({
   onCommitRename,
   onCancelRename,
   onMove,
-  onPreview,
+  onOpen,
 }: {
-  row: RecordingRow;
+  row: ProjectRow;
   folders: FolderRow[];
   menuOpen: boolean;
   renaming: boolean;
@@ -210,32 +100,16 @@ const RecordingCard = ({
   onDraftChange: (value: string) => void;
   onCommitRename: () => void;
   onCancelRename: () => void;
-  onMove: (folderId: Id<"presentRecordingFolders"> | null) => void;
-  onPreview: () => void;
+  onMove: (folderId: Id<"editorProjectFolders"> | null) => void;
+  onOpen: () => void;
 }) => {
   const clock = formatRecordingClock(row.durationMs);
-  const size = formatRecordingSize(row.sizeBytes);
-  const when = formatRecordingWhen(row.createdAt);
-  const label = recordingLabel(row);
+  const when = formatRecordingWhen(row.updatedAt);
   const nameInputRef = useRef<HTMLInputElement>(null);
-  const draggedRef = useRef(false);
-  const [probed, setProbed] = useState<{
-    width: number;
-    height: number;
-  } | null>(null);
-  const quality = formatRecordingQuality(
-    row.width ?? probed?.width ?? 0,
-    row.height ?? probed?.height ?? 0,
-  );
-  const rememberSize = (video: HTMLVideoElement) => {
-    if (video.videoWidth > 0 && video.videoHeight > 0) {
-      setProbed({
-        width: video.videoWidth,
-        height: video.videoHeight,
-      });
-    }
-  };
   const moveTargets = folders.filter((folder) => folder._id !== row.folderId);
+  const clipsLabel = `${row.clipCount} ${
+    row.clipCount === 1 ? "clip" : "clips"
+  }`;
 
   useEffect(() => {
     if (!renaming) {
@@ -257,7 +131,7 @@ const RecordingCard = ({
           ref={nameInputRef}
           className="jayrr-present__recording-name-input"
           value={draftName}
-          aria-label="Recording name"
+          aria-label="Project name"
           onChange={(event) => onDraftChange(event.target.value)}
           onClick={(event) => event.stopPropagation()}
           onMouseDown={(event) => event.stopPropagation()}
@@ -274,53 +148,15 @@ const RecordingCard = ({
           }}
         />
       ) : (
-        <span className="jayrr-present__recording-name">{label}</span>
+        <span className="jayrr-present__recording-name">{row.name}</span>
       )}
       <button
         type="button"
         className="jayrr-present__recording-thumb"
-        draggable={!renaming}
-        aria-label={
-          quality
-            ? `Play recording ${label}, ${clock}, ${quality}, ${size}`
-            : `Play recording ${label}, ${clock}, ${size}`
-        }
-        onDragStart={(event) => {
-          draggedRef.current = true;
-          event.dataTransfer.setData(
-            JAYRR_RECORDING_DRAG,
-            JSON.stringify({
-              url: row.url,
-              width: row.width ?? probed?.width ?? null,
-              height: row.height ?? probed?.height ?? null,
-            }),
-          );
-          event.dataTransfer.setData("text/plain", row.url);
-          event.dataTransfer.effectAllowed = "copy";
-        }}
-        onDragEnd={() => {
-          window.setTimeout(() => {
-            draggedRef.current = false;
-          }, 0);
-        }}
-        onClick={() => {
-          if (draggedRef.current) {
-            return;
-          }
-          onPreview();
-        }}
+        aria-label={`Open ${row.name}`}
+        onClick={onOpen}
       >
-        <RecordingThumbMedia
-          url={row.url}
-          durationMs={row.durationMs}
-          onSize={rememberSize}
-        />
-        <span className="jayrr-present__recording-badges">
-          {quality ? (
-            <span className="jayrr-present__recording-quality">{quality}</span>
-          ) : null}
-          <span className="jayrr-present__recording-size">{size}</span>
-        </span>
+        <span className="jayrr-scene-card__empty">{clipsLabel}</span>
         <span className="jayrr-present__recording-clock">{clock}</span>
       </button>
       <div className="jayrr-present__recording-meta">
@@ -328,7 +164,7 @@ const RecordingCard = ({
         <DropdownMenu open={menuOpen}>
           <DropdownMenu.Trigger
             className="jayrr-present__recording-menu"
-            aria-label={`${label} menu`}
+            aria-label={`${row.name} menu`}
             onToggle={onMenuToggle}
             onMouseDown={(event) => event.stopPropagation()}
             onPointerDown={(event) => event.stopPropagation()}
@@ -339,7 +175,7 @@ const RecordingCard = ({
             onClickOutside={onMenuToggle}
             onSelect={onMenuToggle}
           >
-            <DropdownMenu.Item onSelect={onPreview}>Open</DropdownMenu.Item>
+            <DropdownMenu.Item onSelect={onOpen}>Open</DropdownMenu.Item>
             <DropdownMenu.Item onSelect={onStartRename}>
               Rename
             </DropdownMenu.Item>
@@ -392,11 +228,6 @@ const FolderCard = ({
   onDelete: () => void;
 }) => {
   const renameInputRef = useRef<HTMLInputElement>(null);
-  const previews = useQuery(
-    convexApi.presentRecordings.list,
-    folder.recordingCount > 0 ? { folderId: folder._id } : "skip",
-  );
-  const thumbs = previews?.slice(0, 4) ?? [];
 
   useEffect(() => {
     if (!renaming) {
@@ -441,18 +272,12 @@ const FolderCard = ({
         aria-label={`Open ${folder.name}`}
         onClick={onOpen}
       >
-        {folder.recordingCount === 0 || (previews && thumbs.length === 0) ? (
+        {folder.projectCount === 0 ? (
           <span className="jayrr-scene-card__empty">Empty</span>
         ) : (
-          <span className="jayrr-present__folder-thumbs">
-            {thumbs.map((row) => (
-              <span key={row._id} className="jayrr-present__folder-thumb">
-                <RecordingThumbMedia
-                  url={row.url}
-                  durationMs={row.durationMs}
-                />
-              </span>
-            ))}
+          <span className="jayrr-scene-card__empty">
+            {folder.projectCount}{" "}
+            {folder.projectCount === 1 ? "project" : "projects"}
           </span>
         )}
       </button>
@@ -480,37 +305,29 @@ const FolderCard = ({
   );
 };
 
-export const JayrrPresentRecordingsPanel = ({
-  uploading,
+export const JayrrEditorProjectsPanel = ({
   toolbar,
 }: {
-  uploading: boolean;
   toolbar?: ReactNode;
 }) => {
   if (!isConvexLinked) {
     return (
-      <RecordingsShell uploading={uploading} toolbar={toolbar} title="Docs">
-        <p className="jayrr-present__empty">
-          Sign in to store recordings here.
-        </p>
-      </RecordingsShell>
+      <ProjectsShell toolbar={toolbar} title="Docs">
+        <p className="jayrr-present__empty">Sign in to store projects here.</p>
+      </ProjectsShell>
     );
   }
 
-  return (
-    <JayrrPresentRecordingsAuthed uploading={uploading} toolbar={toolbar} />
-  );
+  return <JayrrEditorProjectsAuthed toolbar={toolbar} />;
 };
 
-const RecordingsShell = ({
-  uploading,
+const ProjectsShell = ({
   title,
   toolbar,
   onBack,
   footer,
   children,
 }: {
-  uploading: boolean;
   title: ReactNode;
   toolbar?: ReactNode;
   onBack?: () => void;
@@ -524,7 +341,7 @@ const RecordingsShell = ({
           <button
             type="button"
             className="jayrr-present__back"
-            aria-label="Back to recordings"
+            aria-label="Back to projects"
             onClick={onBack}
           >
             {chevronLeftIcon}
@@ -537,63 +354,52 @@ const RecordingsShell = ({
         )}
         {toolbar}
         <span className="jayrr-present__sr">
-          Saved slideshow recordings in folders. Drag a clip onto the canvas.
-          Rename, move, or delete from the menu.
+          Saved editor projects in folders. Open a card to load it into the
+          video editor.
         </span>
       </div>
-      {uploading ? (
-        <p className="jayrr-present__status" aria-live="polite">
-          Saving recording…
-        </p>
-      ) : null}
       <div className="jayrr-present__recordings-body">{children}</div>
       {footer}
     </div>
   );
 };
 
-const JayrrPresentRecordingsAuthed = ({
-  uploading,
-  toolbar,
-}: {
-  uploading: boolean;
-  toolbar?: ReactNode;
-}) => {
+const JayrrEditorProjectsAuthed = ({ toolbar }: { toolbar?: ReactNode }) => {
   const api = useExcalidrawAPI();
-  const [openFolderId, setOpenFolderId] = useAtom(openRecordingFolderIdAtom);
-  const folders = useQuery(convexApi.presentRecordingFolders.list);
+  const { loadProject } = useJayrrEditorSession();
+  const [openFolderId, setOpenFolderId] = useAtom(
+    openEditorProjectFolderIdAtom,
+  );
+  const folders = useQuery(convexApi.editorProjectFolders.list);
   const openFolder = useQuery(
-    convexApi.presentRecordingFolders.get,
+    convexApi.editorProjectFolders.get,
     openFolderId ? { folderId: openFolderId } : "skip",
   );
-  const recordings = useQuery(convexApi.presentRecordings.list, {
+  const projects = useQuery(convexApi.editorProjects.list, {
     folderId: openFolderId ?? null,
   });
-  const createFolder = useMutation(convexApi.presentRecordingFolders.create);
-  const renameFolder = useMutation(convexApi.presentRecordingFolders.rename);
-  const removeFolder = useMutation(convexApi.presentRecordingFolders.remove);
-  const removeRecording = useAction(convexApi.presentBlob.removeRecording);
-  const renameRecording = useMutation(convexApi.presentRecordings.rename);
-  const moveRecording = useMutation(convexApi.presentRecordings.move);
+  const createFolder = useMutation(convexApi.editorProjectFolders.create);
+  const renameFolder = useMutation(convexApi.editorProjectFolders.rename);
+  const removeFolder = useMutation(convexApi.editorProjectFolders.remove);
+  const removeProject = useMutation(convexApi.editorProjects.remove);
+  const renameProject = useMutation(convexApi.editorProjects.rename);
+  const moveProject = useMutation(convexApi.editorProjects.move);
 
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
-  const [previewRecording, setPreviewRecording] = useState<RecordingRow | null>(
-    null,
-  );
-  const [pendingDeleteRecording, setPendingDeleteRecording] =
-    useState<RecordingRow | null>(null);
+  const [pendingDeleteProject, setPendingDeleteProject] =
+    useState<ProjectRow | null>(null);
   const [pendingDeleteFolder, setPendingDeleteFolder] =
     useState<FolderRow | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [renamingRecordingId, setRenamingRecordingId] =
-    useState<Id<"presentRecordings"> | null>(null);
+  const [renamingProjectId, setRenamingProjectId] =
+    useState<Id<"editorProjects"> | null>(null);
   const [renamingFolderId, setRenamingFolderId] =
-    useState<Id<"presentRecordingFolders"> | null>(null);
+    useState<Id<"editorProjectFolders"> | null>(null);
   const [draftName, setDraftName] = useState("");
   const folderRenameRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    persistOpenRecordingFolderId(openFolderId);
+    persistOpenEditorProjectFolderId(openFolderId);
   }, [openFolderId]);
 
   useEffect(() => {
@@ -610,24 +416,27 @@ const JayrrPresentRecordingsAuthed = ({
     folderRenameRef.current?.select();
   }, [renamingFolderId, openFolderId]);
 
-  const openFolderById = (folderId: Id<"presentRecordingFolders">) => {
+  const openFolderById = (folderId: Id<"editorProjectFolders">) => {
     setOpenFolderId(folderId);
-    setRenamingRecordingId(null);
+    setRenamingProjectId(null);
     setOpenMenuId(null);
   };
 
-  const commitRecordingRename = async () => {
-    if (!renamingRecordingId) {
+  const commitProjectRename = async () => {
+    if (!renamingProjectId) {
       return;
     }
-    const id = renamingRecordingId;
-    const name = draftName;
-    setRenamingRecordingId(null);
+    const id = renamingProjectId;
+    const name = draftName.trim();
+    setRenamingProjectId(null);
+    if (!name) {
+      return;
+    }
     try {
-      await renameRecording({ recordingId: id, name });
+      await renameProject({ projectId: id, name });
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Could not rename recording.";
+        error instanceof Error ? error.message : "Could not rename project.";
       api?.setToast({ message, closable: true });
     }
   };
@@ -668,46 +477,58 @@ const JayrrPresentRecordingsAuthed = ({
     }
   };
 
-  const renderRecordingList = (rows: RecordingRow[]) => (
+  const onOpenProject = async (row: ProjectRow) => {
+    try {
+      await loadProject(row._id);
+    } catch (error) {
+      api?.setToast({
+        message:
+          error instanceof Error ? error.message : "Could not load project.",
+        closable: true,
+      });
+    }
+  };
+
+  const renderProjectList = (rows: ProjectRow[]) => (
     <ul className="jayrr-present__recordings-list">
       {rows.map((row) => (
-        <RecordingCard
+        <ProjectCard
           key={row._id}
           row={row}
           folders={folders ?? []}
           menuOpen={openMenuId === row._id}
-          renaming={renamingRecordingId === row._id}
+          renaming={renamingProjectId === row._id}
           draftName={draftName}
           onMenuToggle={() => {
             setOpenMenuId((current) => (current === row._id ? null : row._id));
           }}
           onDelete={() => {
-            setPendingDeleteRecording(row);
+            setPendingDeleteProject(row);
           }}
           onStartRename={() => {
-            setDraftName(row.name ?? "");
-            setRenamingRecordingId(row._id);
+            setDraftName(row.name);
+            setRenamingProjectId(row._id);
           }}
           onDraftChange={setDraftName}
           onCommitRename={() => {
-            void commitRecordingRename();
+            void commitProjectRename();
           }}
           onCancelRename={() => {
-            setRenamingRecordingId(null);
+            setRenamingProjectId(null);
           }}
-          onPreview={() => {
+          onOpen={() => {
             setOpenMenuId(null);
-            setPreviewRecording(row);
+            void onOpenProject(row);
           }}
           onMove={(folderId) => {
             void (async () => {
               try {
-                await moveRecording({ recordingId: row._id, folderId });
+                await moveProject({ projectId: row._id, folderId });
               } catch (error) {
                 const message =
                   error instanceof Error
                     ? error.message
-                    : "Could not move recording.";
+                    : "Could not move project.";
                 api?.setToast({ message, closable: true });
               }
             })();
@@ -717,35 +538,52 @@ const JayrrPresentRecordingsAuthed = ({
     </ul>
   );
 
-  const previewDialog = previewRecording ? (
-    <VideoPreviewDialog
-      source={{
-        url: previewRecording.url,
-        posterUrl: previewRecording.posterUrl,
-        title: recordingLabel(previewRecording),
-        durationMs: previewRecording.durationMs,
+  const deleteProjectDialog = pendingDeleteProject ? (
+    <JayrrConfirmDialog
+      title={`Delete "${pendingDeleteProject.name}"?`}
+      info="Removes this project from Docs. This cannot be undone."
+      busy={deleting}
+      onCancel={() => {
+        if (!deleting) {
+          setPendingDeleteProject(null);
+        }
       }}
-      onClose={() => setPreviewRecording(null)}
+      onConfirm={() => {
+        void (async () => {
+          setDeleting(true);
+          try {
+            await removeProject({ projectId: pendingDeleteProject._id });
+            setPendingDeleteProject(null);
+          } catch (error) {
+            const message =
+              error instanceof Error
+                ? error.message
+                : "Could not delete project.";
+            api?.setToast({ message, closable: true });
+          } finally {
+            setDeleting(false);
+          }
+        })();
+      }}
     />
   ) : null;
 
   if (openFolderId && openFolder) {
     let body: ReactNode;
-    if (recordings === undefined) {
-      body = <p className="jayrr-present__empty">Loading recordings…</p>;
-    } else if (recordings.length === 0) {
+    if (projects === undefined) {
+      body = <p className="jayrr-present__empty">Loading projects…</p>;
+    } else if (projects.length === 0) {
       body = (
         <p className="jayrr-present__empty">
-          No recordings in this folder yet. Use Record on the Present tab.
+          No projects in this folder yet. Save from the video editor.
         </p>
       );
     } else {
-      body = renderRecordingList(recordings);
+      body = renderProjectList(projects);
     }
 
     return (
-      <RecordingsShell
-        uploading={uploading}
+      <ProjectsShell
         toolbar={toolbar}
         onBack={() => setOpenFolderId(null)}
         title={
@@ -783,52 +621,23 @@ const JayrrPresentRecordingsAuthed = ({
         }
       >
         {body}
-        {previewDialog}
-        {pendingDeleteRecording ? (
-          <DeleteRecordingDialog
-            busy={deleting}
-            onCancel={() => {
-              if (!deleting) {
-                setPendingDeleteRecording(null);
-              }
-            }}
-            onConfirm={() => {
-              void (async () => {
-                setDeleting(true);
-                try {
-                  await removeRecording({
-                    recordingId: pendingDeleteRecording._id,
-                  });
-                  setPendingDeleteRecording(null);
-                } catch (error) {
-                  const message =
-                    error instanceof Error
-                      ? error.message
-                      : "Could not delete recording.";
-                  api?.setToast({ message, closable: true });
-                } finally {
-                  setDeleting(false);
-                }
-              })();
-            }}
-          />
-        ) : null}
-      </RecordingsShell>
+        {deleteProjectDialog}
+      </ProjectsShell>
     );
   }
 
   const folderList = folders ?? [];
-  const unfiled = recordings ?? [];
-  const loading = folders === undefined || recordings === undefined;
+  const unfiled = projects ?? [];
+  const loading = folders === undefined || projects === undefined;
 
   let body: ReactNode;
   if (loading) {
-    body = <p className="jayrr-present__empty">Loading recordings…</p>;
+    body = <p className="jayrr-present__empty">Loading projects…</p>;
   } else if (folderList.length === 0 && unfiled.length === 0) {
     body = (
       <div className="jayrr-present__empty-block">
         <p className="jayrr-present__empty">
-          No recordings yet. Create a folder, or use Record on the Present tab.
+          No projects yet. Create a folder, or save from the video editor.
         </p>
         <Button
           className="jayrr-present__create-folder"
@@ -881,7 +690,7 @@ const JayrrPresentRecordingsAuthed = ({
             {folderList.length > 0 ? (
               <h3 className="jayrr-present__section-label">Unfiled</h3>
             ) : null}
-            {renderRecordingList(unfiled)}
+            {renderProjectList(unfiled)}
           </>
         ) : null}
       </>
@@ -889,8 +698,7 @@ const JayrrPresentRecordingsAuthed = ({
   }
 
   return (
-    <RecordingsShell
-      uploading={uploading}
+    <ProjectsShell
       toolbar={toolbar}
       title="Docs"
       footer={
@@ -909,40 +717,11 @@ const JayrrPresentRecordingsAuthed = ({
       }
     >
       {body}
-      {previewDialog}
-      {pendingDeleteRecording ? (
-        <DeleteRecordingDialog
-          busy={deleting}
-          onCancel={() => {
-            if (!deleting) {
-              setPendingDeleteRecording(null);
-            }
-          }}
-          onConfirm={() => {
-            void (async () => {
-              setDeleting(true);
-              try {
-                await removeRecording({
-                  recordingId: pendingDeleteRecording._id,
-                });
-                setPendingDeleteRecording(null);
-              } catch (error) {
-                const message =
-                  error instanceof Error
-                    ? error.message
-                    : "Could not delete recording.";
-                api?.setToast({ message, closable: true });
-              } finally {
-                setDeleting(false);
-              }
-            })();
-          }}
-        />
-      ) : null}
+      {deleteProjectDialog}
       {pendingDeleteFolder ? (
         <JayrrConfirmDialog
           title={`Delete "${pendingDeleteFolder.name}"?`}
-          info="Removes the folder. Recordings inside move back to Docs."
+          info="Removes the folder. Projects inside move back to Docs."
           busy={deleting}
           onCancel={() => {
             if (!deleting) {
@@ -968,26 +747,6 @@ const JayrrPresentRecordingsAuthed = ({
           }}
         />
       ) : null}
-    </RecordingsShell>
-  );
-};
-
-const DeleteRecordingDialog = ({
-  busy,
-  onCancel,
-  onConfirm,
-}: {
-  busy: boolean;
-  onCancel: () => void;
-  onConfirm: () => void;
-}) => {
-  return (
-    <JayrrConfirmDialog
-      title="Delete recording"
-      info="Removes this clip from Docs. This cannot be undone."
-      busy={busy}
-      onCancel={onCancel}
-      onConfirm={onConfirm}
-    />
+    </ProjectsShell>
   );
 };

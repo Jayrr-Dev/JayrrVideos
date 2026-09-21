@@ -14,19 +14,19 @@ import {
 
 import type { NonDeletedExcalidrawElement } from "@excalidraw/element/types";
 
-import { api, isConvexLinked } from "../../convexClient";
+import { api, convexClient, isConvexLinked } from "../../convexClient";
 
 import {
   buildEditorTimeline,
-  clipLaneId,
   EDITOR_CLIP_TYPE,
+  EDITOR_SOUND_TYPE,
   removeStackLane as foldStackLane,
-  isEditorBlendMode,
-  isEditorClipType,
-  isEditorTransitionKind,
+  isEditorVideoClip,
   MAX_STACK_LANES,
   newEditorClipId,
   newEditorLaneId,
+  returnClipsAudio,
+  separateClipsAudio,
   SEQUENCE_LANE_ID,
   sequenceEndMs,
   withFrozenStarts,
@@ -34,130 +34,50 @@ import {
 } from "./buildEditorTimeline";
 import { publishEditorPlayback } from "./editorPlaybackBridge";
 import { isJayrrEditorPreviewElement } from "./editorPreviewModel";
+import {
+  parseStoredEditorClips,
+  parseStoredStackLanes,
+  readStoredClips,
+  readStoredStackLanes,
+  recordingIdsFromStored,
+  restoreProjectClips,
+  stackLanesForClips,
+  writeStoredClips,
+  writeStoredStackLanes,
+} from "./editorProjectStore";
 import { insertEditorPreview } from "./insertEditorPreview";
 import { type EditorRecordingPick } from "./JayrrEditorAddRecordingDialog";
 import { useEditorPlayback } from "./useEditorPlayback";
 
+import type { JayrrSoundPick } from "../../components/ui/JayrrSoundLibraryDialog";
+import { jayrrLocalSoundUrl } from "../../sounds/jayrrSoundPlayback";
+
 import type { Id } from "../../../convex/_generated/dataModel";
 
+const EDITOR_HISTORY_LIMIT = 80;
+
+type EditorHistorySnapshot = {
+  clips: EditorProjectClip[];
+  stackLaneIds: readonly string[];
+};
+
+const cloneEditorSnapshot = (
+  clips: readonly EditorProjectClip[],
+  stackLaneIds: readonly string[],
+): EditorHistorySnapshot => ({
+  clips: clips.map((clip) => ({ ...clip })),
+  stackLaneIds: [...stackLaneIds],
+});
+
+const editorSnapshotsEqual = (
+  a: EditorHistorySnapshot,
+  b: EditorHistorySnapshot,
+) =>
+  JSON.stringify(a.clips) === JSON.stringify(b.clips) &&
+  a.stackLaneIds.length === b.stackLaneIds.length &&
+  a.stackLaneIds.every((id, index) => id === b.stackLaneIds[index]);
+
 const PREVIEW_ID_KEY = "jayrr-editor-preview-element-v1";
-const STORAGE_KEY = "jayrr-editor-recording-clips-v1";
-const STACK_LANES_KEY = "jayrr-editor-stack-lanes-v1";
-
-type StoredClip = {
-  id: string;
-  type?: string;
-  recordingId: string;
-  durationMs?: number;
-  sourceOffsetMs?: number;
-  laneId?: string;
-  laneStartMs?: number;
-  transitionKind?: EditorProjectClip["transitionKind"];
-  blendMode?: EditorProjectClip["blendMode"];
-};
-
-const readStoredClips = (): StoredClip[] => {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      return [];
-    }
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) {
-      return [];
-    }
-    const out: StoredClip[] = [];
-    for (const item of parsed) {
-      if (
-        item &&
-        typeof item === "object" &&
-        typeof Reflect.get(item, "id") === "string" &&
-        typeof Reflect.get(item, "recordingId") === "string"
-      ) {
-        const durationRaw = Reflect.get(item, "durationMs");
-        const offsetRaw = Reflect.get(item, "sourceOffsetMs");
-        const laneRaw = Reflect.get(item, "laneId");
-        const laneStartRaw = Reflect.get(item, "laneStartMs");
-        const transitionRaw = Reflect.get(item, "transitionKind");
-        const blendRaw = Reflect.get(item, "blendMode");
-        const typeRaw = Reflect.get(item, "type");
-        if (typeRaw !== undefined && !isEditorClipType(typeRaw)) {
-          continue;
-        }
-        out.push({
-          id: Reflect.get(item, "id") as string,
-          type: EDITOR_CLIP_TYPE,
-          recordingId: Reflect.get(item, "recordingId") as string,
-          ...(typeof durationRaw === "number" && Number.isFinite(durationRaw)
-            ? { durationMs: Math.max(1, Math.round(durationRaw)) }
-            : {}),
-          ...(typeof offsetRaw === "number" && Number.isFinite(offsetRaw)
-            ? { sourceOffsetMs: Math.max(0, Math.round(offsetRaw)) }
-            : {}),
-          ...(typeof laneRaw === "string" && laneRaw
-            ? { laneId: laneRaw }
-            : {}),
-          ...(typeof laneStartRaw === "number" && Number.isFinite(laneStartRaw)
-            ? { laneStartMs: Math.max(0, Math.round(laneStartRaw)) }
-            : {}),
-          ...(isEditorTransitionKind(transitionRaw)
-            ? { transitionKind: transitionRaw }
-            : {}),
-          ...(isEditorBlendMode(blendRaw) ? { blendMode: blendRaw } : {}),
-        });
-      }
-    }
-    return out;
-  } catch {
-    return [];
-  }
-};
-
-const writeStoredClips = (clips: readonly EditorProjectClip[]) => {
-  const payload: StoredClip[] = clips.map((clip) => ({
-    id: clip.id,
-    type: clip.type,
-    recordingId: clip.recordingId,
-    durationMs: clip.durationMs,
-    sourceOffsetMs: clip.sourceOffsetMs ?? 0,
-    ...(clip.laneId ? { laneId: clip.laneId } : {}),
-    ...(typeof clip.laneStartMs === "number"
-      ? { laneStartMs: clip.laneStartMs }
-      : {}),
-    ...(clip.transitionKind ? { transitionKind: clip.transitionKind } : {}),
-    ...(clip.blendMode ? { blendMode: clip.blendMode } : {}),
-  }));
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-};
-
-const readStoredStackLanes = (): string[] => {
-  try {
-    const raw = localStorage.getItem(STACK_LANES_KEY);
-    if (!raw) {
-      return [];
-    }
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) {
-      return [];
-    }
-    const out: string[] = [];
-    for (const item of parsed) {
-      if (typeof item === "string" && item && item !== SEQUENCE_LANE_ID) {
-        out.push(item);
-      }
-      if (out.length >= MAX_STACK_LANES) {
-        break;
-      }
-    }
-    return out;
-  } catch {
-    return [];
-  }
-};
-
-const writeStoredStackLanes = (laneIds: readonly string[]) => {
-  localStorage.setItem(STACK_LANES_KEY, JSON.stringify(laneIds));
-};
 
 const readStoredPreviewId = (): string | null => {
   try {
@@ -210,6 +130,12 @@ type EditorSessionValue = {
   clearPreviewLink: () => void;
   focusPreview: () => void;
   addRecording: (row: EditorRecordingPick) => string;
+  addSound: (row: JayrrSoundPick) => string;
+  separateAudio: (clipIds: readonly string[]) => string[];
+  returnAudio: (clipIds: readonly string[]) => string[];
+  loadProject: (projectId: Id<"editorProjects">) => Promise<void>;
+  undo: () => boolean;
+  redo: () => boolean;
   disabled: boolean;
 };
 
@@ -244,6 +170,13 @@ export const JayrrEditorSession = ({ children }: { children: ReactNode }) => {
     Record<string, boolean>
   >({});
   const hydratedRef = useRef(false);
+  const clipsRef = useRef(clips);
+  const stackLaneIdsRef = useRef(stackLaneIds);
+  const skipHistoryRef = useRef(false);
+  const undoStackRef = useRef<EditorHistorySnapshot[]>([]);
+  const redoStackRef = useRef<EditorHistorySnapshot[]>([]);
+  clipsRef.current = clips;
+  stackLaneIdsRef.current = stackLaneIds;
 
   useEffect(() => {
     if (!apiExcal) {
@@ -288,60 +221,22 @@ export const JayrrEditorSession = ({ children }: { children: ReactNode }) => {
   }, [apiExcal, linkPreview, previewElementId, selectedElementIds]);
 
   useEffect(() => {
-    if (hydratedRef.current || recordings === undefined) {
+    if (hydratedRef.current) {
+      return;
+    }
+    if (canQuery && recordings === undefined) {
       return;
     }
     hydratedRef.current = true;
     const stored = readStoredClips();
-    if (stored.length === 0 || !recordings) {
+    if (stored.length === 0) {
       return;
     }
-    const byId = new Map(recordings.map((row) => [row._id, row]));
-    const restored: EditorProjectClip[] = [];
-    for (const item of stored) {
-      const row = byId.get(item.recordingId as Id<"presentRecordings">);
-      if (!row) {
-        continue;
-      }
-      const sourceOffsetMs = Math.max(
-        0,
-        Math.min(Math.max(0, row.durationMs - 1), item.sourceOffsetMs ?? 0),
-      );
-      const maxDuration = Math.max(1, row.durationMs - sourceOffsetMs);
-      restored.push({
-        id: item.id,
-        type: EDITOR_CLIP_TYPE,
-        recordingId: row._id,
-        url: row.url,
-        posterUrl: row.posterUrl,
-        label: row.name?.trim() || "Recording",
-        durationMs: Math.max(
-          1,
-          Math.min(maxDuration, item.durationMs ?? maxDuration),
-        ),
-        sourceOffsetMs,
-        ...(item.laneId ? { laneId: item.laneId } : {}),
-        ...(typeof item.laneStartMs === "number"
-          ? { laneStartMs: item.laneStartMs }
-          : {}),
-        ...(item.transitionKind ? { transitionKind: item.transitionKind } : {}),
-        ...(item.blendMode ? { blendMode: item.blendMode } : {}),
-      });
-    }
+    const restored = restoreProjectClips(stored, recordings ?? null);
     if (restored.length > 0) {
       setClips(restored);
       setStackLaneIds((current) => {
-        const next = [...current];
-        for (const clip of restored) {
-          const laneId = clipLaneId(clip);
-          if (laneId === SEQUENCE_LANE_ID || next.includes(laneId)) {
-            continue;
-          }
-          if (next.length >= MAX_STACK_LANES) {
-            break;
-          }
-          next.push(laneId);
-        }
+        const next = stackLanesForClips(restored, current);
         if (next.length === current.length) {
           return current;
         }
@@ -349,7 +244,7 @@ export const JayrrEditorSession = ({ children }: { children: ReactNode }) => {
         return next;
       });
     }
-  }, [recordings]);
+  }, [canQuery, recordings]);
 
   const timeline = useMemo(() => buildEditorTimeline(clips), [clips]);
   const { currentTimeMs, playing, play, pause, stop, seek, togglePlay } =
@@ -378,19 +273,80 @@ export const JayrrEditorSession = ({ children }: { children: ReactNode }) => {
 
   const persist = useCallback((next: EditorProjectClip[]) => {
     const frozen = withFrozenStarts(next);
+    if (!skipHistoryRef.current) {
+      const previous = cloneEditorSnapshot(
+        clipsRef.current,
+        stackLaneIdsRef.current,
+      );
+      const upcoming = cloneEditorSnapshot(frozen, stackLaneIdsRef.current);
+      if (!editorSnapshotsEqual(previous, upcoming)) {
+        undoStackRef.current = [...undoStackRef.current, previous].slice(
+          -EDITOR_HISTORY_LIMIT,
+        );
+        redoStackRef.current = [];
+      }
+    }
+    clipsRef.current = frozen;
     setClips(frozen);
     writeStoredClips(frozen);
   }, []);
 
+  const applyHistorySnapshot = useCallback(
+    (snapshot: EditorHistorySnapshot) => {
+      skipHistoryRef.current = true;
+      clipsRef.current = snapshot.clips;
+      stackLaneIdsRef.current = snapshot.stackLaneIds;
+      setClips(snapshot.clips);
+      writeStoredClips(snapshot.clips);
+      setStackLaneIds(snapshot.stackLaneIds);
+      writeStoredStackLanes(snapshot.stackLaneIds);
+      skipHistoryRef.current = false;
+    },
+    [],
+  );
+
+  const undo = useCallback(() => {
+    const previous = undoStackRef.current.at(-1);
+    if (!previous) {
+      return false;
+    }
+    undoStackRef.current = undoStackRef.current.slice(0, -1);
+    redoStackRef.current = [
+      ...redoStackRef.current,
+      cloneEditorSnapshot(clipsRef.current, stackLaneIdsRef.current),
+    ].slice(-EDITOR_HISTORY_LIMIT);
+    applyHistorySnapshot(previous);
+    return true;
+  }, [applyHistorySnapshot]);
+
+  const redo = useCallback(() => {
+    const next = redoStackRef.current.at(-1);
+    if (!next) {
+      return false;
+    }
+    redoStackRef.current = redoStackRef.current.slice(0, -1);
+    undoStackRef.current = [
+      ...undoStackRef.current,
+      cloneEditorSnapshot(clipsRef.current, stackLaneIdsRef.current),
+    ].slice(-EDITOR_HISTORY_LIMIT);
+    applyHistorySnapshot(next);
+    return true;
+  }, [applyHistorySnapshot]);
+
   const addStackLane = useCallback(() => {
-    setStackLaneIds((current) => {
-      if (current.length >= MAX_STACK_LANES) {
-        return current;
-      }
-      const next = [...current, newEditorLaneId()];
-      writeStoredStackLanes(next);
-      return next;
-    });
+    const current = stackLaneIdsRef.current;
+    if (current.length >= MAX_STACK_LANES) {
+      return;
+    }
+    const previous = cloneEditorSnapshot(clipsRef.current, current);
+    const next = [...current, newEditorLaneId()];
+    undoStackRef.current = [...undoStackRef.current, previous].slice(
+      -EDITOR_HISTORY_LIMIT,
+    );
+    redoStackRef.current = [];
+    stackLaneIdsRef.current = next;
+    setStackLaneIds(next);
+    writeStoredStackLanes(next);
   }, []);
 
   const removeStackLane = useCallback(
@@ -400,6 +356,7 @@ export const JayrrEditorSession = ({ children }: { children: ReactNode }) => {
         return;
       }
       persist(next.clips);
+      stackLaneIdsRef.current = next.stackLaneIds;
       setStackLaneIds(next.stackLaneIds);
       writeStoredStackLanes(next.stackLaneIds);
     },
@@ -493,9 +450,122 @@ export const JayrrEditorSession = ({ children }: { children: ReactNode }) => {
     [clips, persist],
   );
 
+  const addSound = useCallback(
+    (row: JayrrSoundPick) => {
+      const frozen = withFrozenStarts(clips);
+      const durationMs = Math.max(
+        1,
+        Math.round(
+          (row.durationSec && row.durationSec > 0 ? row.durationSec : 1) * 1000,
+        ),
+      );
+      const next: EditorProjectClip = {
+        id: newEditorClipId(),
+        type: EDITOR_SOUND_TYPE,
+        soundId: row.id,
+        path: row.path,
+        url: row.url || jayrrLocalSoundUrl(row.path),
+        label: row.name.trim() || "Sound",
+        durationMs,
+        laneId: SEQUENCE_LANE_ID,
+        laneStartMs: sequenceEndMs(frozen),
+      };
+      persist([...frozen, next]);
+      return next.id;
+    },
+    [clips, persist],
+  );
+
+  const separateAudio = useCallback(
+    (clipIds: readonly string[]) => {
+      const result = separateClipsAudio(clips, clipIds, stackLaneIds);
+      if (!result) {
+        return [];
+      }
+      persist(result.clips);
+      if (
+        stackLaneIdsRef.current.length !== result.stackLaneIds.length ||
+        stackLaneIdsRef.current.some(
+          (id, index) => id !== result.stackLaneIds[index],
+        )
+      ) {
+        stackLaneIdsRef.current = result.stackLaneIds;
+        setStackLaneIds(result.stackLaneIds);
+        writeStoredStackLanes(result.stackLaneIds);
+      }
+      return result.audioIds;
+    },
+    [clips, persist, stackLaneIds],
+  );
+
+  const returnAudio = useCallback(
+    (clipIds: readonly string[]) => {
+      const result = returnClipsAudio(clips, clipIds);
+      if (!result) {
+        return [];
+      }
+      persist(result.clips);
+      return result.videoIds;
+    },
+    [clips, persist],
+  );
+
+  const applyRestored = useCallback(
+    (restored: EditorProjectClip[], stackLanes: readonly string[]) => {
+      persist(restored);
+      const nextLanes = stackLanesForClips(restored, stackLanes);
+      stackLaneIdsRef.current = nextLanes;
+      setStackLaneIds(nextLanes);
+      writeStoredStackLanes(nextLanes);
+      stop();
+    },
+    [persist, stop],
+  );
+
+  const loadProject = useCallback(
+    async (projectId: Id<"editorProjects">) => {
+      if (!convexClient) {
+        throw new Error("Sign in to load projects.");
+      }
+      const project = await convexClient.query(api.editorProjects.get, {
+        projectId,
+      });
+      if (!project) {
+        throw new Error("Project not found");
+      }
+      let clipsParsed: unknown = [];
+      let lanesParsed: unknown = [];
+      try {
+        clipsParsed = JSON.parse(project.clipsJson);
+        lanesParsed = JSON.parse(project.stackLanesJson);
+      } catch {
+        throw new Error("Project data is invalid");
+      }
+      const stored = parseStoredEditorClips(clipsParsed);
+      const recordingIds = recordingIdsFromStored(stored);
+      const rows =
+        recordingIds.length > 0
+          ? await convexClient.query(api.presentRecordings.getMany, {
+              recordingIds,
+            })
+          : [];
+      const restored = restoreProjectClips(stored, rows);
+      if (restored.length === 0 && stored.length > 0) {
+        throw new Error("Could not restore clips from this project.");
+      }
+      applyRestored(restored, parseStoredStackLanes(lanesParsed));
+      apiExcal?.setToast({
+        message: `Loaded "${project.name}".`,
+        closable: true,
+      });
+    },
+    [apiExcal, applyRestored],
+  );
+
+  const hasVideo = clips.some(isEditorVideoClip);
   const disabled =
     (timeline.sequence.length === 0 && timeline.overlays.length === 0) ||
-    !previewElementId;
+    (hasVideo && !previewElementId);
 
   const value = useMemo(
     (): EditorSessionValue => ({
@@ -521,11 +591,22 @@ export const JayrrEditorSession = ({ children }: { children: ReactNode }) => {
       clearPreviewLink,
       focusPreview,
       addRecording,
+      addSound,
+      separateAudio,
+      returnAudio,
+      loadProject,
+      undo,
+      redo,
       disabled,
     }),
     [
       addRecording,
+      addSound,
+      separateAudio,
+      returnAudio,
       addStackLane,
+      redo,
+      undo,
       canQuery,
       clearPreviewLink,
       clips,
@@ -534,6 +615,7 @@ export const JayrrEditorSession = ({ children }: { children: ReactNode }) => {
       disabled,
       focusPreview,
       linkSelected,
+      loadProject,
       pause,
       persist,
       placePreview,

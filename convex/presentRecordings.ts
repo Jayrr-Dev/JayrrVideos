@@ -114,6 +114,30 @@ export const list = query({
   },
 });
 
+export const getMany = query({
+  args: {
+    recordingIds: v.array(v.id("presentRecordings")),
+  },
+  returns: v.array(recordingRow),
+  handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
+    const rows = [];
+    const seen = new Set<string>();
+    for (const recordingId of args.recordingIds.slice(0, 80)) {
+      if (seen.has(recordingId)) {
+        continue;
+      }
+      seen.add(recordingId);
+      const row = await ctx.db.get(recordingId);
+      if (!row || row.userId !== user._id) {
+        continue;
+      }
+      rows.push(mapRecording(row));
+    }
+    return rows;
+  },
+});
+
 /** Recent recordings across all folders — for the video editor picker. */
 export const listRecent = query({
   args: {

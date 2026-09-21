@@ -94,7 +94,7 @@ const applyAudioToVideo = (
   audio: EditorPreviewAudio,
 ) => {
   video.volume = audio.volume;
-  video.muted = audio.muted;
+  video.muted = audio.muted || video.dataset.jayrrClipMuted === "1";
 };
 
 const eachRegisteredVideo = (visit: (video: HTMLVideoElement) => void) => {

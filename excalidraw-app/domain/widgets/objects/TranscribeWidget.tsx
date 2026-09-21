@@ -439,7 +439,6 @@ const JevCardHeader = ({
   ariaLabel,
   onToggle,
   container,
-  inlineView = true,
   children,
 }: {
   label: string;
@@ -447,7 +446,6 @@ const JevCardHeader = ({
   ariaLabel: string;
   onToggle: () => void;
   container: HTMLElement | null;
-  inlineView?: boolean;
   children: ReactNode;
 }) => (
   <>
@@ -466,9 +464,9 @@ const JevCardHeader = ({
           </Popover.Trigger>
           <Popover.Portal container={container ?? undefined}>
             <Popover.Content
-              side="bottom"
+              side="right"
               align="start"
-              sideOffset={6}
+              sideOffset={8}
               collisionPadding={8}
               className="jayrr-called-embed__legend"
             >
@@ -491,7 +489,6 @@ const JevCardHeader = ({
         <span className="jayrr-called-embed__knob" />
       </button>
     </div>
-    {pressed ? (inlineView ? children : null) : null}
   </>
 );
 
@@ -1700,7 +1697,6 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
               pressed={!!config.contextEnabled}
               ariaLabel="Show conversation topic view"
               container={rootRef.current}
-              inlineView={false}
               onToggle={() =>
                 applyConfig(
                   { ...config, contextEnabled: !config.contextEnabled },
@@ -1824,7 +1820,7 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
                 applyConfig(next, true);
               }}
             >
-              <div className="jayrr-called-embed__bands jayrr-called-embed__bands--hype">
+              <div className="jayrr-called-embed__bands jayrr-called-embed__bands--online">
                 {ONLINE_BANDS.map((band) => (
                   <span
                     key={band.id}

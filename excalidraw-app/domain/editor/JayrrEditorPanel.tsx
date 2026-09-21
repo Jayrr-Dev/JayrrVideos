@@ -1,28 +1,42 @@
+import { DEFAULT_SIDEBAR, KEYS, matchKey } from "@excalidraw/common";
+import { useExcalidrawAPI } from "@excalidraw/excalidraw";
 import {
+  checkIcon,
   helpIcon,
   settingsIcon,
 } from "@excalidraw/excalidraw/components/icons";
+import { useMutation } from "convex/react";
 import { ContextMenu, Popover } from "radix-ui";
 import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type KeyboardEvent,
+  type MouseEvent,
 } from "react";
 
+import { appJotaiStore } from "../../app-jotai";
 import { FilledButton, Island, Tooltip } from "../../components/ui/editor";
+import { JayrrSoundLibraryDialog } from "../../components/ui/JayrrSoundLibraryDialog";
+import { api } from "../../convexClient";
+import { docsViewAtom, persistDocsView } from "../../present/docsView";
+import { JAYRR_RECORDINGS_TAB } from "../../present/JayrrPresentRecordingsPanel";
 
 import "../../components/ui/JayrrLibraryMenu.scss";
 
 import {
   canCutAtTime,
   clipAtTimeAcrossLanes,
-  EDITOR_CLIP_TYPE,
   EDITOR_CUT_MIN_MS,
+  EDITOR_PX_PER_SECOND,
+  EDITOR_PX_PER_SECOND_OPTIONS,
   editorLanes,
   formatEditorClock,
   getMergeableClips,
+  isEditorAudioClip,
+  isEditorVideoClip,
   mergeProjectClips,
   moveEditorClip,
   newEditorClipId,
@@ -34,8 +48,10 @@ import {
   type EditorTransitionKind,
 } from "./buildEditorTimeline";
 import { findEditorTargetVideo } from "./editorPreviewModel";
+import { clipsToStoredEditor } from "./editorProjectStore";
 import { JayrrEditorAddRecordingDialog } from "./JayrrEditorAddRecordingDialog";
 import { JayrrEditorBlendModeDialog } from "./JayrrEditorBlendModeDialog";
+import { JayrrEditorSaveProjectDialog } from "./JayrrEditorSaveProjectDialog";
 import { useJayrrEditorSession } from "./JayrrEditorSession";
 import { JayrrEditorTimeline } from "./JayrrEditorTimeline";
 import { JayrrEditorVolumeControl } from "./JayrrEditorVolumeControl";
@@ -46,6 +62,15 @@ export const JAYRR_EDITOR_TAB = "jayrrEditor";
 
 const SETTINGS_INFO =
   "Place or link a canvas box for timeline playback. Volume here is the preview loudness.";
+
+const defaultProjectName = () => {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  const hours = String(now.getHours()).padStart(2, "0");
+  const minutes = String(now.getMinutes()).padStart(2, "0");
+  return `Project ${month}-${day} ${hours}:${minutes}`;
+};
 
 export const editorTabIcon = (
   <svg aria-hidden="true" focusable="false" viewBox="0 0 20 20">
@@ -70,6 +95,33 @@ export const editorTabIcon = (
   </svg>
 );
 
+const PlayGlyph = (
+  <svg aria-hidden="true" focusable="false" viewBox="0 0 20 20">
+    <path d="M6.2 3.8v12.4L16.4 10Z" fill="currentColor" />
+  </svg>
+);
+
+const PauseGlyph = (
+  <svg aria-hidden="true" focusable="false" viewBox="0 0 20 20">
+    <rect
+      x="4.4"
+      y="3.6"
+      width="4"
+      height="12.8"
+      rx="0.8"
+      fill="currentColor"
+    />
+    <rect
+      x="11.6"
+      y="3.6"
+      width="4"
+      height="12.8"
+      rx="0.8"
+      fill="currentColor"
+    />
+  </svg>
+);
+
 export const JayrrEditorPanel = () => {
   const {
     container,
@@ -82,11 +134,9 @@ export const JayrrEditorPanel = () => {
     timeline,
     currentTimeMs,
     playing,
-    play,
-    pause,
     stop,
-    seek,
     togglePlay,
+    seek,
     previewElementId,
     selectedLinkable,
     placePreview,
@@ -94,12 +144,23 @@ export const JayrrEditorPanel = () => {
     clearPreviewLink,
     focusPreview,
     addRecording,
+    addSound,
+    separateAudio,
+    returnAudio,
+    undo,
+    redo,
     disabled,
   } = useJayrrEditorSession();
+  const excalidrawAPI = useExcalidrawAPI();
+  const saveProject = useMutation(api.editorProjects.save);
 
   const [zoomMode, setZoomMode] = useState<"fit" | "fixed">("fit");
+  const [pxPerSecond, setPxPerSecond] = useState(EDITOR_PX_PER_SECOND);
   const [selectedClipIds, setSelectedClipIds] = useState<string[]>([]);
   const [addRecordingOpen, setAddRecordingOpen] = useState(false);
+  const [addSoundOpen, setAddSoundOpen] = useState(false);
+  const [saveOpen, setSaveOpen] = useState(false);
+  const [saveBusy, setSaveBusy] = useState(false);
   const [blendPicker, setBlendPicker] = useState<{
     clipIds: readonly string[];
     blendMode: EditorBlendMode;
@@ -148,6 +209,48 @@ export const JayrrEditorPanel = () => {
     [clips, selectedIdSet],
   );
   const canMerge = Boolean(mergeable);
+  const separateTargets = useMemo(() => {
+    const selected = clips.filter((clip) => {
+      if (!selectedIdSet.has(clip.id) || !isEditorVideoClip(clip)) {
+        return false;
+      }
+      return !clip.muted;
+    });
+    if (selected.length > 0) {
+      return selected;
+    }
+    if (
+      playheadClip &&
+      isEditorVideoClip(playheadClip) &&
+      !playheadClip.muted
+    ) {
+      return [playheadClip];
+    }
+    return [];
+  }, [clips, playheadClip, selectedIdSet]);
+  const canSeparateAudio = separateTargets.length > 0;
+  const returnTargets = useMemo(() => {
+    const selected = clips.filter((clip) => {
+      if (!selectedIdSet.has(clip.id)) {
+        return false;
+      }
+      if (isEditorAudioClip(clip)) {
+        return true;
+      }
+      return isEditorVideoClip(clip) && clip.muted === true;
+    });
+    if (selected.length > 0) {
+      return selected;
+    }
+    if (playheadClip && isEditorAudioClip(playheadClip)) {
+      return [playheadClip];
+    }
+    if (playheadClip && isEditorVideoClip(playheadClip) && playheadClip.muted) {
+      return [playheadClip];
+    }
+    return [];
+  }, [clips, playheadClip, selectedIdSet]);
+  const canReturnAudio = returnTargets.length > 0;
 
   const mergeSelected = useCallback(() => {
     const group = getMergeableClips(clips, selectedIdSet);
@@ -186,30 +289,23 @@ export const JayrrEditorPanel = () => {
     }
     const sourceOffsetMs = clip.sourceOffsetMs ?? 0;
     const startMs = clip.laneStartMs ?? clip.startMs;
+    const { startMs: _laidStart, ...projectClip } = clip;
     const left: EditorProjectClip = {
-      id: clip.id,
-      type: EDITOR_CLIP_TYPE,
-      recordingId: clip.recordingId,
-      url: clip.url,
-      posterUrl: clip.posterUrl,
-      label: clip.label,
+      ...projectClip,
       durationMs: offsetInClip,
       sourceOffsetMs,
-      laneId: clip.laneId,
       laneStartMs: startMs,
-      ...(clip.transitionKind ? { transitionKind: clip.transitionKind } : {}),
-      ...(clip.blendMode ? { blendMode: clip.blendMode } : {}),
     };
+    const {
+      transitionKind: _transitionKind,
+      blendMode: _blendMode,
+      ...rightBase
+    } = projectClip;
     const right: EditorProjectClip = {
+      ...rightBase,
       id: newEditorClipId(),
-      type: EDITOR_CLIP_TYPE,
-      recordingId: clip.recordingId,
-      url: clip.url,
-      posterUrl: clip.posterUrl,
-      label: clip.label,
       durationMs: clip.durationMs - offsetInClip,
       sourceOffsetMs: sourceOffsetMs + offsetInClip,
-      laneId: clip.laneId,
       laneStartMs: startMs + offsetInClip,
     };
     const index = clips.findIndex((item) => item.id === clip.id);
@@ -225,6 +321,25 @@ export const JayrrEditorPanel = () => {
     persist(next);
     setSelectedClipIds([left.id, right.id]);
   }, [clips, currentTimeMs, lanes, persist, selectedIdSet]);
+
+  const separateSelectedAudio = useCallback(() => {
+    if (separateTargets.length === 0) {
+      return;
+    }
+    const audioIds = separateAudio(separateTargets.map((clip) => clip.id));
+    if (audioIds.length === 0) {
+      return;
+    }
+    setSelectedClipIds(audioIds);
+  }, [separateAudio, separateTargets]);
+
+  const returnSelectedAudio = useCallback(() => {
+    if (returnTargets.length === 0) {
+      return;
+    }
+    const videoIds = returnAudio(returnTargets.map((clip) => clip.id));
+    setSelectedClipIds(videoIds.length > 0 ? videoIds : []);
+  }, [returnAudio, returnTargets]);
 
   const selectClip = useCallback(
     (clip: EditorClip, opts?: { toggle?: boolean }) => {
@@ -275,6 +390,80 @@ export const JayrrEditorPanel = () => {
     [clips, persist],
   );
 
+  const playClickTimer = useRef<number | null>(null);
+
+  useEffect(
+    () => () => {
+      if (playClickTimer.current != null) {
+        window.clearTimeout(playClickTimer.current);
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    const doc = container?.ownerDocument ?? document;
+    const onEditorHistoryKey = (event: globalThis.KeyboardEvent) => {
+      const sidebar = excalidrawAPI?.getAppState().openSidebar;
+      if (
+        sidebar?.name !== DEFAULT_SIDEBAR.name ||
+        sidebar.tab !== JAYRR_EDITOR_TAB
+      ) {
+        return;
+      }
+      const target = event.target;
+      if (target instanceof HTMLElement) {
+        const tag = target.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA" || target.isContentEditable) {
+          return;
+        }
+      }
+      if (!event[KEYS.CTRL_OR_CMD] && !event.ctrlKey) {
+        return;
+      }
+      const undoKey = matchKey(event, KEYS.Z) && !event.shiftKey;
+      const redoKey =
+        matchKey(event, KEYS.Y) || (matchKey(event, KEYS.Z) && event.shiftKey);
+      if (undoKey) {
+        if (!undo()) {
+          return;
+        }
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        return;
+      }
+      if (redoKey) {
+        if (!redo()) {
+          return;
+        }
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }
+    };
+    doc.defaultView?.addEventListener("keydown", onEditorHistoryKey, true);
+    return () => {
+      doc.defaultView?.removeEventListener("keydown", onEditorHistoryKey, true);
+    };
+  }, [container, excalidrawAPI, redo, undo]);
+
+  const onTransportClick = useCallback(
+    (event: MouseEvent) => {
+      if (event.detail >= 2) {
+        if (playClickTimer.current != null) {
+          window.clearTimeout(playClickTimer.current);
+          playClickTimer.current = null;
+        }
+        stop();
+        return;
+      }
+      playClickTimer.current = window.setTimeout(() => {
+        playClickTimer.current = null;
+        togglePlay();
+      }, 280);
+    },
+    [stop, togglePlay],
+  );
+
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (disabled) {
       return;
@@ -298,37 +487,41 @@ export const JayrrEditorPanel = () => {
     >
       <div className="jayrr-library__header">
         <div className="jayrr-library__title">Video editor</div>
-        <EditorSettingsPopover
-          container={container}
-          canLinkSelected={Boolean(selectedLinkable)}
-          hasPreview={Boolean(previewElementId)}
-          previewElementId={previewElementId}
-          onPlace={placePreview}
-          onLinkSelected={linkSelected}
-          onClear={clearPreviewLink}
-          onFocus={focusPreview}
-        />
+        <div className="jayrr-editor-panel__header-actions">
+          <button
+            type="button"
+            className="jayrr-editor-panel__save"
+            disabled={!canQuery || clips.length === 0 || saveBusy}
+            onClick={() => setSaveOpen(true)}
+          >
+            Save
+          </button>
+          <EditorSettingsPopover
+            container={container}
+            canLinkSelected={Boolean(selectedLinkable)}
+            hasPreview={Boolean(previewElementId)}
+            previewElementId={previewElementId}
+            onPlace={placePreview}
+            onLinkSelected={linkSelected}
+            onClear={clearPreviewLink}
+            onFocus={focusPreview}
+          />
+        </div>
       </div>
       <div className="jayrr-editor-panel__body">
         <div className="jayrr-editor-panel__transport">
           {!disabled ? (
             <FilledButton
               color="primary"
-              label={playing ? "Pause" : "Play"}
-              onClick={() => (playing ? pause() : play())}
-            >
-              {playing ? "Pause" : "Play"}
-            </FilledButton>
-          ) : null}
-          {timeline.sequence.length > 0 || timeline.overlays.length > 0 ? (
-            <FilledButton
-              color="muted"
-              variant="outlined"
-              label="Stop"
-              onClick={stop}
-            >
-              Stop
-            </FilledButton>
+              variant="icon"
+              label={
+                playing
+                  ? "Pause. Double-click to reset"
+                  : "Play. Double-click to reset"
+              }
+              icon={playing ? PauseGlyph : PlayGlyph}
+              onClick={onTransportClick}
+            />
           ) : null}
           <span className="jayrr-editor-panel__clock">
             {formatEditorClock(currentTimeMs)} /{" "}
@@ -348,15 +541,49 @@ export const JayrrEditorPanel = () => {
             >
               Fit
             </button>
-            <button
-              type="button"
-              className={`jayrr-editor-panel__zoom-btn${
-                zoomMode === "fixed" ? " is-active" : ""
-              }`}
-              onClick={() => setZoomMode("fixed")}
-            >
-              40px/s
-            </button>
+            <ContextMenu.Root modal={false}>
+              <ContextMenu.Trigger asChild>
+                <button
+                  type="button"
+                  className={`jayrr-editor-panel__zoom-btn${
+                    zoomMode === "fixed" ? " is-active" : ""
+                  }`}
+                  title="Right-click to choose scale"
+                  onClick={() => setZoomMode("fixed")}
+                >
+                  {pxPerSecond}px/s
+                </button>
+              </ContextMenu.Trigger>
+              <ContextMenu.Portal container={container}>
+                <ContextMenu.Content
+                  className="jayrr-editor-menu"
+                  collisionPadding={8}
+                  data-prevent-outside-click
+                  style={{ maxHeight: "none" }}
+                >
+                  {EDITOR_PX_PER_SECOND_OPTIONS.map((option) => {
+                    const selected = option === pxPerSecond;
+                    return (
+                      <ContextMenu.Item
+                        key={option}
+                        className={`jayrr-editor-menu__item${
+                          selected ? " is-active" : ""
+                        }`}
+                        onSelect={() => {
+                          setPxPerSecond(option);
+                          setZoomMode("fixed");
+                        }}
+                      >
+                        <span>{option}px/s</span>
+                        <span className="jayrr-editor-menu__check" aria-hidden>
+                          {selected ? checkIcon : null}
+                        </span>
+                      </ContextMenu.Item>
+                    );
+                  })}
+                </ContextMenu.Content>
+              </ContextMenu.Portal>
+            </ContextMenu.Root>
           </div>
         </div>
 
@@ -369,6 +596,7 @@ export const JayrrEditorPanel = () => {
                 selectedClipIds={selectedIdSet}
                 playheadClipId={playheadClipId}
                 zoomMode={zoomMode}
+                pxPerSecond={pxPerSecond}
                 stackLaneIds={stackLaneIds}
                 onSeek={seek}
                 onSelectClip={selectClip}
@@ -405,12 +633,34 @@ export const JayrrEditorPanel = () => {
               >
                 Add recording
               </ContextMenu.Item>
+              <ContextMenu.Item
+                className="jayrr-editor-menu__item"
+                onSelect={() => setAddSoundOpen(true)}
+              >
+                Add sound
+              </ContextMenu.Item>
               {canCut ? (
                 <ContextMenu.Item
                   className="jayrr-editor-menu__item"
                   onSelect={cutAtPlayhead}
                 >
                   Cut
+                </ContextMenu.Item>
+              ) : null}
+              {canSeparateAudio ? (
+                <ContextMenu.Item
+                  className="jayrr-editor-menu__item"
+                  onSelect={separateSelectedAudio}
+                >
+                  Separate Audio
+                </ContextMenu.Item>
+              ) : null}
+              {canReturnAudio ? (
+                <ContextMenu.Item
+                  className="jayrr-editor-menu__item"
+                  onSelect={returnSelectedAudio}
+                >
+                  Return Audio
                 </ContextMenu.Item>
               ) : null}
               {canMerge ? (
@@ -433,6 +683,56 @@ export const JayrrEditorPanel = () => {
           </ContextMenu.Portal>
         </ContextMenu.Root>
       </div>
+      {saveOpen ? (
+        <JayrrEditorSaveProjectDialog
+          canQuery={canQuery}
+          defaultName={defaultProjectName()}
+          saving={saveBusy}
+          onClose={() => {
+            if (!saveBusy) {
+              setSaveOpen(false);
+            }
+          }}
+          onSave={async ({ name, folderId }) => {
+            setSaveBusy(true);
+            try {
+              await saveProject({
+                name,
+                folderId: folderId ?? undefined,
+                clipsJson: JSON.stringify(clipsToStoredEditor(clips)),
+                stackLanesJson: JSON.stringify(stackLaneIds),
+                durationMs: timeline.totalMs,
+                clipCount: clips.length,
+              });
+              persistDocsView("project");
+              appJotaiStore.set(docsViewAtom, "project");
+              setSaveOpen(false);
+              excalidrawAPI?.setToast({
+                message: "Project saved.",
+                closable: true,
+              });
+              excalidrawAPI?.updateScene({
+                appState: {
+                  openSidebar: {
+                    name: DEFAULT_SIDEBAR.name,
+                    tab: JAYRR_RECORDINGS_TAB,
+                  },
+                },
+              });
+            } catch (error) {
+              excalidrawAPI?.setToast({
+                message:
+                  error instanceof Error
+                    ? error.message
+                    : "Could not save project.",
+                closable: true,
+              });
+            } finally {
+              setSaveBusy(false);
+            }
+          }}
+        />
+      ) : null}
       {addRecordingOpen ? (
         <JayrrEditorAddRecordingDialog
           canQuery={canQuery}
@@ -441,6 +741,19 @@ export const JayrrEditorPanel = () => {
             const clipId = addRecording(row);
             setSelectedClipIds([clipId]);
             setAddRecordingOpen(false);
+          }}
+        />
+      ) : null}
+      {addSoundOpen ? (
+        <JayrrSoundLibraryDialog
+          onClose={() => setAddSoundOpen(false)}
+          onSelect={(row) => {
+            if (!row) {
+              return;
+            }
+            const clipId = addSound(row);
+            setSelectedClipIds([clipId]);
+            setAddSoundOpen(false);
           }}
         />
       ) : null}

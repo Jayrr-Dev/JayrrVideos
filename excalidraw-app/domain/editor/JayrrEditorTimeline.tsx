@@ -38,7 +38,8 @@ import {
   collectLaneOverlaps,
   collectOverlapBands,
   collectSnapPointsMs,
-  EDITOR_PX_PER_SECOND,
+  EDITOR_AUDIO_TYPE,
+  EDITOR_SOUND_TYPE,
   EDITOR_TRANSITION_OPTIONS,
   formatEditorClock,
   MAX_STACK_LANES,
@@ -77,6 +78,7 @@ type JayrrEditorTimelineProps = {
   selectedClipIds: ReadonlySet<string>;
   playheadClipId: string | null;
   zoomMode: ZoomMode;
+  pxPerSecond: number;
   stackLaneIds: readonly string[];
   disabled?: boolean;
   emptyAction?: ReactNode;
@@ -136,6 +138,7 @@ export const JayrrEditorTimeline = ({
   selectedClipIds,
   playheadClipId,
   zoomMode,
+  pxPerSecond,
   stackLaneIds,
   disabled,
   emptyAction,
@@ -240,11 +243,11 @@ export const JayrrEditorTimeline = ({
 
   const pxPerMs = useMemo(() => {
     if (zoomMode === "fixed") {
-      return EDITOR_PX_PER_SECOND / 1000;
+      return pxPerSecond / 1000;
     }
     const total = Math.max(timeline.totalMs, 1);
     return Math.max(0.02, (bodyHeight - TRACK_PAD_PX * 2) / total);
-  }, [bodyHeight, timeline.totalMs, zoomMode]);
+  }, [bodyHeight, pxPerSecond, timeline.totalMs, zoomMode]);
 
   const snapThresholdMs = SNAP_THRESHOLD_PX / pxPerMs;
 
@@ -583,14 +586,14 @@ export const JayrrEditorTimeline = ({
           Time
         </div>
         <LaneHeader
-          label="Sequence"
+          label="1"
           addDisabled={!canAddStackLane}
           onAdd={onAddStackLane}
         />
         {stackLaneIds.map((laneId, index) => (
           <LaneHeader
             key={laneId}
-            label={`Stack ${index + 1}`}
+            label={`${index + 2}`}
             hovered={hoveredStackId === laneId}
             onHover={(inside) => setHoveredStackId(inside ? laneId : null)}
             onRemove={() => onRemoveStackLane(laneId)}
@@ -785,8 +788,8 @@ const LaneHeader = ({
       <button
         type="button"
         className="jayrr-editor-timeline__add-lane"
-        aria-label="Add stack column"
-        title="Add stack column"
+        aria-label="Add column"
+        title="Add column"
         disabled={addDisabled}
         onClick={(event) => {
           event.stopPropagation();
@@ -800,7 +803,7 @@ const LaneHeader = ({
       <button
         type="button"
         className="jayrr-editor-timeline__remove-lane"
-        aria-label="Remove stack column"
+        aria-label="Remove column"
         title="Move clips left and remove column"
         onClick={(event) => {
           event.stopPropagation();
@@ -867,6 +870,7 @@ const OverlapHandle = ({
   const toIndex = Math.max(...indexes);
   const top = TRACK_PAD_PX + msToPx(band.joinMs, pxPerMs);
   const gridColumn = `${fromIndex + 2} / ${toIndex + 3}`;
+  const joinClock = formatEditorClock(band.joinMs);
   return (
     <DropdownMenu.Root modal={false} open={open} onOpenChange={setOpen}>
       <DropdownMenu.Trigger asChild>
@@ -874,8 +878,7 @@ const OverlapHandle = ({
           type="button"
           className="jayrr-editor-timeline__overlap"
           style={{ top, gridColumn }}
-          aria-label="Choose overlap transition"
-          title="Choose transition"
+          aria-label={`Choose overlap transition at ${joinClock}`}
           onPointerDown={(event) => event.stopPropagation()}
           onClick={(event) => event.stopPropagation()}
           onContextMenu={(event) => {
@@ -883,7 +886,11 @@ const OverlapHandle = ({
             event.stopPropagation();
             setOpen(true);
           }}
-        />
+        >
+          <span className="jayrr-editor-timeline__overlap-label" aria-hidden>
+            {joinClock}
+          </span>
+        </button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal container={container ?? undefined}>
         <DropdownMenu.Content
@@ -965,7 +972,7 @@ const useClipFilmstripFrames = (
   useEffect(() => {
     let cancelled = false;
     setFrames(null);
-    if (!clip.url || !ownerDocument) {
+    if (!clip.url || !ownerDocument || sliceCount < 1) {
       return;
     }
     void getClipFilmstrip({
@@ -1056,8 +1063,24 @@ const ClipFace = ({
   useLayoutEffect(() => {
     setOwnerDocument(innerRef.current?.ownerDocument ?? null);
   }, []);
-  const frames = useClipFilmstripFrames(clip, sliceCount, ownerDocument);
-  const slices = filmstripSources(sliceCount, frames, clip.posterUrl);
+  const isSound =
+    clip.type === EDITOR_SOUND_TYPE || clip.type === EDITOR_AUDIO_TYPE;
+  const frames = useClipFilmstripFrames(
+    clip,
+    isSound ? 0 : sliceCount,
+    isSound ? null : ownerDocument,
+  );
+  const slices = isSound
+    ? []
+    : filmstripSources(
+        sliceCount,
+        frames,
+        clip.type === "clip" ? clip.posterUrl : null,
+
+        sliceCount,
+        frames,
+        clip.type === "clip" ? clip.posterUrl : null,
+      );
   const top = packed ? undefined : TRACK_PAD_PX + msToPx(clip.startMs, pxPerMs);
   const mergedStyle: CSSProperties = {
     height: heightPx,
@@ -1070,7 +1093,7 @@ const ClipFace = ({
     <button
       ref={setRefs}
       type="button"
-      className={`jayrr-editor-clip jayrr-editor-clip--clip${
+      className={`jayrr-editor-clip jayrr-editor-clip--${clip.type}${
         packed ? "" : " jayrr-editor-clip--overlay"
       }${selected ? " is-selected" : ""}${playhead ? " is-playhead" : ""}${
         dragging ? " is-dragging" : ""

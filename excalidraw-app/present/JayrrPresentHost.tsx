@@ -17,6 +17,7 @@ import { createPortal } from "react-dom";
 import type { NonDeletedExcalidrawElement } from "@excalidraw/element/types";
 
 import { JAYRR_AI_TAB, JayrrAiChat } from "../ai/JayrrAiChat";
+import { appJotaiStore } from "../app-jotai";
 import { TopErrorBoundary } from "../components/TopErrorBoundary";
 import {
   JAYRR_EDITOR_TAB,
@@ -40,15 +41,16 @@ import {
 import { JayrrCameraHost } from "../camera/JayrrCameraHost";
 import { JayrrFrameHost } from "../frame/JayrrFrameHost";
 
+import { JayrrDocsPanel } from "./JayrrDocsPanel";
 import { JayrrPresentCursor } from "./JayrrPresentCursor";
 import { JayrrPresentHud, JayrrPresentPanel } from "./JayrrPresentPanel";
 import {
   JAYRR_RECORDINGS_TAB,
-  JayrrPresentRecordingsPanel,
   recordingsTabIcon,
 } from "./JayrrPresentRecordingsPanel";
 import { JayrrPresentTranslationOverlay } from "./JayrrPresentTranslationOverlay";
 import { JAYRR_PRESENT_TAB } from "./buildPresentDeck";
+import { docsViewAtom, persistDocsView } from "./docsView";
 import {
   JAYRR_RECORDING_DRAG,
   insertPresentRecordingAt,
@@ -154,6 +156,8 @@ export const JayrrPresentHost = ({
         result.width,
         result.height,
       );
+      persistDocsView("record");
+      appJotaiStore.set(docsViewAtom, "record");
       api?.setToast({ message: "Recording saved.", closable: true });
       api?.updateScene({
         appState: {
@@ -353,8 +357,8 @@ export const JayrrPresentHost = ({
                 </Sidebar.TabTrigger>
                 <Sidebar.TabTrigger
                   tab={JAYRR_RECORDINGS_TAB}
-                  title="Recordings"
-                  aria-label="Recordings"
+                  title="Docs"
+                  aria-label="Docs"
                 >
                   {recordingsTabIcon}
                 </Sidebar.TabTrigger>
@@ -408,7 +412,7 @@ export const JayrrPresentHost = ({
               </Sidebar.Tab>
               <Sidebar.Tab tab={JAYRR_RECORDINGS_TAB}>
                 <TopErrorBoundary compact>
-                  <JayrrPresentRecordingsPanel uploading={uploading} />
+                  <JayrrDocsPanel uploading={uploading} />
                 </TopErrorBoundary>
               </Sidebar.Tab>
               <Sidebar.Tab tab={JAYRR_AI_TAB}>

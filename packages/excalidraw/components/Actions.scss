@@ -206,3 +206,25 @@
   --button-hover-bg: #363541;
   --button-bg: var(--color-surface-high);
 }
+
+.layers-context-menu {
+  background: var(--popup-bg-color);
+  border-radius: var(--border-radius-lg);
+  box-shadow: var(--shadow-island);
+  padding: 0.25rem;
+}
+
+.layers-context-menu-item {
+  font-size: 0.75rem;
+  padding: 0.375rem 0.625rem;
+  border-radius: var(--border-radius-md);
+  color: var(--text-primary-color);
+  cursor: pointer;
+  outline: none;
+  user-select: none;
+
+  &[data-highlighted],
+  &:not([data-disabled]):hover {
+    background: var(--button-hover-bg);
+  }
+}

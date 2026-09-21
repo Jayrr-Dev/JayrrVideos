@@ -154,20 +154,20 @@ export const ConversationIndicators = ({
           ))}
         </select>
       </label>
-      <div className="jayrr-called-embed__chips">
-        <span className="jayrr-called-embed__chip">
-          {!result || result.provisional
-            ? "Provisional"
-            : result.refined
-            ? "Refined"
-            : "Contextual"}
-        </span>
-        {result?.callbacks.map((id) => (
-          <span className="jayrr-called-embed__chip" key={id}>
-            ↩ {context.topics.find((topic) => topic.id === id)?.title ?? id}
-          </span>
-        ))}
-      </div>
+      {result && (!result.provisional || result.callbacks.length > 0) ? (
+        <div className="jayrr-called-embed__chips">
+          {result.provisional ? null : (
+            <span className="jayrr-called-embed__chip">
+              {result.refined ? "Refined" : "Contextual"}
+            </span>
+          )}
+          {result.callbacks.map((id) => (
+            <span className="jayrr-called-embed__chip" key={id}>
+              ↩ {context.topics.find((topic) => topic.id === id)?.title ?? id}
+            </span>
+          ))}
+        </div>
+      ) : null}
       {context.summaryError ? (
         <div className="jayrr-called-embed__hint">{context.summaryError}</div>
       ) : null}

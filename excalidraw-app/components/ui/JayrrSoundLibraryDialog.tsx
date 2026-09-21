@@ -36,6 +36,8 @@ export type JayrrSoundPick = {
   id: string;
   name: string;
   path: string;
+  durationSec?: number;
+  url?: string | null;
 };
 
 type JayrrSoundLibraryDialogProps = {
@@ -795,6 +797,8 @@ const JayrrSoundLibraryDialogConnected = ({
                             id: row._id,
                             name: row.name,
                             path: row.path,
+                            durationSec: row.durationSec,
+                            url: row.url,
                           });
                         }}
                       >

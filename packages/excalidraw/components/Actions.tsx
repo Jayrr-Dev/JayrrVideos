@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { Popover } from "radix-ui";
+import { ContextMenu, Popover } from "radix-ui";
 import { useRef } from "react";
 
 import { CLASSES } from "@excalidraw/common";
@@ -13,6 +13,12 @@ import type {
 } from "@excalidraw/element/types";
 
 import { actionToggleZenMode } from "../actions";
+import {
+  actionBringForward,
+  actionBringToFront,
+  actionSendBackward,
+  actionSendToBack,
+} from "../actions/actionZindex";
 
 import { t } from "../i18n";
 import { getTargetElements } from "../scene";
@@ -25,7 +31,7 @@ import { actionToggleViewMode } from "../actions/actionToggleViewMode";
 
 import "./Actions.scss";
 
-import { useExcalidrawContainer } from "./App";
+import { useExcalidrawActionManager, useExcalidrawContainer } from "./App";
 import { PropertiesPopover } from "./PropertiesPopover";
 import Stack from "./Stack";
 import { Tooltip } from "./Tooltip";
@@ -59,6 +65,26 @@ const PROPERTIES_CLASSES = clsx([
   "properties-content",
 ]);
 
+const LAYER_ACTIONS = [
+  actionSendToBack,
+  actionSendBackward,
+  actionBringForward,
+  actionBringToFront,
+] as const;
+
+const layerActionLabel = (name: typeof LAYER_ACTIONS[number]["name"]) => {
+  if (name === "sendToBack") {
+    return t("labels.sendToBack");
+  }
+  if (name === "sendBackward") {
+    return t("labels.sendBackward");
+  }
+  if (name === "bringForward") {
+    return t("labels.bringForward");
+  }
+  return t("labels.bringToFront");
+};
+
 /**
  * The "arrange" (z-order) fieldset, identical across every styles-panel layout.
  */
@@ -66,17 +92,43 @@ const LayersFieldset = ({
   renderAction,
 }: {
   renderAction: ActionManager["renderAction"];
-}) => (
-  <fieldset>
-    <legend>{t("labels.layers")}</legend>
-    <div className="buttonList">
-      {renderAction("sendToBack")}
-      {renderAction("sendBackward")}
-      {renderAction("bringForward")}
-      {renderAction("bringToFront")}
-    </div>
-  </fieldset>
-);
+}) => {
+  const { container } = useExcalidrawContainer();
+  const actionManager = useExcalidrawActionManager();
+
+  return (
+    <fieldset>
+      <legend>{t("labels.layers")}</legend>
+      <ContextMenu.Root>
+        <ContextMenu.Trigger asChild>
+          <div className="buttonList">
+            {renderAction("sendToBack")}
+            {renderAction("sendBackward")}
+            {renderAction("bringForward")}
+            {renderAction("bringToFront")}
+          </div>
+        </ContextMenu.Trigger>
+        <ContextMenu.Portal container={container}>
+          <ContextMenu.Content
+            className="layers-context-menu"
+            collisionPadding={8}
+            style={{ zIndex: "var(--zIndex-ui-styles-popup)" }}
+          >
+            {LAYER_ACTIONS.map((action) => (
+              <ContextMenu.Item
+                key={action.name}
+                className="layers-context-menu-item"
+                onSelect={() => actionManager.executeAction(action, "ui")}
+              >
+                {layerActionLabel(action.name)}
+              </ContextMenu.Item>
+            ))}
+          </ContextMenu.Content>
+        </ContextMenu.Portal>
+      </ContextMenu.Root>
+    </fieldset>
+  );
+};
 
 /**
  * The align + distribute fieldset, identical across every styles-panel layout.

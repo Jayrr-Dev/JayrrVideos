@@ -18,6 +18,30 @@
   .jayrr-present__title {
     margin: 0;
     font-size: 1rem;
+    min-width: 0;
+  }
+
+  .jayrr-docs__views {
+    margin-left: auto;
+    display: inline-flex;
+    gap: 0.25rem;
+    flex-shrink: 0;
+  }
+
+  .jayrr-docs__view-btn {
+    border: 1px solid var(--default-border-color);
+    background: var(--color-surface-low);
+    color: var(--text-primary-color);
+    border-radius: var(--border-radius-md);
+    font-size: 0.7rem;
+    padding: 0.2rem 0.5rem;
+    cursor: pointer;
+  }
+
+  .jayrr-docs__view-btn.is-active {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+    background: var(--color-surface-mid);
   }
 
   .jayrr-present__settings {
