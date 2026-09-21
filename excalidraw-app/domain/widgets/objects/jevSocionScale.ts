@@ -1,5 +1,7 @@
+import { JEV_SHARED_EVIDENCE } from "../../transcription/jevSharedState";
+
 const UTTERANCE_SCOPE =
-  "Judge only `utterance`. `previous_text` is recent talk before this line; use it to read fragments and replies, not as extra speech to type. Score the Model A ego this line uses, not an MBTI code and not a life diagnosis. Socionics j/p follows the leading function, not the extraverted one.";
+  `Judge only \`utterance\`. ${JEV_SHARED_EVIDENCE} Score the Model A ego this line uses, not an MBTI code and not a life diagnosis. Socionics j/p follows the leading function, not the extraverted one.`;
 
 export type SocionId =
   | "ILE"

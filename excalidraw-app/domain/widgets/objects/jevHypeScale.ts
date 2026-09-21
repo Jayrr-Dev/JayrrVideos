@@ -1,5 +1,6 @@
-const UTTERANCE_SCOPE =
-  "Judge only `utterance`. `previous_text` is recent talk before this line; use it to read fragments and replies, not as extra speech to score. Score how much this line would hold attention, not whether you personally like the speaker.";
+import { JEV_SHARED_EVIDENCE } from "../../transcription/jevSharedState";
+
+const UTTERANCE_SCOPE = `Judge only \`utterance\`. ${JEV_SHARED_EVIDENCE} Score how much this line would hold attention, not whether you personally like the speaker.`;
 
 export type HypeId =
   | "dull"

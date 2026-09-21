@@ -1,5 +1,6 @@
-const UTTERANCE_SCOPE =
-  "Score `utterance`. Use `previous_text`, when present, as the talk just before this line so fragments, answers, and continuations keep the right feeling. Do not copy emotions from `previous_text` unless this line still carries them.";
+import { JEV_SHARED_EVIDENCE } from "../../transcription/jevSharedState";
+
+const UTTERANCE_SCOPE = `Score \`utterance\`. ${JEV_SHARED_EVIDENCE} Do not copy emotions from another speaker or from earlier lines unless this line still carries them.`;
 
 export type EmotionTone =
   | "uncertain"

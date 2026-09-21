@@ -3,6 +3,7 @@ import { useCallback, useEffect, useReducer, useState } from "react";
 import { api, convexClient } from "../../convexClient";
 
 import { conversationFor } from "./conversationContext";
+import { debugTranscribe } from "./debugTranscribe";
 
 import type { JevQuestion } from "../../../convex/canvasAi/jevClient";
 import type { TopicMemory } from "./conversationContext";
@@ -65,6 +66,14 @@ export const useConversationContext = (
         throw new Error("Convex is not connected.");
       }
       const request = context.prepare(text, turnId);
+      debugTranscribe("context prepare", {
+        turnId: request.stamp.turnId,
+        requested: turnId,
+        revision: request.stamp.revision,
+        version: request.stamp.contextVersion,
+        ownsTopic: request.ownsTopic,
+        text: text.slice(0, 120),
+      });
       const started = Date.now();
       if (!questions.length && !request.questions.length) {
         return {
@@ -88,9 +97,21 @@ export const useConversationContext = (
           !context.current(response.stamp) ||
           request.stamp.contextVersion !== context.version
         ) {
+          debugTranscribe("context stale", {
+            turnId: request.stamp.turnId,
+            sentVersion: request.stamp.contextVersion,
+            nowVersion: context.version,
+            current: context.current(response.stamp),
+          });
           throw new Error("Stale conversation result");
         }
         const metadata = context.accept(request.stamp, response.result.answers);
+        debugTranscribe("context done", {
+          turnId: request.stamp.turnId,
+          topicId: metadata.topicId,
+          provisional: metadata.provisional,
+          latencyMs: Date.now() - started,
+        });
         return {
           ...response.result,
           metadata,

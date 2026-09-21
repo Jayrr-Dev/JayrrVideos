@@ -1,5 +1,7 @@
+import { JEV_SHARED_EVIDENCE } from "../../transcription/jevSharedState";
+
 const UTTERANCE_SCOPE =
-  "Judge only `utterance`. `previous_text` is recent talk before this line; use it to read fragments and replies, not as extra speech to score. Each trait is a spectrum, not a type. Score how this line behaves, not a life diagnosis.";
+  `Judge only \`utterance\`. ${JEV_SHARED_EVIDENCE} Each trait is a spectrum, not a type. Score how this line behaves, not a life diagnosis.`;
 
 export type BigFiveId = "O" | "C" | "E" | "A" | "N";
 

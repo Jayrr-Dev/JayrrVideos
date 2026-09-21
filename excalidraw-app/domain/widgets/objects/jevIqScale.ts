@@ -1,3 +1,5 @@
+import { JEV_SHARED_EVIDENCE } from "../../transcription/jevSharedState";
+
 export type IqShade =
   | "white"
   | "white2"
@@ -38,8 +40,7 @@ export type IqDimension = {
   levels: IqLevel[];
 };
 
-const UTTERANCE_SCOPE =
-  "Judge only `utterance`. If it has several sentences, score the most intellectually loaded complete sentence — not an average with filler, agreement, or small talk. `previous_text` is recent talk before this line; use it to read fragments and replies, not as extra speech to score.";
+const UTTERANCE_SCOPE = `Judge only \`utterance\`. If it has several sentences, score the most intellectually loaded complete sentence — not an average with filler, agreement, or small talk. ${JEV_SHARED_EVIDENCE}`;
 
 /**
  * Score intellectual speech in this utterance, not a running speaker mean.
@@ -214,11 +215,27 @@ const PREVIOUS_TEXT_CHARS = 800;
 export const buildIqState = (
   utterance: string,
   previousText: string | null,
+  extras?: {
+    speaker?: string;
+    speakerRecent?: string | null;
+    recentTurns?: string | null;
+  },
 ) => {
   const state: Record<string, string> = { utterance: utterance.trim() };
+  if (extras?.speaker) {
+    state.speaker = extras.speaker;
+  }
   const context = previousText?.trim() ?? "";
   if (context) {
     state.previous_text = context.slice(-PREVIOUS_TEXT_CHARS);
+  }
+  const speakerRecent = extras?.speakerRecent?.trim() ?? "";
+  if (speakerRecent) {
+    state.speaker_recent = speakerRecent.slice(-PREVIOUS_TEXT_CHARS);
+  }
+  const recentTurns = extras?.recentTurns?.trim() ?? "";
+  if (recentTurns) {
+    state.recent_turns = recentTurns.slice(-PREVIOUS_TEXT_CHARS);
   }
   return state;
 };
@@ -274,7 +291,9 @@ const IQ_MIN = 70;
 const IQ_MAX = 160;
 const IQ_TOP = IQ_BANDS.length - 1;
 
-export const averageIqComposite = (rows: readonly IqResult[]): number | null => {
+export const averageIqComposite = (
+  rows: readonly IqResult[],
+): number | null => {
   const substantive = rows.filter((row) => row.substantive);
   if (substantive.length === 0) {
     return null;

@@ -10,6 +10,7 @@ import { Dialog, Tooltip } from "../../components/ui/editor";
 import { Field, Input } from "../../components/ui/Field";
 import { api } from "../../convexClient";
 import { getOpenRecordingFolderId } from "../../present/openRecordingFolder";
+import { DEFAULT_EDITOR_PROJECT_NAME } from "./editorProjectStore";
 
 import "../../components/ui/JayrrLibraryMenu.scss";
 
@@ -20,7 +21,16 @@ import "./JayrrEditorAddRecordingDialog.scss";
 import type { Id } from "../../../convex/_generated/dataModel";
 
 const INFO =
-  "Plays the timeline once and saves a flattened video under Docs. Default name is Optimized video.";
+  "Plays the timeline once and saves a flattened video under Docs. Default name is the project name plus date.";
+
+const exportNameFromProject = (projectName: string) => {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  const year = String(now.getFullYear());
+  const trimmed = projectName.trim() || DEFAULT_EDITOR_PROJECT_NAME;
+  return `${trimmed} ${month}-${day}-${year}`.slice(0, 80);
+};
 
 type FolderRow = {
   _id: Id<"presentRecordingFolders">;
@@ -60,6 +70,7 @@ const PickFolderCard = ({
 type JayrrEditorExportDialogProps = {
   canQuery: boolean;
   exporting: boolean;
+  projectName: string;
   onClose: () => void;
   onExport: (args: {
     name: string;
@@ -70,12 +81,13 @@ type JayrrEditorExportDialogProps = {
 export const JayrrEditorExportDialog = ({
   canQuery,
   exporting,
+  projectName,
   onClose,
   onExport,
 }: JayrrEditorExportDialogProps) => {
   const formId = useId();
   const descriptionId = `${formId}-description`;
-  const [name, setName] = useState("Optimized video");
+  const [name, setName] = useState(() => exportNameFromProject(projectName));
   const [folderId, setFolderId] =
     useState<Id<"presentRecordingFolders"> | null>(getOpenRecordingFolderId());
 

@@ -58,6 +58,26 @@ describe("conversation topic memory", () => {
     expect(sarcastic.speaker).toBe("1");
   });
 
+  it("stores each speaker separately and still shares conversation topics", () => {
+    const context = new ConversationContext();
+    context.ingest([
+      turn("a", "Our holiday to Paris", 0),
+      turn("b", "The office budget is tight", 1),
+      turn("c", "Paris was worth it", 0),
+    ]);
+    const holiday = decide(context, "a", "new").topicId!;
+    decide(context, "b", "new");
+    decide(context, "c", holiday);
+    expect(context.speakers.get("0")?.turnIds).toEqual(["a", "c"]);
+    expect(context.speakers.get("1")?.turnIds).toEqual(["b"]);
+    const state = context.prepare("Paris was worth it", "c").state;
+    expect(state.speaker_recent).toContain("Our holiday to Paris");
+    expect(state.speaker_recent).not.toContain("office budget");
+    expect(state.recent_turns).toContain("office budget");
+    expect(state.speaker_topics).toContain(holiday);
+    expect(state.active_topic).toContain(holiday);
+  });
+
   it("retains earlier topics when a callback does not switch the main subject", () => {
     const context = new ConversationContext();
     context.ingest([turn("a", "Our holiday to Paris")]);
@@ -114,6 +134,22 @@ describe("conversation topic memory", () => {
     expect(context.prepare("a", "a").questions).toEqual([]);
     context.release(first.key);
     expect(context.prepare("a", "a").ownsTopic).toBe(true);
+  });
+
+  it("updates live speech in place without notifying or bumping version", () => {
+    const context = new ConversationContext();
+    const notify = vi.fn();
+    context.subscribe(notify);
+    context.ingest([turn("live", "Process", 0, false)]);
+    context.ingest([turn("live", "Process and the difficulty", 0, false)]);
+    expect(context.version).toBe(0);
+    expect(context.turns).toHaveLength(1);
+    expect(context.turns[0]?.text).toBe("Process and the difficulty");
+    expect(notify).not.toHaveBeenCalled();
+    context.ingest([
+      turn("live", "Process and the difficulty of getting that running", 0),
+    ]);
+    expect(notify).toHaveBeenCalledTimes(1);
   });
 
   it("keeps 200 turns independently of an 80-bubble feed and caps topics at 100", () => {

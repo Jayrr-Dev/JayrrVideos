@@ -1,5 +1,7 @@
+import { JEV_SHARED_EVIDENCE } from "../../transcription/jevSharedState";
+
 const UTTERANCE_SCOPE =
-  "Judge only `utterance`. `previous_text` is recent talk before this line; use it to read fragments and replies, not as extra speech to score. Score how well this line understands the situation, not a lifetime IQ or whether you like the speaker.";
+  `Judge only \`utterance\`. ${JEV_SHARED_EVIDENCE} Score how well this line understands the situation, not a lifetime IQ or whether you like the speaker.`;
 
 export type SmartId =
   | "clueless"
@@ -117,10 +119,7 @@ export const smartFromAnswers = (
   );
 };
 
-export const rankedSmart = (
-  row: SmartResult,
-  count: number,
-): SmartResult[] => {
+export const rankedSmart = (row: SmartResult, count: number): SmartResult[] => {
   const picked: SmartResult[] = [];
   for (let dist = 0; picked.length < count && dist <= SMART_TOP; dist += 1) {
     const candidates =

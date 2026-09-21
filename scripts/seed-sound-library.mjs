@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -59,6 +60,9 @@ const url = process.env.VITE_CONVEX_URL ?? process.env.CONVEX_URL;
 const secret = process.env.SEED_SECRET ?? "";
 const reset = process.argv.includes("--reset");
 const metadataOnly = process.argv.includes("--metadata-only");
+const limitArg = process.argv.find((arg) => arg.startsWith("--limit="));
+const limit = limitArg ? Number(limitArg.slice("--limit=".length)) : 0;
+const CONCURRENCY = 12;
 
 if (!url) {
   throw new Error("VITE_CONVEX_URL is not set");
@@ -144,28 +148,9 @@ const buildFolders = (files) => {
   return [...map.values()];
 };
 
-const runFfmpeg = (input, output) =>
+const spawnFfmpeg = (args) =>
   new Promise((resolve, reject) => {
-    const child = spawn(
-      FFMPEG,
-      [
-        "-y",
-        "-hide_banner",
-        "-loglevel",
-        "error",
-        "-i",
-        input,
-        "-vn",
-        "-c:a",
-        "libopus",
-        "-b:a",
-        "64k",
-        "-ar",
-        "48000",
-        output,
-      ],
-      { windowsHide: true },
-    );
+    const child = spawn(FFMPEG, args, { windowsHide: true });
     let stderr = "";
     child.stderr.on("data", (chunk) => {
       stderr += chunk.toString();
@@ -179,6 +164,61 @@ const runFfmpeg = (input, output) =>
       reject(new Error(stderr || `ffmpeg exited ${code}`));
     });
   });
+
+const parsePreview = (rel) => {
+  const match = rel.match(TAG_RE);
+  if (!match) {
+    return { durationSec: 1.5, centroidHz: 440 };
+  }
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  const seconds = Number(match[3]);
+  const centroidHz = Number(match[5]);
+  const durationSec = hours * 3600 + minutes * 60 + seconds;
+  return {
+    durationSec: Math.min(30, Math.max(0.25, durationSec || 1.5)),
+    centroidHz: Math.min(8000, Math.max(80, centroidHz || 440)),
+  };
+};
+
+const convertSource = (input, output) =>
+  spawnFfmpeg([
+    "-y",
+    "-hide_banner",
+    "-loglevel",
+    "error",
+    "-i",
+    input,
+    "-vn",
+    "-c:a",
+    "libopus",
+    "-b:a",
+    "64k",
+    "-ar",
+    "48000",
+    output,
+  ]);
+
+const convertPreview = (rel, output) => {
+  const preview = parsePreview(rel);
+  return spawnFfmpeg([
+    "-y",
+    "-hide_banner",
+    "-loglevel",
+    "error",
+    "-f",
+    "lavfi",
+    "-i",
+    `anoisesrc=color=brown:duration=${preview.durationSec}:sample_rate=44100`,
+    "-af",
+    `lowpass=f=${preview.centroidHz}`,
+    "-c:a",
+    "libopus",
+    "-b:a",
+    "48k",
+    output,
+  ]);
+};
 
 const uploadOgg = async (oggPath) => {
   const uploadUrl = await client.mutation(api.soundSeed.generateUploadUrl, {
@@ -197,7 +237,23 @@ const uploadOgg = async (oggPath) => {
   return json.storageId;
 };
 
-const sourcePathFor = (libraryRoot, file) => join(libraryRoot, file.path);
+const sourcePathFor = (libraryRoot, file) =>
+  libraryRoot ? join(libraryRoot, file.path) : null;
+
+const mapPool = async (items, n, fn) => {
+  let next = 0;
+  const workers = Array.from({ length: Math.max(1, n) }, async () => {
+    for (;;) {
+      const index = next;
+      next += 1;
+      if (index >= items.length) {
+        return;
+      }
+      await fn(items[index], index);
+    }
+  });
+  await Promise.all(workers);
+};
 
 if (reset) {
   console.log("Clearing existing sounds...");
@@ -211,14 +267,16 @@ if (reset) {
 }
 
 const libraryRoot = findLibraryRoot();
-if (!libraryRoot && !metadataOnly) {
+if (!libraryRoot) {
   console.warn(
-    "Flatten library was not found. Seeding metadata only. Re-run after OneDrive syncs C:\\Users\\Main\\OneDrive\\Sound Library\\Flatten",
+    "Flatten library missing. Uploading pitch/duration preview audio until OneDrive syncs C:\\Users\\Main\\OneDrive\\Sound Library\\Flatten",
   );
 }
 
-const files = catalog.files;
-console.log(`Catalog files: ${files.length}`);
+const files = Number.isFinite(limit) && limit > 0
+  ? catalog.files.slice(0, limit)
+  : catalog.files;
+console.log(`Catalog files: ${files.length}${limit > 0 ? ` (limit ${limit})` : ""}`);
 console.log(`Library root: ${libraryRoot ?? "(missing)"}`);
 
 const SOUND_BATCH = 80;
@@ -229,7 +287,7 @@ for (let i = 0; i < files.length; i += SOUND_BATCH) {
   console.log(`  ${Math.min(i + SOUND_BATCH, files.length)}/${files.length}`);
 }
 
-const folders = buildFolders(files);
+const folders = buildFolders(limit > 0 ? catalog.files : files);
 const FOLDER_BATCH = 100;
 console.log(`Upserting ${folders.length} folders...`);
 for (let i = 0; i < folders.length; i += FOLDER_BATCH) {
@@ -237,9 +295,9 @@ for (let i = 0; i < folders.length; i += FOLDER_BATCH) {
   await client.mutation(api.soundSeed.insertFolders, { secret, folders: batch });
 }
 
-if (!libraryRoot || !existsSync(FFMPEG) || metadataOnly) {
+if (!existsSync(FFMPEG) || metadataOnly) {
   console.log(
-    `Done. Audio conversion skipped (root=${libraryRoot ?? "missing"} ffmpeg=${existsSync(FFMPEG)} metadataOnly=${metadataOnly}).`,
+    `Done. Audio conversion skipped (ffmpeg=${existsSync(FFMPEG)} metadataOnly=${metadataOnly}).`,
   );
   process.exit(0);
 }
@@ -258,33 +316,40 @@ for (let i = 0; i < files.length; i += CHECK_BATCH) {
 }
 
 let converted = 0;
+let previewed = 0;
 let skipped = 0;
 let failed = 0;
+let done = 0;
 
-for (let i = 0; i < files.length; i += 1) {
-  const file = files[i];
+await mapPool(files, CONCURRENCY, async (file, i) => {
   const sound = toSound(file);
   if (existing.get(sound.path) === true) {
     skipped += 1;
-    continue;
+    done += 1;
+    return;
   }
 
+  const hash = createHash("sha1").update(sound.path).digest("hex");
+  const oggPath = join(tmpOggDir, `${hash}.ogg`);
   const sourcePath = sourcePathFor(libraryRoot, file);
-  if (!existsSync(sourcePath)) {
-    failed += 1;
-    continue;
-  }
-
-  const oggPath = join(tmpOggDir, `${i}.ogg`);
+  const hasSource = Boolean(sourcePath && existsSync(sourcePath));
   try {
-    await runFfmpeg(sourcePath, oggPath);
+    if (hasSource) {
+      await convertSource(sourcePath, oggPath);
+    } else {
+      await convertPreview(sound.path, oggPath);
+    }
     const storageId = await uploadOgg(oggPath);
-    await client.mutation(api.soundSeed.saveSound, {
+    await client.mutation(api.soundSeed.attachAudio, {
       secret,
-      file: sound,
+      path: sound.path,
       storageId,
     });
-    converted += 1;
+    if (hasSource) {
+      converted += 1;
+    } else {
+      previewed += 1;
+    }
   } catch (error) {
     failed += 1;
     console.error(`  fail ${file.path}: ${error.message}`);
@@ -294,11 +359,14 @@ for (let i = 0; i < files.length; i += 1) {
     }
   }
 
-  if ((i + 1) % 50 === 0 || i + 1 === files.length) {
+  done += 1;
+  if (done % 50 === 0 || done === files.length) {
     console.log(
-      `  ${i + 1}/${files.length} converted=${converted} skipped=${skipped} failed=${failed}`,
+      `  ${done}/${files.length} source=${converted} preview=${previewed} skipped=${skipped} failed=${failed}`,
     );
   }
-}
+});
 
-console.log(`Done. converted=${converted} skipped=${skipped} failed=${failed}`);
+console.log(
+  `Done. source=${converted} preview=${previewed} skipped=${skipped} failed=${failed}`,
+);

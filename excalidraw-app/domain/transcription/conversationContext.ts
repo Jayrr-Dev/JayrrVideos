@@ -2,6 +2,7 @@ import type {
   JevAnswer,
   JevQuestion,
 } from "../../../convex/canvasAi/jevClient";
+import { debugTranscribe } from "./debugTranscribe";
 import type { TranscriptFeedTurn } from "./publishTranscript";
 
 export type TopicMemory = {
@@ -12,6 +13,12 @@ export type TopicMemory = {
   unresolved: string[];
   turnIds: string[];
 };
+export type SpeakerMemory = {
+  speaker: number | null;
+  turnIds: string[];
+};
+const speakerKey = (speaker: number | null) =>
+  speaker === null ? "unknown" : String(speaker);
 type ContextTurn = TranscriptFeedTurn & { revision: number; sequence: number };
 export type ContextStamp = {
   session: string;
@@ -36,6 +43,7 @@ export class ConversationContext {
   version = 0;
   turns: ContextTurn[] = [];
   topics: TopicMemory[] = [];
+  speakers = new Map<string, SpeakerMemory>();
   activeTopic: string | null = null;
   results = new Map<string, ContextResult>();
   listeners = new Set<() => void>();
@@ -70,6 +78,7 @@ export class ConversationContext {
     this.session = `conversation-${++sessionCounter}`;
     this.turns = [];
     this.topics = [];
+    this.speakers.clear();
     this.results.clear();
     this.claims.clear();
     this.summaryThrough.clear();
@@ -81,7 +90,28 @@ export class ConversationContext {
     this.summaryUrgent = false;
     this.retryAfter = 0;
     this.version++;
+    debugTranscribe("context reset", {
+      session: this.session,
+      version: this.version,
+    });
     this.emit();
+  }
+
+  private rememberSpeakers() {
+    const next = new Map<string, SpeakerMemory>();
+    for (const turn of this.turns) {
+      if (!turn.isFinal) {
+        continue;
+      }
+      const key = speakerKey(turn.speaker);
+      const memory = next.get(key) ?? {
+        speaker: turn.speaker,
+        turnIds: [],
+      };
+      memory.turnIds = [...memory.turnIds, turn.id].slice(-40);
+      next.set(key, memory);
+    }
+    this.speakers = next;
   }
 
   ingest(incoming: TranscriptFeedTurn[], now = Date.now()) {
@@ -155,8 +185,62 @@ export class ConversationContext {
       }
     }
     if (changed) {
+      this.rememberSpeakers();
+    }
+    const emit = changed && incoming.some((turn) => turn.isFinal);
+    if (changed) {
+      debugTranscribe("ingest", {
+        incoming: incoming.length,
+        finals: incoming.filter((turn) => turn.isFinal).length,
+        live: incoming.filter((turn) => !turn.isFinal).length,
+        ids: incoming.map((turn) => turn.id),
+        version: this.version,
+        emit,
+      });
+    }
+    if (emit) {
       this.emit();
     }
+  }
+
+  drop(turnIds: readonly string[]) {
+    const drop = new Set(turnIds);
+    const nextTurns = this.turns.filter((turn) => !drop.has(turn.id));
+    if (nextTurns.length === this.turns.length) {
+      return;
+    }
+    this.turns = nextTurns;
+    this.topics = this.topics
+      .map((topic) => ({
+        ...topic,
+        turnIds: topic.turnIds.filter((id) => !drop.has(id)),
+      }))
+      .filter((topic) => topic.turnIds.length > 0);
+    if (
+      this.activeTopic &&
+      !this.topics.some((topic) => topic.id === this.activeTopic)
+    ) {
+      this.activeTopic = this.topics.at(-1)?.id ?? null;
+    }
+    if (this.pendingSwitch && drop.has(this.pendingSwitch.turnId)) {
+      this.pendingSwitch = null;
+    }
+    for (const id of drop) {
+      this.results.delete(id);
+      this.dirty.delete(id);
+    }
+    for (const key of [...this.claims]) {
+      if (
+        !this.turns.some((turn) =>
+          key.startsWith(`${turn.id}:${turn.revision}:`),
+        )
+      ) {
+        this.claims.delete(key);
+      }
+    }
+    this.rememberSpeakers();
+    this.version++;
+    this.emit();
   }
 
   find(text: string, turnId: string) {
@@ -223,6 +307,30 @@ export class ConversationContext {
     const recent = this.turns
       .filter((item) => item.sequence < turn.sequence && item.isFinal)
       .slice(-6);
+    const ownIds = new Set(
+      this.speakers.get(speakerKey(turn.speaker))?.turnIds ?? [],
+    );
+    const speakerRecent = this.turns
+      .filter(
+        (item) =>
+          item.sequence < turn.sequence &&
+          item.isFinal &&
+          ownIds.has(item.id) &&
+          item.speaker === turn.speaker,
+      )
+      .slice(-6);
+    const speakerTopics = safeTopics
+      .filter((topic) =>
+        topic.turnIds.some((id) => {
+          const evidence = this.turns.find((item) => item.id === id);
+          return evidence?.speaker === turn.speaker;
+        }),
+      )
+      .slice(-4);
+    const formatTurn = (item: ContextTurn) =>
+      `[${item.id}; speaker ${item.speaker ?? "unknown"}] ${item.text.slice(
+        -450,
+      )}`;
     const compact = (topic: TopicMemory) =>
       JSON.stringify({
         id: topic.id,
@@ -236,14 +344,9 @@ export class ConversationContext {
       utterance: text.slice(-4000),
       speaker: turn.speaker === null ? "unknown" : String(turn.speaker),
       previous_text: recent.at(-1)?.text.slice(-1000) ?? "",
-      recent_turns: recent
-        .map(
-          (item) =>
-            `[${item.id}; speaker ${
-              item.speaker ?? "unknown"
-            }] ${item.text.slice(-450)}`,
-        )
-        .join("\n"),
+      speaker_recent: speakerRecent.map(formatTurn).join("\n"),
+      recent_turns: recent.map(formatTurn).join("\n"),
+      speaker_topics: speakerTopics.map(compact).join("\n"),
       active_topic: active ? compact(active) : "No confirmed active topic",
       earlier_topics: candidates.map(compact).join("\n"),
     };
@@ -394,6 +497,11 @@ export class ConversationContext {
           if (this.activeTopic !== topicId) {
             this.summaryUrgent = true;
             this.version++;
+            debugTranscribe("topic switch", {
+              topicId,
+              version: this.version,
+              turnId: turn.id,
+            });
           }
           this.activeTopic = topicId;
           this.lastDecisionSequence = turn.sequence;
@@ -424,6 +532,12 @@ export class ConversationContext {
         (sufficient?.type === "noul" && sufficient.noul < 0.7),
     };
     this.results.set(turn.id, result);
+    debugTranscribe("topic accept", {
+      turnId: turn.id,
+      topicId: result.topicId,
+      provisional: result.provisional,
+      version: this.version,
+    });
     this.emit();
     return result;
   }

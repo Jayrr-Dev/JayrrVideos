@@ -1,5 +1,7 @@
+import { JEV_SHARED_EVIDENCE } from "../../transcription/jevSharedState";
+
 const UTTERANCE_SCOPE =
-  "Judge only `utterance`. `previous_text` is recent talk before this line; use it to read fragments and replies, not as extra speech to type. Score the cognitive function this line is using, not a life diagnosis.";
+  `Judge only \`utterance\`. ${JEV_SHARED_EVIDENCE} Score the cognitive function this line is using, not a life diagnosis.`;
 
 export type CogFn = "Se" | "Si" | "Ne" | "Ni" | "Te" | "Ti" | "Fe" | "Fi";
 

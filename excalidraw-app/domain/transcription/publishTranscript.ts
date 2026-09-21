@@ -42,6 +42,39 @@ export const clearTranscript = (sourceId: string) => {
   notify();
 };
 
+export const dropTranscriptTurns = (
+  sourceId: string,
+  turnIds: readonly string[],
+) => {
+  if (turnIds.length === 0) {
+    return;
+  }
+  conversationFor(sourceId).drop(turnIds);
+  const feed = feeds.get(sourceId);
+  if (!feed) {
+    return;
+  }
+  const drop = new Set(turnIds);
+  const turns = feed.turns.filter((turn) => !drop.has(turn.id));
+  if (turns.length === feed.turns.length) {
+    return;
+  }
+  if (turns.length === 0) {
+    feeds.delete(sourceId);
+    notify();
+    return;
+  }
+  feeds.set(sourceId, {
+    ...feed,
+    turns,
+    text: turns
+      .filter((turn) => turn.isFinal)
+      .map((turn) => turn.text)
+      .join("\n"),
+  });
+  notify();
+};
+
 export const readTranscript = (sourceId: string) => feeds.get(sourceId) ?? null;
 
 export const listTranscriptFeeds = () => [...feeds.values()];

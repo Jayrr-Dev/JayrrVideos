@@ -6,6 +6,7 @@ import {
   type SttProvider,
 } from "../flags/sttProviderFlag";
 
+import { debugTranscribe } from "./debugTranscribe";
 import { turnsFromTranscript } from "./transcriptTurns";
 
 import type { TranscriptTurn } from "./transcriptTurns";
@@ -216,7 +217,7 @@ export const listenStreamTranscript = (
   onStatus?: (message: string) => void,
 ): TranscriptSession => {
   const debug = (stage: string, detail: string) => {
-    console.info(`[Jayrr Transcribe] ${stage}: ${detail}`);
+    debugTranscribe(stage, detail);
     if (!onDebug) {
       return;
     }

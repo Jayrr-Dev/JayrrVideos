@@ -96,6 +96,30 @@ export const insertSounds = mutation({
   },
 });
 
+export const attachAudio = mutation({
+  args: {
+    secret: v.string(),
+    path: v.string(),
+    storageId: v.id("_storage"),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    assertSeed(args.secret);
+    const row = await ctx.db
+      .query("sounds")
+      .withIndex("by_path", (q) => q.eq("path", args.path))
+      .unique();
+    if (!row) {
+      throw new Error(`Sound not found: ${args.path}`);
+    }
+    if (row.storageId && row.storageId !== args.storageId) {
+      await ctx.storage.delete(row.storageId);
+    }
+    await ctx.db.patch(row._id, { storageId: args.storageId });
+    return null;
+  },
+});
+
 export const saveSound = mutation({
   args: {
     secret: v.string(),

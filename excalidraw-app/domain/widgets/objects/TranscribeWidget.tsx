@@ -32,6 +32,8 @@ import {
   presentMicDeviceId,
   setPresentMic,
 } from "../../../present/presentMic";
+import { conversationFor } from "../../transcription/conversationContext";
+import { debugTranscribe } from "../../transcription/debugTranscribe";
 import {
   listenStreamTranscript,
   type TranscriptSession,
@@ -273,6 +275,8 @@ type Job = {
   text: string;
   /** Recent talk before this bubble, so fragments keep conversational tone. */
   previousTurn: string | null;
+  speakerRecent: string | null;
+  recentTurns: string | null;
 };
 
 const nextTurnId = () =>
@@ -338,6 +342,42 @@ const asBubbles = (turn: ChatTurn, text: string, keepId: boolean) => {
 
 const sameVoice = (left: ChatTurn, right: ChatTurn) =>
   left.speaker === right.speaker || right.speaker === null;
+
+const sameChatTurns = (left: ChatTurn[], right: ChatTurn[]) =>
+  left.length === right.length &&
+  left.every((turn, index) => {
+    const other = right[index];
+    return (
+      !!other &&
+      turn.id === other.id &&
+      turn.speaker === other.speaker &&
+      turn.text === other.text &&
+      turn.isFinal === other.isFinal
+    );
+  });
+
+const withLiveIds = (
+  current: ChatTurn[],
+  incoming: TranscriptTurn[],
+  isFinal: boolean,
+): ChatTurn[] => {
+  const leftover = current.filter((turn) => !turn.isFinal);
+  const idsBySpeaker = new Map<string, string[]>();
+  for (const turn of leftover) {
+    const key = String(turn.speaker);
+    const ids = idsBySpeaker.get(key) ?? [];
+    ids.push(turn.id);
+    idsBySpeaker.set(key, ids);
+  }
+  return incoming.map((turn) => {
+    const ids = idsBySpeaker.get(String(turn.speaker));
+    return {
+      ...turn,
+      id: ids?.shift() ?? nextTurnId(),
+      isFinal,
+    };
+  });
+};
 
 const shouldJoin = (left: ChatTurn, right: ChatTurn) => {
   if (left.isFinal !== right.isFinal || !sameVoice(left, right)) {
@@ -533,6 +573,53 @@ const scoreErrorMessage = (error: unknown) => {
 };
 
 const CONTEXT_TURNS = 5;
+
+const formatContextTurn = (turn: ChatTurn) => {
+  const text = turn.text.trim();
+  if (!text) {
+    return "";
+  }
+  const speaker = turn.speaker === null ? "unknown" : String(turn.speaker);
+  return `[speaker ${speaker}] ${text}`;
+};
+
+const recentTurnsText = (turns: ChatTurn[], index: number) => {
+  const start = Math.max(0, index - CONTEXT_TURNS);
+  const parts: string[] = [];
+  for (let cursor = start; cursor < index; cursor += 1) {
+    const line = turns[cursor] ? formatContextTurn(turns[cursor]) : "";
+    if (line) {
+      parts.push(line);
+    }
+  }
+  if (parts.length === 0) {
+    return null;
+  }
+  return parts.join("\n");
+};
+
+const speakerRecentText = (
+  turns: ChatTurn[],
+  index: number,
+  speaker: number | null,
+) => {
+  const start = Math.max(0, index - CONTEXT_TURNS);
+  const parts: string[] = [];
+  for (let cursor = start; cursor < index; cursor += 1) {
+    const turn = turns[cursor];
+    if (!turn || turn.speaker !== speaker) {
+      continue;
+    }
+    const line = formatContextTurn(turn);
+    if (line) {
+      parts.push(line);
+    }
+  }
+  if (parts.length === 0) {
+    return null;
+  }
+  return parts.join("\n");
+};
 
 // Last few bubbles before this line, same speaker included, so a fragment
 // like "Phone numbers of the property owners." still sits in the prior plan.
@@ -910,9 +997,7 @@ const TurnBadges = ({
         ? iqScore === undefined
           ? null
           : rankedIqComposites(iqScore, jevTopCount(config, "iq")).map(
-              (composite) => (
-                <IqBadge key={composite} composite={composite} />
-              ),
+              (composite) => <IqBadge key={composite} composite={composite} />,
             )
         : null}
       {jevScoreVisible(config, config.jevSmart, "smart", "line")
@@ -1027,12 +1112,8 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
               conversation.topicId,
           )
         : scores;
-    if (!live) {
-      return base;
-    }
-    return [...base, live];
+    return base;
   }, [
-    live,
     scores,
     config.contextEnabled,
     conversation.context,
@@ -1048,6 +1129,8 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
   const inFlightRef = useRef<Job | null>(null);
   const generationRef = useRef(0);
   const scoredTextRef = useRef(new Map<string, string>());
+  const liveRef = useRef(live);
+  liveRef.current = live;
 
   const persist = useCallback(
     (next: TranscribeConfig) => {
@@ -1106,6 +1189,7 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
     queueRef.current = [];
     liveJobRef.current = null;
     scoredTextRef.current.clear();
+    debugTranscribe("score reset", { generation: generationRef.current });
     setScores([]);
     setLive(null);
   }, []);
@@ -1286,6 +1370,7 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
 
   const applyTurns = (next: TranscriptTurn[], isFinal: boolean) => {
     if (!isFinal && skipLiveRef.current) {
+      debugTranscribe("applyTurns skip", "live drafts ignored after delete");
       return;
     }
     const pin = liveSpeakerPinRef.current;
@@ -1302,13 +1387,16 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
         attributed.map((turn) => turn.speaker),
       ),
     );
+    let adopted: ChatTurn | null = null;
+    let skipped = false;
+    let incomingIds: string[] = [];
+    const leftoverIds = turnsRef.current
+      .filter((turn) => !turn.isFinal)
+      .map((turn) => turn.id);
     setTurns((current) => {
       const kept = current.filter((turn) => turn.isFinal);
-      const incoming = attributed.map((turn) => ({
-        ...turn,
-        id: nextTurnId(),
-        isFinal,
-      }));
+      const incoming = withLiveIds(current, attributed, isFinal);
+      incomingIds = incoming.map((turn) => turn.id);
       const packed = mergeChatTurns(incoming);
       const last = kept[kept.length - 1];
       const first = packed[0];
@@ -1318,10 +1406,69 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
           joinSentences(last.text, first.text),
           true,
         );
-        return [...kept.slice(0, -1), ...joined, ...packed.slice(1)].slice(-80);
+        const nextTurns = [
+          ...kept.slice(0, -1),
+          ...joined,
+          ...packed.slice(1),
+        ].slice(-80);
+        if (sameChatTurns(current, nextTurns)) {
+          skipped = true;
+          return current;
+        }
+        if (isFinal) {
+          adopted = joined[0] ?? first;
+        }
+        return nextTurns;
       }
-      return [...kept, ...packed].slice(-80);
+      const nextTurns = [...kept, ...packed].slice(-80);
+      if (sameChatTurns(current, nextTurns)) {
+        skipped = true;
+        return current;
+      }
+      if (isFinal) {
+        adopted = first ?? null;
+      }
+      return nextTurns;
     });
+    debugTranscribe("applyTurns", {
+      isFinal,
+      skipped,
+      incoming: attributed.length,
+      ids: incomingIds,
+      reused: incomingIds.filter((id) => leftoverIds.includes(id)),
+      adoptedId: adopted?.id ?? null,
+      text: attributed
+        .map((turn) => turn.text)
+        .join(" | ")
+        .slice(0, 160),
+    });
+    if (isFinal) {
+      const snapshot = liveRef.current;
+      const turn = adopted;
+      if (
+        snapshot &&
+        turn &&
+        snapshot.text === turn.text.trim() &&
+        snapshot.speaker === turn.speaker
+      ) {
+        scoredTextRef.current.set(
+          turn.id,
+          `${contextVersionRef.current}:${turn.text.trim()}`,
+        );
+        setScores((current) =>
+          [
+            ...current.filter((row) => row.turnId !== turn.id),
+            {
+              ...snapshot,
+              turnId: turn.id,
+              speaker: turn.speaker,
+              text: turn.text.trim(),
+            },
+          ].slice(-MAX_SCORED_TURNS),
+        );
+      }
+      setLive(null);
+    }
     setStatus("");
   };
 
@@ -1351,7 +1498,11 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
       const result = scoring.contextEnabled
         ? await evaluateContext(job.text, job.turnId, questions)
         : await convexClient.action(api.canvasAi.jev.ask, {
-            state: buildIqState(job.text, job.previousTurn),
+            state: buildIqState(job.text, job.previousTurn, {
+              speaker: job.speaker === null ? "unknown" : String(job.speaker),
+              speakerRecent: job.speakerRecent,
+              recentTurns: job.recentTurns,
+            }),
             questions,
           });
       return {
@@ -1394,16 +1545,31 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
           scoredTextRef.current.get(job.turnId) ===
             `${contextVersion}:${job.text}`
         ) {
+          debugTranscribe("score skip", {
+            turnId: job.turnId,
+            reason: "already-scored",
+          });
           continue;
         }
         inFlightRef.current = job;
         lastWasLive = job.turnId === LIVE_TURN_ID;
+        debugTranscribe("score start", {
+          turnId: job.turnId,
+          speaker: job.speaker,
+          queue: queueRef.current.length,
+          version: contextVersion,
+          text: job.text.slice(0, 120),
+        });
         if (job.turnId === LIVE_TURN_ID) {
           liveJobRef.current = null;
         }
         try {
           const scored = await scoreJob(job);
           if (generation !== generationRef.current) {
+            debugTranscribe("score drop", {
+              turnId: job.turnId,
+              reason: "generation",
+            });
             continue;
           }
           const currentTurn =
@@ -1415,6 +1581,12 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
             currentTurn.text.trim() !== job.text ||
             currentTurn.speaker !== job.speaker
           ) {
+            debugTranscribe("score drop", {
+              turnId: job.turnId,
+              reason: "text-changed",
+              expected: job.text.slice(0, 80),
+              actual: currentTurn?.text.trim().slice(0, 80) ?? null,
+            });
             continue;
           }
           const row: TurnIq = {
@@ -1447,19 +1619,31 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
               ].slice(-MAX_SCORED_TURNS),
             );
           }
+          debugTranscribe("score ok", {
+            turnId: job.turnId,
+            mbti: row.mbti?.type ?? null,
+            socion: row.socion?.id ?? null,
+            ennea: row.ennea?.label ?? null,
+            fns: row.advance?.stack.slice(0, 2) ?? null,
+          });
         } catch (error: unknown) {
           if (
             error instanceof Error &&
             error.message === "Stale conversation result"
           ) {
-            if (
+            const requeue =
               generation === generationRef.current &&
               job.turnId !== LIVE_TURN_ID &&
               turnsRef.current.some(
                 (turn) =>
                   turn.id === job.turnId && turn.text.trim() === job.text,
-              )
-            ) {
+              );
+            debugTranscribe("score stale", {
+              turnId: job.turnId,
+              requeue,
+              version: contextVersionRef.current,
+            });
+            if (requeue) {
               queueRef.current.push(job);
             }
             continue;
@@ -1468,6 +1652,10 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
             continue;
           }
           setStatus(scoreErrorMessage(error));
+          debugTranscribe("score error", {
+            turnId: job.turnId,
+            message: error instanceof Error ? error.message : String(error),
+          });
           // Preserve final speech even when one model request fails.
         } finally {
           inFlightRef.current = null;
@@ -1479,7 +1667,12 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
   }, [scoreJob]);
 
   const enqueueFinal = useCallback(
-    (turn: ChatTurn, previousTurn: string | null) => {
+    (
+      turn: ChatTurn,
+      previousTurn: string | null,
+      speakerRecent: string | null,
+      recentTurns: string | null,
+    ) => {
       const text = turn.text.trim();
       if (
         inFlightRef.current?.turnId === turn.id &&
@@ -1493,15 +1686,19 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
         return false;
       }
       const previous = scoredTextRef.current.get(turn.id);
-      const recent = turnsRef.current
-        .filter((item) => item.isFinal)
-        .slice(-6)
-        .some((item) => item.id === turn.id);
-      if (
-        previous === `${contextVersionRef.current}:${text}` ||
-        (previous?.endsWith(`:${text}`) && !recent)
-      ) {
+      if (previous === `${contextVersionRef.current}:${text}`) {
         return false;
+      }
+      if (previous?.endsWith(`:${text}`)) {
+        const result = conversationFor(elementId).results.get(turn.id);
+        if (!result?.provisional) {
+          return false;
+        }
+        debugTranscribe("enqueue retry", {
+          turnId: turn.id,
+          reason: "provisional",
+          version: contextVersionRef.current,
+        });
       }
       queueRef.current = queueRef.current.filter(
         (job) => job.turnId !== turn.id,
@@ -1511,10 +1708,17 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
         speaker: turn.speaker,
         text,
         previousTurn,
+        speakerRecent,
+        recentTurns,
+      });
+      debugTranscribe("enqueue", {
+        turnId: turn.id,
+        queue: queueRef.current.length,
+        text: text.slice(0, 120),
       });
       return true;
     },
-    [],
+    [elementId],
   );
 
   useEffect(() => {
@@ -1523,7 +1727,15 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
     }
     let added = false;
     turns.forEach((turn, index) => {
-      if (turn.isFinal && enqueueFinal(turn, previousText(turns, index))) {
+      if (
+        turn.isFinal &&
+        enqueueFinal(
+          turn,
+          previousText(turns, index),
+          speakerRecentText(turns, index, turn.speaker),
+          recentTurnsText(turns, index),
+        )
+      ) {
         added = true;
       }
     });
@@ -1555,7 +1767,14 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
         speaker: liveTurn.speaker,
         text: livePhrase,
         previousTurn: previousText(turns, liveIndex),
+        speakerRecent: speakerRecentText(turns, liveIndex, liveTurn.speaker),
+        recentTurns: recentTurnsText(turns, liveIndex),
       };
+      debugTranscribe("live job", {
+        speaker: liveTurn.speaker,
+        chars: livePhrase.length,
+        text: livePhrase.slice(0, 120),
+      });
       void pump();
     }, LIVE_DEBOUNCE_MS);
     return () => ownerWindow.clearTimeout(handle);

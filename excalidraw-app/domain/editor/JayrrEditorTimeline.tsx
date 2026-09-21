@@ -142,6 +142,8 @@ const RULER_TICK_MS = 1000;
 const TRACK_PAD_PX = 10;
 const SNAP_THRESHOLD_PX = 8;
 const CLIP_SHADE_COUNT = 5;
+const TAIL_VIEWPORTS = 1;
+const GROW_NEAR_END_PX = 160;
 
 const clipShadeIndex = (clipId: string) => {
   let hash = 0;
@@ -200,6 +202,15 @@ export const JayrrEditorTimeline = ({
     edge: EditorClipEdge;
   } | null>(null);
   const [bodyHeight, setBodyHeight] = useState(360);
+  const [scrollTop, setScrollTop] = useState(0);
+  const [grownPx, setGrownPx] = useState(0);
+
+  useEffect(() => {
+    if (grownPx <= 100_000) {
+      return;
+    }
+    setGrownPx(0);
+  }, [grownPx]);
   const [activeClipId, setActiveClipId] = useState<string | null>(null);
   const [placement, setPlacement] = useState<DragPlacement | null>(null);
   const [trimDraft, setTrimDraft] = useState<TrimDraft | null>(null);
@@ -295,24 +306,44 @@ export const JayrrEditorTimeline = ({
 
   const snapThresholdMs = SNAP_THRESHOLD_PX / pxPerMs;
 
-  const totalHeight = Math.max(
+  const viewportPx = Math.max(80, Math.min(bodyHeight, 2400));
+  const contentHeight = Math.max(
     80,
     msToPx(timeline.totalMs, pxPerMs) + TRACK_PAD_PX * 2,
+  );
+  const tailPx = viewportPx * TAIL_VIEWPORTS + grownPx;
+  const totalHeight = contentHeight + tailPx;
+  const canvasMs = Math.max(
+    timeline.totalMs,
+    (totalHeight - TRACK_PAD_PX * 2) / Math.max(pxPerMs, 0.0001),
   );
   const playheadTop = TRACK_PAD_PX + msToPx(currentTimeMs, pxPerMs);
 
   const ticks = useMemo(() => {
+    const startMs = Math.max(
+      0,
+      Math.floor(
+        (scrollTop - TRACK_PAD_PX) / Math.max(pxPerMs, 0.0001) / RULER_TICK_MS,
+      ) *
+        RULER_TICK_MS -
+        RULER_TICK_MS * 2,
+    );
+    const endMs = Math.min(
+      canvasMs,
+      Math.ceil(
+        (scrollTop + bodyHeight - TRACK_PAD_PX) /
+          Math.max(pxPerMs, 0.0001) /
+          RULER_TICK_MS,
+      ) *
+        RULER_TICK_MS +
+        RULER_TICK_MS * 2,
+    );
     const marks: number[] = [];
-    const total = timeline.totalMs;
-    for (let t = 0; t <= total; t += RULER_TICK_MS) {
+    for (let t = startMs; t <= endMs; t += RULER_TICK_MS) {
       marks.push(t);
     }
-    const last = marks[marks.length - 1] ?? 0;
-    if (total - last >= 500) {
-      marks.push(total);
-    }
     return marks;
-  }, [timeline.totalMs]);
+  }, [bodyHeight, canvasMs, pxPerMs, scrollTop]);
 
   const timeFromClientY = useCallback(
     (clientY: number, clampToTimeline = true) => {
@@ -330,6 +361,60 @@ export const JayrrEditorTimeline = ({
     },
     [pxPerMs, timeline.totalMs],
   );
+
+  const onTimelineScroll = useCallback(() => {
+    const body = bodyRef.current;
+    if (!body) {
+      return;
+    }
+    setScrollTop(body.scrollTop);
+    if (body.scrollTop <= 0) {
+      return;
+    }
+    const remain = body.scrollHeight - body.scrollTop - body.clientHeight;
+    if (remain > GROW_NEAR_END_PX) {
+      return;
+    }
+    const step = Math.min(Math.max(body.clientHeight, 80), 1200);
+    setGrownPx((prev) => {
+      const next = prev + step;
+      return next > 500_000 ? prev : next;
+    });
+  }, []);
+
+  const followTimeMs =
+    placement != null
+      ? placement.startMs + placement.durationMs
+      : trimDraft?.edgeMs ?? null;
+
+  useLayoutEffect(() => {
+    if (followTimeMs == null) {
+      return;
+    }
+    const tailMs = (viewportPx * 0.5) / Math.max(pxPerMs, 0.0001);
+    if (canvasMs - followTimeMs > tailMs) {
+      return;
+    }
+    setGrownPx((prev) => {
+      const next = prev + Math.min(viewportPx, 1200);
+      return next > 500_000 ? prev : next;
+    });
+  }, [canvasMs, followTimeMs, pxPerMs, viewportPx]);
+
+  useLayoutEffect(() => {
+    const body = bodyRef.current;
+    if (!body || followTimeMs == null) {
+      return;
+    }
+    const y = TRACK_PAD_PX + msToPx(followTimeMs, pxPerMs);
+    const margin = 48;
+    const viewBottom = body.scrollTop + body.clientHeight;
+    if (y <= viewBottom - margin) {
+      return;
+    }
+    body.scrollTop += y - (viewBottom - margin);
+    setScrollTop(body.scrollTop);
+  }, [followTimeMs, pxPerMs]);
 
   const clearPlacement = useCallback(() => {
     placementRef.current = null;
@@ -781,6 +866,7 @@ export const JayrrEditorTimeline = ({
       <div
         ref={bodyRef}
         className="jayrr-editor-timeline__body"
+        onScroll={onTimelineScroll}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}

@@ -1,5 +1,7 @@
+import { JEV_SHARED_EVIDENCE } from "../../transcription/jevSharedState";
+
 const UTTERANCE_SCOPE =
-  "Judge only `utterance`. `previous_text` is recent talk before this line; use it to read fragments and replies, not as extra speech to type. Score the Enneagram habit of attention this line shows, not a life diagnosis. There is no better type.";
+  `Judge only \`utterance\`. ${JEV_SHARED_EVIDENCE} Score the Enneagram habit of attention this line shows, not a life diagnosis. There is no better type.`;
 
 export type EnneaId = "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9";
 

@@ -1,5 +1,7 @@
+import { JEV_SHARED_EVIDENCE } from "../../transcription/jevSharedState";
+
 const UTTERANCE_SCOPE =
-  "Judge only `utterance`. `previous_text` is recent talk before this line; use it to read fragments and replies, not as extra speech to score. Score the emotional energy this line expresses, not a life diagnosis or a running speaker mean.";
+  `Judge only \`utterance\`. ${JEV_SHARED_EVIDENCE} Score the emotional energy this line expresses, not a life diagnosis or a running speaker mean.`;
 
 export type EnergyZone = "low" | "mid" | "high";
 

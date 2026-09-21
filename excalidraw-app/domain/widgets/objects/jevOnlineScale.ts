@@ -1,5 +1,7 @@
+import { JEV_SHARED_EVIDENCE } from "../../transcription/jevSharedState";
+
 const UTTERANCE_SCOPE =
-  "Judge only `utterance`. `previous_text` is recent talk before this line; use it to read fragments and replies, not as extra speech to score. Score how this line treats other people, not whether the topic is serious.";
+  `Judge only \`utterance\`. ${JEV_SHARED_EVIDENCE} Score how this line treats other people, not whether the topic is serious.`;
 
 export type OnlineId =
   | "troll"

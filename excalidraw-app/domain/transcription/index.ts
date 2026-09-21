@@ -11,6 +11,7 @@ export { listenStreamTranscript } from "./listenStreamTranscript";
 export type { TranscriptDebug } from "./listenStreamTranscript";
 export {
   clearTranscript,
+  dropTranscriptTurns,
   listTranscriptFeeds,
   publishTranscript,
   readTranscript,

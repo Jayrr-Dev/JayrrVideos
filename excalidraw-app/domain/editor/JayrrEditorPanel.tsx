@@ -1139,6 +1139,7 @@ export const JayrrEditorPanel = () => {
         <JayrrEditorExportDialog
           canQuery={canQuery}
           exporting={exportBusy}
+          projectName={projectName}
           onClose={() => {
             if (!exportBusy) {
               setExportOpen(false);

@@ -1,5 +1,7 @@
+import { JEV_SHARED_EVIDENCE } from "../../transcription/jevSharedState";
+
 const UTTERANCE_SCOPE =
-  "Judge only `utterance`. `previous_text` is recent talk before this line; use it to read fragments and replies, not as extra speech to type. There are no better or worse preferences. Score the natural orientation this line shows, not a life diagnosis.";
+  `Judge only \`utterance\`. ${JEV_SHARED_EVIDENCE} There are no better or worse preferences. Score the natural orientation this line shows, not a life diagnosis.`;
 
 export type MbtiLetter = "E" | "I" | "S" | "N" | "T" | "F" | "J" | "P";
 
@@ -164,11 +166,7 @@ export const mbtiFromAnswers = (
   return resultFromPairs(pairs);
 };
 
-const pairProb = (
-  row: MbtiResult,
-  pairId: MbtiPairId,
-  letter: MbtiLetter,
-) => {
+const pairProb = (row: MbtiResult, pairId: MbtiPairId, letter: MbtiLetter) => {
   const pair = MBTI_PAIRS.find((item) => item.id === pairId);
   const score = row.pairs[pairId];
   if (!pair || !score) {
