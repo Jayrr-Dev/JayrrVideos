@@ -1,6 +1,7 @@
 import type { ExcalidrawElement } from "@excalidraw/element/types";
 
 import { JAYRR_CALLED_OBJECT_KEY } from "../model";
+
 import { GENDER_BANDS } from "./jevGenderStyleScale";
 import { HOUSE_BANDS } from "./jevHogwartsScale";
 import { TRUTH_BANDS } from "./jevTruthScale";
