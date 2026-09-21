@@ -516,6 +516,7 @@ const JayrrSoundLibraryDialogConnected = ({
   const [loudnessGen, setLoudnessGen] = useState(0);
   const [sortKey, setSortKey] = useState<SoundSortKey>("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const playGenRef = useRef(0);
 
   useEffect(() => {
     if (dbFilter === 0 && sortKey !== "db") {
@@ -607,6 +608,7 @@ const JayrrSoundLibraryDialogConnected = ({
   }, [audioRef, isPlaying, setProgress]);
 
   const closeDialog = () => {
+    playGenRef.current += 1;
     audioRef.current?.pause();
     setIsPlaying(false);
     onClose();
@@ -617,6 +619,8 @@ const JayrrSoundLibraryDialogConnected = ({
     path: string,
     soundId: string,
   ) => {
+    const playGen = playGenRef.current + 1;
+    playGenRef.current = playGen;
     if (!audioRef.current) {
       audioRef.current = new Audio();
     }
@@ -662,8 +666,15 @@ const JayrrSoundLibraryDialogConnected = ({
     };
 
     for (const src of urls) {
+      if (playGenRef.current !== playGen) {
+        return;
+      }
       const ok = await assignAndPlayAudio(audio, src);
       if (ok) {
+        if (playGenRef.current !== playGen) {
+          audio.pause();
+          return;
+        }
         setIsPlaying(true);
         return;
       }
@@ -679,8 +690,15 @@ const JayrrSoundLibraryDialogConnected = ({
         convexUrl = null;
       }
       if (convexUrl && !urls.includes(convexUrl)) {
+        if (playGenRef.current !== playGen) {
+          return;
+        }
         const ok = await assignAndPlayAudio(audio, convexUrl);
         if (ok) {
+          if (playGenRef.current !== playGen) {
+            audio.pause();
+            return;
+          }
           setIsPlaying(true);
           return;
         }
