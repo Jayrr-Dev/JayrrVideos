@@ -36,7 +36,7 @@ export const isJayrrEditorPreviewElement = (
 
 const videos = new Map<string, HTMLVideoElement>();
 const layerTargets = new Map<string, EditorPreviewLayers>();
-const soundElements = new Map<string, HTMLAudioElement>();
+const soundElements = new Map<string, HTMLMediaElement>();
 const videoListeners = new Set<() => void>();
 const audioListeners = new Set<(audio: EditorPreviewAudio) => void>();
 
@@ -261,9 +261,10 @@ export const getEditorPreviewVideo = (elementId: string) =>
 
 export const registerEditorPreviewSound = (
   clipId: string,
-  audio: HTMLAudioElement,
+  audio: HTMLMediaElement,
 ) => {
   soundElements.set(clipId, audio);
+  applyPreviewMediaMix(audio);
   return () => {
     if (soundElements.get(clipId) === audio) {
       soundElements.delete(clipId);

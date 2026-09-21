@@ -8,6 +8,15 @@ export type SpeakerTurn = {
   speaker: number | null;
 };
 
+/** Preserve a draft result during final scoring, without changing its evidence. */
+export const adoptLiveScore = <T extends SpeakerScoreRow>(
+  live: T | null,
+  turn: SpeakerTurn | null,
+): T | null =>
+  live && turn && live.speaker === turn.speaker
+    ? { ...live, turnId: turn.id }
+    : null;
+
 export type AverageCache<Item, Result> = {
   speakers: Map<number, { items: readonly Item[]; result: Result }>;
   output: Map<number, Result>;
@@ -78,11 +87,7 @@ const sameItems = <Item>(
   return true;
 };
 
-export const averagesBySpeaker = <
-  Row extends SpeakerScoreRow,
-  Item,
-  Result,
->(
+export const averagesBySpeaker = <Row extends SpeakerScoreRow, Item, Result>(
   rows: readonly Row[],
   pick: (row: Row) => Item | null | undefined,
   average: (items: readonly Item[]) => Result | null | undefined,

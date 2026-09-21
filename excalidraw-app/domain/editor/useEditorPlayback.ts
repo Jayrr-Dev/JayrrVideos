@@ -1,15 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { jayrrSoundPlayUrls } from "../../sounds/jayrrSoundPlayback";
+import {
+  assignMediaSrcFromList,
+  jayrrSoundPlayUrls,
+} from "../../sounds/jayrrSoundPlayback";
 
 import {
   baseBlendAtTime,
   clipAtTime,
   clipLaneId,
-  collectLaneOverlaps,
   clipPlaybackMuted,
   clipVolumeValue,
+  collectLaneOverlaps,
   editorHasClips,
+  isEditorAudioClip,
   isEditorAudioLikeClip,
   isEditorClocklessVisual,
   isEditorHtmlClip,
@@ -281,6 +285,34 @@ const coveringSounds = (timeline: EditorTimeline, timeMs: number) =>
       timeMs < clip.startMs + clip.durationMs,
   );
 
+const soundPlayUrls = (clip: EditorClip) => {
+  if (isEditorSoundClip(clip)) {
+    const urls = jayrrSoundPlayUrls(clip.url || null, clip.path);
+    if (clip.url) {
+      return [clip.url, ...urls.filter((url) => url !== clip.url)];
+    }
+    return urls;
+  }
+  if (isEditorHtmlClip(clip) || !("url" in clip) || !clip.url) {
+    return [];
+  }
+  return [clip.url];
+};
+
+const createSoundNode = (doc: Document, clip: EditorClip) => {
+  if (isEditorAudioClip(clip)) {
+    const video = doc.createElement("video");
+    video.preload = "auto";
+    video.playsInline = true;
+    video.crossOrigin = "anonymous";
+    return video;
+  }
+  const audio = doc.createElement("audio");
+  audio.preload = "auto";
+  audio.crossOrigin = "anonymous";
+  return audio;
+};
+
 const applyVideoMix = (
   video: HTMLVideoElement,
   clipMuted: boolean,
@@ -320,7 +352,7 @@ export const useEditorPlayback = ({
   const lastTickRef = useRef(0);
   const rafRef = useRef(0);
   const prefetchUrlRef = useRef<string | null>(null);
-  const soundNodesRef = useRef(new Map<string, HTMLAudioElement>());
+  const soundNodesRef = useRef(new Map<string, HTMLMediaElement>());
   const timelineRef = useRef(timeline);
   timelineRef.current = timeline;
   const stackLaneIdsRef = useRef(stackLaneIds);
@@ -412,8 +444,7 @@ export const useEditorPlayback = ({
         }
         let audio = soundNodesRef.current.get(clip.id);
         if (!audio) {
-          audio = doc.createElement("audio");
-          audio.preload = "auto";
+          audio = createSoundNode(doc, clip);
           soundNodesRef.current.set(clip.id, audio);
           registerEditorPreviewSound(clip.id, audio);
         }
@@ -422,11 +453,10 @@ export const useEditorPlayback = ({
           clipVolumeValue(clip),
           clipPlaybackMuted(clip),
         );
-        const src = isEditorSoundClip(clip)
-          ? jayrrSoundPlayUrls(clip.url || null, clip.path)[0]
-          : clip.url;
-        if (src && audio.getAttribute("src") !== src) {
-          audio.src = src;
+        const src = await assignMediaSrcFromList(audio, soundPlayUrls(clip));
+        if (!src) {
+          audio.pause();
+          continue;
         }
         const offset = sourceOffsetSec(clip, timeMs);
         if (Number.isFinite(audio.duration) && audio.duration > 0) {

@@ -221,7 +221,7 @@ type AudioWindow = Window &
 
 const mixAudioTracks = (
   videos: readonly HTMLVideoElement[],
-  sounds: readonly HTMLAudioElement[],
+  sounds: readonly HTMLMediaElement[],
   ownerWindow: Window,
 ) => {
   const view = ownerWindow as AudioWindow;

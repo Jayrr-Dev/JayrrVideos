@@ -13,6 +13,10 @@ import {
 } from "../../transcription/publishTranscript";
 import { speakerLabel } from "../../transcription/transcriptTurns";
 import {
+  pruneScoredText,
+  retryStaleScore,
+} from "../../transcription/scoringQueue";
+import {
   ConversationIndicators,
   useConversationContext,
 } from "../../transcription/useConversationContext";
@@ -29,6 +33,7 @@ import {
   writeClassifierConfig,
   type ClassifierConfig,
 } from "./classifierConfig";
+import { attributeSpeakerScores, mapSpeakersByTurn } from "./speakerScoreCache";
 
 type TabId = "classes" | "config" | "output";
 
@@ -61,7 +66,12 @@ type SpeakerCard = {
   rows: ScoreRow[];
 };
 
-type Job = { turnId: string; speaker: number | null; text: string };
+type Job = {
+  turnId: string;
+  speaker: number | null;
+  text: string;
+  staleRetries?: number;
+};
 
 const TABS: { id: TabId; label: string }[] = [
   { id: "classes", label: "Classes" },
@@ -174,7 +184,7 @@ const toRows = (
  * The tag is whichever class they lean toward most overall.
  */
 const buildSpeakerCards = (
-  scores: TurnScore[],
+  scores: readonly TurnScore[],
   speakerNames: Record<number, string>,
   names: Map<string, string>,
 ): SpeakerCard[] => {
@@ -298,6 +308,16 @@ export const ClassifierWidget = ({ elementId }: { elementId: string }) => {
   useEffect(() => {
     resetScores();
   }, [config, conversation.session, resetScores]);
+
+  useEffect(
+    () => () => {
+      generationRef.current += 1;
+      queueRef.current = [];
+      liveJobRef.current = null;
+      scoredTextRef.current.clear();
+    },
+    [],
+  );
 
   useEffect(() => {
     const element = editor
@@ -443,7 +463,7 @@ export const ClassifierWidget = ({ elementId }: { elementId: string }) => {
                   turn.id === job.turnId && turn.text.trim() === job.text,
               )
             ) {
-              queueRef.current.push(job);
+              retryStaleScore(queueRef.current, job);
             }
             continue;
           }
@@ -495,6 +515,7 @@ export const ClassifierWidget = ({ elementId }: { elementId: string }) => {
 
   // Live mode: every finished bubble gets scored once (re-scored if it grew).
   useEffect(() => {
+    pruneScoredText(scoredTextRef.current, turns);
     if (!config.sourceId || !classesReady) {
       return;
     }
@@ -553,19 +574,11 @@ export const ClassifierWidget = ({ elementId }: { elementId: string }) => {
   }, [liveTurn]);
 
   const names = useMemo(() => classNames(config), [config]);
+  const speakerByTurn = useMemo(() => mapSpeakersByTurn(turns), [turns]);
   const cards = useMemo(() => {
-    const speakerByTurn = new Map(
-      turns.map((turn) => [turn.id, turn.speaker] as const),
-    );
-    const rows = (live ? [...scores, live] : scores).map((row) => {
-      const speaker = speakerByTurn.get(row.turnId);
-      if (speaker === undefined || speaker === row.speaker) {
-        return row;
-      }
-      return { ...row, speaker };
-    });
+    const rows = attributeSpeakerScores(scores, speakerByTurn, live);
     return buildSpeakerCards(rows, speakerNames, names);
-  }, [live, names, scores, speakerNames, turns]);
+  }, [live, names, scores, speakerByTurn, speakerNames]);
   const preview =
     livePhrase.length > SNIPPET_CHARS
       ? livePhrase.slice(-SNIPPET_CHARS)

@@ -74,7 +74,10 @@ export class TopErrorBoundary extends React.Component<
     console.error(error, errorInfo);
     const snapshot: Record<string, unknown> = {};
     try {
-      for (const [key, value] of Object.entries({ ...localStorage })) {
+      // Widget failures must not copy the entire saved canvas into memory.
+      for (const [key, value] of Object.entries(
+        this.props.compact ? {} : { ...localStorage },
+      )) {
         try {
           snapshot[key] = JSON.parse(value);
         } catch {

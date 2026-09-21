@@ -17,7 +17,11 @@ export const JayrrCalledObjectEmbed = ({
   elementId: string;
 }) => {
   if (kind === "classifier") {
-    return <ClassifierWidget elementId={elementId} />;
+    return (
+      <TopErrorBoundary compact key={elementId}>
+        <ClassifierWidget elementId={elementId} />
+      </TopErrorBoundary>
+    );
   }
   if (kind === "transcription") {
     return <TranscriptionWidget elementId={elementId} />;
@@ -31,5 +35,10 @@ export const JayrrCalledObjectEmbed = ({
   if (kind === "pdf") {
     return <PdfWidget elementId={elementId} />;
   }
-  return <TranscribeWidget elementId={elementId} />;
+  return (
+    <TopErrorBoundary compact key={elementId}>
+      <TranscribeWidget elementId={elementId} />
+    </TopErrorBoundary>
+  );
 };
+import { TopErrorBoundary } from "../../../components/TopErrorBoundary";

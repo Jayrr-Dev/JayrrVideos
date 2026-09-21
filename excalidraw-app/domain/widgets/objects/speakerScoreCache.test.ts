@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  adoptLiveScore,
   attributeSpeakerScores,
   averagesBySpeaker,
   emptyAverageCache,
@@ -15,6 +16,26 @@ type Row = {
 };
 
 describe("speakerScoreCache", () => {
+  it("retains draft evidence when final speech grows or merges into a bubble", () => {
+    const live = {
+      turnId: "__live__",
+      speaker: 0,
+      text: "research",
+      value: { n: 4 },
+    };
+    const adopted = adoptLiveScore(live, { id: "final", speaker: 0 });
+    expect(adopted).toEqual({ ...live, turnId: "final" });
+    expect(adopted?.value).toBe(live.value);
+    expect(live.turnId).toBe("__live__");
+  });
+
+  it("does not transfer a draft label to another speaker or missing turn", () => {
+    const live = { turnId: "__live__", speaker: 0, value: { n: 4 } };
+    expect(adoptLiveScore(live, { id: "final", speaker: 1 })).toBeNull();
+    expect(adoptLiveScore(live, null)).toBeNull();
+    expect(adoptLiveScore(null, { id: "final", speaker: 0 })).toBeNull();
+  });
+
   it("keeps the same scores array when speakers already match", () => {
     const scores: Row[] = [
       { turnId: "a", speaker: 0, value: { n: 1 } },

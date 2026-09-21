@@ -465,12 +465,20 @@
     justify-content: flex-start;
   }
 
-  .jayrr-called-embed__bands--online .jayrr-called-embed__iq {
+  .jayrr-called-embed__bands--online .jayrr-called-embed__iq,
+  .jayrr-called-embed__bands--truth .jayrr-called-embed__iq {
     width: auto;
     max-width: 100%;
     flex: 0 1 auto;
     overflow: visible;
     white-space: nowrap;
+  }
+
+  .jayrr-called-embed__bands--truth {
+    display: flex;
+    flex-wrap: wrap;
+    grid-template-columns: none;
+    justify-content: flex-start;
   }
 
   .jayrr-called-embed__bands--energy {
@@ -852,6 +860,53 @@
     border-color: #fca5a5;
   }
 
+  .jayrr-called-embed__truth {
+    min-width: 0;
+    text-align: center;
+  }
+
+  .jayrr-called-embed__truth--fabricated {
+    background: #fecaca;
+    color: #b91c1c;
+    border-color: #f87171;
+  }
+
+  .jayrr-called-embed__truth--false {
+    background: #fee2e2;
+    color: #b91c1c;
+    border-color: #fca5a5;
+  }
+
+  .jayrr-called-embed__truth--misleading {
+    background: #ffedd5;
+    color: #c2410c;
+    border-color: #fdba74;
+  }
+
+  .jayrr-called-embed__truth--unclear {
+    background: #f4f4f5;
+    color: #52525b;
+    border-color: #d4d4d8;
+  }
+
+  .jayrr-called-embed__truth--plausible {
+    background: #e0f2fe;
+    color: #0369a1;
+    border-color: #7dd3fc;
+  }
+
+  .jayrr-called-embed__truth--supported {
+    background: #dcfce7;
+    color: #15803d;
+    border-color: #86efac;
+  }
+
+  .jayrr-called-embed__truth--proven {
+    background: #166534;
+    color: #dcfce7;
+    border-color: #22c55e;
+  }
+
   .jayrr-called-embed__energy {
     min-width: 0;
     text-align: center;
@@ -1160,16 +1215,22 @@
 
   .jayrr-called-embed__now-row {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: flex-start;
     flex-wrap: wrap;
-    gap: 0.4rem;
+    gap: 0.32rem 0.35rem;
     min-width: 0;
+    padding: 0.45rem 0.5rem;
+  }
+
+  .jayrr-called-embed__now-row.is-live {
+    border-color: var(--color-primary);
   }
 
   .jayrr-called-embed__now-row .jayrr-called-embed__now-name,
   .jayrr-called-embed__now-row .jayrr-called-embed__who-input {
-    flex: 1 1 auto;
+    flex: 1 1 100%;
     min-width: 0;
   }
 
@@ -1180,6 +1241,7 @@
   .jayrr-called-embed__now-row .jayrr-called-embed__hype,
   .jayrr-called-embed__now-row .jayrr-called-embed__energy,
   .jayrr-called-embed__now-row .jayrr-called-embed__online,
+  .jayrr-called-embed__now-row .jayrr-called-embed__truth,
   .jayrr-called-embed__now-row .jayrr-called-embed__socion,
   .jayrr-called-embed__now-row .jayrr-called-embed__big5,
   .jayrr-called-embed__now-row .jayrr-called-embed__iq,
@@ -1198,7 +1260,7 @@
     display: flex;
     flex-direction: column;
     align-items: stretch;
-    gap: 0.28rem;
+    gap: 0.45rem;
     min-height: 0;
     overflow: auto;
   }

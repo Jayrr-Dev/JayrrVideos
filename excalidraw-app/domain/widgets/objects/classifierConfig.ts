@@ -76,7 +76,42 @@ export const CLASSIFIER_PRESETS: ClassifierPreset[] = [
     ["Sincere", "Means it literally."],
     ["Sarcastic", "Says the opposite of what they mean, mocking tone."],
   ]),
-  preset("truth", "Truth or lie", "Does this sound truthful?", [
+  preset(
+    "truth",
+    "Claim truth",
+    "How well does this claim match known facts and available evidence? Judge the claim itself, not whether the speaker meant to lie.",
+    [
+      [
+        "Fabricated",
+        "Completely invented. The main event, source, person, number, quote, or evidence doesn’t exist. Real details may be added, but the central claim has no factual basis.",
+      ],
+      [
+        "False",
+        "Reliable evidence directly shows the claim is wrong. The speaker may believe it. False is not the same as lying.",
+      ],
+      [
+        "Misleading",
+        "Contains some truth but creates the wrong impression by dropping context, cherry-picking a number, confusing cause with coincidence, exaggerating, or treating an unusual case as normal.",
+      ],
+      [
+        "Unclear",
+        "Not enough good evidence to decide. Sources conflict, facts are missing, or the claim is too vague to test. Unclear is not false.",
+      ],
+      [
+        "Plausible",
+        "Reasonable and fits what is known, but evidence is still limited or indirect. Another explanation remains possible. Raise confidence only slightly.",
+      ],
+      [
+        "Supported",
+        "Good evidence backs the main claim. Several reliable facts or sources agree, and nothing strong clearly disproves it. Small details may still be uncertain.",
+      ],
+      [
+        "Proven",
+        "Strong, direct, checkable evidence. Independent sources agree, and reasonable competing explanations have been ruled out. Still not absolute certainty.",
+      ],
+    ],
+  ),
+  preset("lie", "Truth or lie", "Does this sound truthful?", [
     ["Truth", "Direct, specific, consistent."],
     ["Lie", "Vague, evasive, over-explaining, or contradictory."],
   ]),
