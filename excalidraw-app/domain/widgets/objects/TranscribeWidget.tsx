@@ -43,6 +43,10 @@ import {
   publishTranscript,
 } from "../../transcription/publishTranscript";
 import {
+  pruneScoredText,
+  retryStaleScore,
+} from "../../transcription/scoringQueue";
+import {
   ensureSpeakerNames,
   speakerLabel,
   type TranscriptTurn,
@@ -51,10 +55,6 @@ import {
   ConversationIndicators,
   useConversationContext,
 } from "../../transcription/useConversationContext";
-import {
-  pruneScoredText,
-  retryStaleScore,
-} from "../../transcription/scoringQueue";
 import { LiveWidgetToolbar } from "../ui/LiveWidgetToolbar";
 import { useRegisterWidgetToolbar } from "../widgetToolbarRegistry";
 
@@ -62,6 +62,7 @@ import {
   BIG5_BANDS,
   BIG5_QUESTIONS,
   averageBigFive,
+  bigFiveChipLabel,
   bigFiveFromAnswers,
   rankedBigFiveTraits,
   type BigFiveResult,
@@ -71,6 +72,7 @@ import {
   EMOTION_BANDS,
   EMOTION_QUESTION,
   averageEmotions,
+  emotionLabelsForTone,
   emotionsFromAnswers,
   type EmotionPick,
 } from "./jevEmotionScale";
@@ -79,6 +81,7 @@ import {
   ENERGY_QUESTION,
   averageEnergy,
   energyFromAnswers,
+  energyGroupIds,
   rankedEnergy,
   type EnergyResult,
 } from "./jevEnergyScale";
@@ -123,6 +126,7 @@ import {
 } from "./jevMbtiAdvanceScale";
 import {
   MBTI_BANDS,
+  MBTI_PAIRS,
   MBTI_QUESTIONS,
   averageMbti,
   mbtiFromAnswers,
@@ -175,7 +179,9 @@ import {
   adoptLiveScore,
   attributeSpeakerScores,
   averagesBySpeaker,
+  clearAverageCache,
   emptyAverageCache,
+  lockFinalScore,
   mapSpeakersByTurn,
 } from "./speakerScoreCache";
 import {
@@ -528,6 +534,20 @@ const uniqueSpeakers = (turns: ChatTurn[]) => {
   return labeled.length > 0 ? labeled : list;
 };
 
+const countSpokenWords = (text: string) => {
+  const matches = text.trim().match(/\S+/g);
+  return matches?.length ?? 0;
+};
+
+const spokenWordsBySpeaker = (turns: readonly ChatTurn[]) => {
+  const totals = new Map<string, number>();
+  for (const turn of turns) {
+    const key = turn.speaker === null ? "unknown" : String(turn.speaker);
+    totals.set(key, (totals.get(key) ?? 0) + countSpokenWords(turn.text));
+  }
+  return totals;
+};
+
 const numberedSpeakers = (turns: ChatTurn[]) =>
   uniqueSpeakers(turns).filter(
     (speaker): speaker is number => speaker !== null,
@@ -756,6 +776,49 @@ const jevScoreMark = (show: boolean, value?: number) => {
   return ` ${Math.round(Math.min(1, Math.max(0, value)) * 100)}%`;
 };
 
+const percentText = (value: number) =>
+  `${Math.round(Math.min(1, Math.max(0, value)) * 100)}%`;
+
+type JevTipRow = { key: string; label: string; mark?: string };
+
+const jevTipBody = (
+  definition?: ReactNode,
+  rows?: readonly JevTipRow[],
+): ReactNode => {
+  const list = rows?.filter((row) => row.label) ?? [];
+  if (!definition && list.length === 0) {
+    return undefined;
+  }
+  return (
+    <>
+      {typeof definition === "string" ? <p>{definition}</p> : definition}
+      {list.length > 0 ? (
+        <ul>
+          {list.map((row) => (
+            <li key={row.key}>
+              {row.label}
+              {row.mark ? ` ${row.mark}` : ""}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </>
+  );
+};
+
+const probabilityRows = (
+  entries: readonly (readonly [string, number])[],
+  labelFor: (id: string) => string,
+): JevTipRow[] =>
+  entries
+    .filter(([, value]) => value > 0.04)
+    .sort((left, right) => right[1] - left[1])
+    .map(([id, value]) => ({
+      key: id,
+      label: labelFor(id),
+      mark: percentText(value),
+    }));
+
 const JevSwitch = ({
   pressed,
   ariaLabel,
@@ -941,16 +1004,23 @@ const SmartBadge = ({
 const EmotionBadge = ({
   emotion,
   showScore,
+  all,
 }: {
   emotion: EmotionPick;
   showScore?: boolean;
+  all?: readonly EmotionPick[];
 }) => (
   <JevTip
     title={`${emotion.label} · ${emotion.cluster}`}
-    body={
+    body={jevTipBody(
       EMOTION_BANDS.find((band) => band.tone === emotion.tone)?.what ??
-      emotion.cluster
-    }
+        emotion.cluster,
+      (all ?? [emotion]).map((row) => ({
+        key: row.id,
+        label: row.label,
+        mark: percentText(row.confidence),
+      })),
+    )}
   >
     <span
       className={`jayrr-called-embed__emo jayrr-called-embed__emo--${emotion.tone}`}
@@ -968,7 +1038,22 @@ const MbtiBadge = ({
   mbti: MbtiResult;
   showScore?: boolean;
 }) => (
-  <JevTip title={`MBTI ${mbti.type}`} body={mbtiTypeWhat(mbti.type)}>
+  <JevTip
+    title={`MBTI ${mbti.type}`}
+    body={jevTipBody(
+      mbtiTypeWhat(mbti.type),
+      MBTI_PAIRS.map((pair) => {
+        const score = mbti.pairs[pair.id];
+        return {
+          key: pair.id,
+          label: `${pair.left}/${pair.right}`,
+          mark: `${percentText(score?.left ?? 0)} · ${percentText(
+            score?.right ?? 0,
+          )}`,
+        };
+      }),
+    )}
+  >
     <span className="jayrr-called-embed__iq jayrr-called-embed__mbti">
       {mbti.type}
       {jevScoreMark(!!showScore, mbti.confidence)}
@@ -980,12 +1065,25 @@ const CogBadge = ({
   fn,
   showScore,
   confidence,
+  all,
 }: {
   fn: CogFn;
   showScore?: boolean;
   confidence?: number;
+  all?: MbtiAdvanceResult;
 }) => (
-  <JevTip title={fn} body={cogWhat(fn)}>
+  <JevTip
+    title={fn}
+    body={jevTipBody(
+      cogWhat(fn),
+      all
+        ? probabilityRows(
+            COG_BANDS.map((id) => [id, all.probabilities[id] ?? 0]),
+            (id) => id,
+          )
+        : undefined,
+    )}
+  >
     <span
       className={`jayrr-called-embed__iq jayrr-called-embed__fn jayrr-called-embed__fn--${fn.toLowerCase()}`}
     >
@@ -1002,7 +1100,19 @@ const EnneaBadge = ({
   ennea: EnneaResult;
   showScore?: boolean;
 }) => (
-  <JevTip title={`Type ${ennea.id} · The ${ennea.name}`} body={ennea.what}>
+  <JevTip
+    title={`Type ${ennea.id} · The ${ennea.name}`}
+    body={jevTipBody(
+      ennea.what,
+      probabilityRows(
+        ENNEA_BANDS.map((band) => [band.id, ennea.probabilities[band.id] ?? 0]),
+        (id) => {
+          const band = ENNEA_BANDS.find((row) => row.id === id);
+          return band ? `${band.id} ${band.name}` : id;
+        },
+      ),
+    )}
+  >
     <span
       className={`jayrr-called-embed__iq jayrr-called-embed__ennea jayrr-called-embed__ennea--${ennea.id}`}
     >
@@ -1048,7 +1158,16 @@ const EnergyBadge = ({
       title={
         band ? `${band.level} ${band.name}` : `${energy.label} ${energy.name}`
       }
-      body={band ? band.what : undefined}
+      body={jevTipBody(
+        band?.what,
+        energyGroupIds(energy.id).map((id) => {
+          const sibling = ENERGY_BANDS.find((row) => row.id === id);
+          return {
+            key: id,
+            label: sibling ? `${sibling.level} ${sibling.name}` : id,
+          };
+        }),
+      )}
     >
       <span
         className={`jayrr-called-embed__iq jayrr-called-embed__energy jayrr-called-embed__energy--${energy.zone} jayrr-called-embed__energy--${energy.id}`}
@@ -1129,7 +1248,19 @@ const SocionBadge = ({
 }) => (
   <JevTip
     title={`${socion.id} ${socion.code4} · ${socion.nick} · ${socion.ego}`}
-    body={socion.what}
+    body={jevTipBody(
+      socion.what,
+      probabilityRows(
+        SOCION_BANDS.map((band) => [
+          band.id,
+          socion.probabilities[band.id] ?? 0,
+        ]),
+        (id) => {
+          const band = SOCION_BANDS.find((row) => row.id === id);
+          return band ? `${band.id} ${band.code4}` : id;
+        },
+      ),
+    )}
   >
     <span
       className={`jayrr-called-embed__iq jayrr-called-embed__socion jayrr-called-embed__socion--${
@@ -1142,6 +1273,16 @@ const SocionBadge = ({
   </JevTip>
 );
 
+const bigFiveTraitRows = (bigFive: BigFiveResult): JevTipRow[] =>
+  BIG5_BANDS.map((band) => {
+    const row = bigFive.traits[band.id];
+    return {
+      key: band.id,
+      label: band.name,
+      mark: row.level,
+    };
+  });
+
 const BigFiveBadge = ({
   bigFive,
   showScore,
@@ -1151,18 +1292,7 @@ const BigFiveBadge = ({
 }) => (
   <JevTip
     title={bigFive.label}
-    body={
-      <ul>
-        {BIG5_BANDS.map((band) => {
-          const trait = bigFive.traits[band.id];
-          return (
-            <li key={band.id}>
-              {band.id} {band.name}: {trait.level}
-            </li>
-          );
-        })}
-      </ul>
-    }
+    body={jevTipBody(undefined, bigFiveTraitRows(bigFive))}
   >
     <span className="jayrr-called-embed__iq jayrr-called-embed__big5">
       {bigFive.label}
@@ -1174,18 +1304,23 @@ const BigFiveBadge = ({
 const BigFiveTraitBadge = ({
   trait,
   showScore,
+  all,
 }: {
   trait: BigFiveTrait;
   showScore?: boolean;
+  all?: BigFiveResult;
 }) => (
   <JevTip
     title={`${trait.name}: ${trait.level}`}
-    body={BIG5_BANDS.find((band) => band.id === trait.id)?.what}
+    body={jevTipBody(
+      BIG5_BANDS.find((band) => band.id === trait.id)?.what,
+      all ? bigFiveTraitRows(all) : undefined,
+    )}
   >
     <span
       className={`jayrr-called-embed__iq jayrr-called-embed__big5 jayrr-called-embed__big5--${trait.id.toLowerCase()}`}
     >
-      {trait.id} {trait.level}
+      {bigFiveChipLabel(trait)}
       {jevScoreMark(!!showScore, trait.confidence)}
     </span>
   </JevTip>
@@ -1199,7 +1334,12 @@ const bigFiveBadges = (
   count <= 1
     ? [<BigFiveBadge key="all" bigFive={bigFive} showScore={showScore} />]
     : rankedBigFiveTraits(bigFive, count).map((trait) => (
-        <BigFiveTraitBadge key={trait.id} trait={trait} showScore={showScore} />
+        <BigFiveTraitBadge
+          key={trait.id}
+          trait={trait}
+          showScore={showScore}
+          all={bigFive}
+        />
       ));
 
 const TurnBadges = ({
@@ -1246,6 +1386,7 @@ const TurnBadges = ({
                 key={emotion.id}
                 emotion={emotion}
                 showScore={jevShowScoreOn(config, "emotion")}
+                all={emotions}
               />
             ))
         : null}
@@ -1358,6 +1499,7 @@ const TurnBadges = ({
                   fn={fn}
                   showScore={jevShowScoreOn(config, "mbtiAdvance")}
                   confidence={advance.probabilities[fn]}
+                  all={advance}
                 />
               ),
             )
@@ -1417,8 +1559,8 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
   namesRef.current = names;
   const speakerByTurn = useMemo(() => mapSpeakersByTurn(turns), [turns]);
   const speakerScores = useMemo(
-    () => attributeSpeakerScores(scores, speakerByTurn, live),
-    [live, scores, speakerByTurn],
+    () => attributeSpeakerScores(scores, speakerByTurn, null),
+    [scores, speakerByTurn],
   );
   const speakerAverageCache = useMemo(
     () => ({
@@ -1528,9 +1670,21 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
     scoredTextRef.current.clear();
     debugTranscribe("score reset", { generation: generationRef.current });
     liveRef.current = null;
+    clearAverageCache(speakerAverageCache.iq);
+    clearAverageCache(speakerAverageCache.emotion);
+    clearAverageCache(speakerAverageCache.mbti);
+    clearAverageCache(speakerAverageCache.advance);
+    clearAverageCache(speakerAverageCache.ennea);
+    clearAverageCache(speakerAverageCache.smart);
+    clearAverageCache(speakerAverageCache.hype);
+    clearAverageCache(speakerAverageCache.energy);
+    clearAverageCache(speakerAverageCache.online);
+    clearAverageCache(speakerAverageCache.socion);
+    clearAverageCache(speakerAverageCache.bigFive);
+    clearAverageCache(speakerAverageCache.truth);
     setScores([]);
     setLive(null);
-  }, []);
+  }, [speakerAverageCache]);
 
   useEffect(() => {
     resetIq();
@@ -1755,25 +1909,28 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
     if (isFinal) {
       const snapshot = adoptLiveScore(liveRef.current, adopted);
       const turn = adopted;
-      if (snapshot && turn && snapshot.speaker === turn.speaker) {
-        // Keep the provisional label until the final text has been scored.
-        // Contextual finals still need a request to confirm their topic.
-        if (
-          snapshot.text === turn.text.trim() &&
-          !configRef.current.contextEnabled
-        ) {
-          scoredTextRef.current.set(turn.id, turn.text.trim());
-        }
+      if (
+        snapshot &&
+        turn &&
+        snapshot.speaker === turn.speaker &&
+        snapshot.text === turn.text.trim() &&
+        !configRef.current.contextEnabled
+      ) {
+        scoredTextRef.current.set(turn.id, turn.text.trim());
+        queueRef.current = queueRef.current.filter(
+          (job) => job.turnId !== turn.id,
+        );
         setScores((current) =>
-          [
-            ...current.filter((row) => row.turnId !== turn.id),
+          lockFinalScore(
+            current,
             {
               ...snapshot,
               turnId: turn.id,
               speaker: turn.speaker,
               text: snapshot.text,
             },
-          ].slice(-MAX_SCORED_TURNS),
+            MAX_SCORED_TURNS,
+          ),
         );
       }
       liveRef.current = null;
@@ -1921,13 +2078,18 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
           if (job.turnId === LIVE_TURN_ID) {
             liveRef.current = row;
             setLive(row);
+          } else if (scoredTextRef.current.get(job.turnId) === job.text) {
+            debugTranscribe("score skip", {
+              turnId: job.turnId,
+              reason: "locked-final",
+            });
           } else {
             scoredTextRef.current.set(job.turnId, job.text);
+            queueRef.current = queueRef.current.filter(
+              (pending) => pending.turnId !== job.turnId,
+            );
             setScores((current) =>
-              [
-                ...current.filter((item) => item.turnId !== job.turnId),
-                row,
-              ].slice(-MAX_SCORED_TURNS),
+              lockFinalScore(current, row, MAX_SCORED_TURNS),
             );
           }
           debugTranscribe("score ok", {
@@ -2501,6 +2663,7 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
       ? "Allow the microphone. Window share has no system audio on its own."
       : status;
   const speakers = uniqueSpeakers(turns);
+  const wordCounts = spokenWordsBySpeaker(turns);
   const roster = numberedSpeakers(turns);
   const excalidrawRoot = rootRef.current?.closest(".excalidraw");
   const menuContainer =
@@ -2733,7 +2896,20 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
                     <JevTip
                       key={band.id}
                       title={`${band.level} ${band.name}`}
-                      body={band.what}
+                      body={jevTipBody(
+                        band.what,
+                        energyGroupIds(band.id).map((id) => {
+                          const sibling = ENERGY_BANDS.find(
+                            (row) => row.id === id,
+                          );
+                          return {
+                            key: id,
+                            label: sibling
+                              ? `${sibling.level} ${sibling.name}`
+                              : id,
+                          };
+                        }),
+                      )}
                     >
                       <span
                         className={`jayrr-called-embed__iq jayrr-called-embed__energy jayrr-called-embed__energy--${band.zone} jayrr-called-embed__energy--${band.id}`}
@@ -2934,7 +3110,16 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
                     <JevTip
                       key={band.letter}
                       title={band.letter}
-                      body={band.what}
+                      body={jevTipBody(
+                        band.what,
+                        MBTI_BANDS.filter((row) => row.pair === band.pair).map(
+                          (row) => ({
+                            key: row.letter,
+                            label: row.letter,
+                            mark: row.what,
+                          }),
+                        ),
+                      )}
                     >
                       <span
                         className={`jayrr-called-embed__iq jayrr-called-embed__mbti jayrr-called-embed__mbti--${band.letter.toLowerCase()}`}
@@ -3049,7 +3234,17 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
                 </div>
                 <div className="jayrr-called-embed__bands jayrr-called-embed__bands--emotion">
                   {EMOTION_BANDS.map((band) => (
-                    <JevTip key={band.tone} title={band.label} body={band.what}>
+                    <JevTip
+                      key={band.tone}
+                      title={band.label}
+                      body={jevTipBody(
+                        band.what,
+                        emotionLabelsForTone(band.tone).map((label) => ({
+                          key: label,
+                          label,
+                        })),
+                      )}
+                    >
                       <span
                         className={`jayrr-called-embed__emo jayrr-called-embed__emo--${band.tone}`}
                       >
@@ -3327,6 +3522,7 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
                       )
                         ? truthBySpeaker.get(speaker)
                         : undefined;
+                    const wordCount = wordCounts.get(speakerKey) ?? 0;
                     const nameControl =
                       speaker === null ? (
                         <span
@@ -3378,7 +3574,12 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
                             : "jayrr-called-embed__card jayrr-called-embed__now-row"
                         }
                       >
-                        {nameControl}
+                        <div className="jayrr-called-embed__now-head">
+                          {nameControl}
+                          <span className="jayrr-called-embed__now-words">
+                            {wordCount} {wordCount === 1 ? "word" : "words"}
+                          </span>
+                        </div>
                         {speakerIq === undefined
                           ? null
                           : rankedIqComposites(
@@ -3400,6 +3601,7 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
                                   key={emotion.id}
                                   emotion={emotion}
                                   showScore={jevShowScoreOn(config, "emotion")}
+                                  all={speakerEmotions}
                                 />
                               ))
                           : null}
@@ -3440,6 +3642,7 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
                                   "mbtiAdvance",
                                 )}
                                 confidence={speakerAdvance.probabilities[fn]}
+                                all={speakerAdvance}
                               />
                             ))
                           : null}

@@ -30,6 +30,29 @@ export const emptyAverageCache = <Item, Result>(): AverageCache<
   output: new Map(),
 });
 
+export const clearAverageCache = <Item, Result>(
+  cache: AverageCache<Item, Result>,
+) => {
+  cache.speakers.clear();
+  cache.output = new Map();
+};
+
+/** Keep the first finalized Jev row for this text. Later jobs cannot replace it. */
+export const lockFinalScore = <T extends { turnId: string; text: string }>(
+  current: readonly T[],
+  incoming: T,
+  max: number,
+): T[] => {
+  const existing = current.find((row) => row.turnId === incoming.turnId);
+  if (existing && existing.text === incoming.text) {
+    return current as T[];
+  }
+  return [
+    ...current.filter((row) => row.turnId !== incoming.turnId),
+    incoming,
+  ].slice(-max);
+};
+
 export const speakerAssignmentStamp = (turns: readonly SpeakerTurn[]) => {
   let stamp = "";
   for (const turn of turns) {
@@ -72,21 +95,6 @@ export const attributeSpeakerScores = <T extends SpeakerScoreRow>(
   return next;
 };
 
-const sameItems = <Item>(
-  left: readonly Item[],
-  right: readonly Item[],
-): boolean => {
-  if (left.length !== right.length) {
-    return false;
-  }
-  for (let index = 0; index < left.length; index += 1) {
-    if (left[index] !== right[index]) {
-      return false;
-    }
-  }
-  return true;
-};
-
 export const averagesBySpeaker = <Row extends SpeakerScoreRow, Item, Result>(
   rows: readonly Row[],
   pick: (row: Row) => Item | null | undefined,
@@ -110,7 +118,7 @@ export const averagesBySpeaker = <Row extends SpeakerScoreRow, Item, Result>(
   let allHit = groups.size === cache.output.size;
   for (const [speaker, items] of groups) {
     const hit = cache.speakers.get(speaker);
-    if (hit && sameItems(hit.items, items)) {
+    if (hit) {
       next.set(speaker, hit.result);
       continue;
     }

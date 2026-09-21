@@ -187,6 +187,9 @@ const slug = (label: string) =>
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_|_$/g, "");
 
+export const emotionLabelsForTone = (tone: EmotionTone) =>
+  CLUSTERS.find((cluster) => cluster.tone === tone)?.labels ?? [];
+
 export const EMOTION_BANDS: readonly {
   tone: EmotionTone;
   label: string;

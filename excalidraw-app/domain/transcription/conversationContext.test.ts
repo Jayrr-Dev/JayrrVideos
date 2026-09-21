@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { validateTopicSummary } from "../../../convex/canvasAi/topicSummary";
 
-import { ConversationContext } from "./conversationContext";
+import { ConversationContext, shortTopicTitle } from "./conversationContext";
 
 import type { JevAnswer } from "../../../convex/canvasAi/jevClient";
 import type { TopicMemory } from "./conversationContext";
@@ -39,6 +39,26 @@ const decide = (
 };
 
 describe("conversation topic memory", () => {
+  it("shortens provisional titles instead of keeping a long speech slice", () => {
+    expect(
+      shortTopicTitle(
+        "is going to happen when they have quote hip hop charter school",
+      ),
+    ).toBe("is going to happen when they…");
+    expect(
+      shortTopicTitle("Motivation for teaching vs industry earnings"),
+    ).toBe("Motivation for teaching vs industry earnings");
+    const context = new ConversationContext();
+    context.ingest([
+      turn(
+        "a",
+        "is going to happen when they have quote hip hop charter school tomorrow",
+      ),
+    ]);
+    decide(context, "a", "new");
+    expect(context.topics[0].title).toBe("is going to happen when they…");
+  });
+
   it("distinguishes the same sentence using attributed preceding speech", () => {
     const first = new ConversationContext();
     const second = new ConversationContext();

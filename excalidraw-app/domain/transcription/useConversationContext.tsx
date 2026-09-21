@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useReducer, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 
 import { api, convexClient } from "../../convexClient";
 
-import { conversationFor } from "./conversationContext";
+import { conversationFor, shortTopicTitle } from "./conversationContext";
 import { debugTranscribe } from "./debugTranscribe";
 
 import type { JevQuestion } from "../../../convex/canvasAi/jevClient";
@@ -148,33 +148,73 @@ export const ConversationIndicators = ({
   conversation: ReturnType<typeof useConversationContext>;
 }) => {
   const { context, selectedTopic, selectTopic } = conversation;
+  const menu = useRef<HTMLDetailsElement>(null);
   const latest = context.turns.at(-1);
   const result = latest ? context.results.get(latest.id) : undefined;
+  const active = context.topics.find(
+    (topic) => topic.id === context.activeTopic,
+  );
+  const pinned = context.topics.find((topic) => topic.id === selectedTopic);
+  const shown = pinned ?? active;
+  const closeMenu = () => {
+    if (menu.current) {
+      menu.current.open = false;
+    }
+  };
+  const pick = (id: string | null) => {
+    selectTopic(id);
+    closeMenu();
+  };
   return (
     <div
       className="jayrr-called-embed__stack jayrr-called-embed__stack--compact"
       aria-label="Topic tracking"
     >
-      <label className="jayrr-called-embed__field">
+      <div className="jayrr-called-embed__field">
         <span>Conversation topic</span>
-        <select
-          className="jayrr-called-embed__select"
-          value={selectedTopic ?? ""}
-          onChange={(event) => selectTopic(event.target.value || null)}
-        >
-          <option value="">
-            Active:{" "}
-            {context.topics.find((topic) => topic.id === context.activeTopic)
-              ?.title ?? "Detecting…"}
-          </option>
-          {context.topics.map((topic) => (
-            <option key={topic.id} value={topic.id}>
-              {topic.title}
-              {topic.id === context.activeTopic ? " (active)" : ""}
-            </option>
-          ))}
-        </select>
-      </label>
+        <details ref={menu} className="jayrr-called-embed__topics">
+          <summary className="jayrr-called-embed__select">
+            {pinned
+              ? shortTopicTitle(pinned.title)
+              : `Active: ${
+                  shown ? shortTopicTitle(shown.title) : "Detecting…"
+                }`}
+          </summary>
+          <div className="jayrr-called-embed__topics-menu" role="listbox">
+            <button
+              type="button"
+              role="option"
+              aria-selected={!pinned}
+              className={
+                pinned
+                  ? "jayrr-called-embed__topics-option"
+                  : "jayrr-called-embed__topics-option is-on"
+              }
+              onClick={() => pick(null)}
+            >
+              Follow live
+              {active ? ` · ${shortTopicTitle(active.title)}` : ""}
+            </button>
+            {context.topics.map((topic) => (
+              <button
+                key={topic.id}
+                type="button"
+                role="option"
+                aria-selected={pinned?.id === topic.id}
+                className={
+                  pinned?.id === topic.id
+                    ? "jayrr-called-embed__topics-option is-on"
+                    : "jayrr-called-embed__topics-option"
+                }
+                onClick={() => pick(topic.id)}
+              >
+                {shortTopicTitle(topic.title)}
+                {topic.id === context.activeTopic ? " (active)" : ""}
+              </button>
+            ))}
+          </div>
+        </details>
+      </div>
       {result && (!result.provisional || result.callbacks.length > 0) ? (
         <div className="jayrr-called-embed__chips">
           {result.provisional ? null : (
@@ -184,7 +224,10 @@ export const ConversationIndicators = ({
           )}
           {result.callbacks.map((id) => (
             <span className="jayrr-called-embed__chip" key={id}>
-              ↩ {context.topics.find((topic) => topic.id === id)?.title ?? id}
+              ↩{" "}
+              {shortTopicTitle(
+                context.topics.find((topic) => topic.id === id)?.title ?? id,
+              )}
             </span>
           ))}
         </div>

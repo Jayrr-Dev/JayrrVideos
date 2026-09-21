@@ -5,6 +5,7 @@ import {
   attributeSpeakerScores,
   averagesBySpeaker,
   emptyAverageCache,
+  lockFinalScore,
   mapSpeakersByTurn,
   speakerAssignmentStamp,
 } from "./speakerScoreCache";
@@ -70,16 +71,14 @@ describe("speakerScoreCache", () => {
     expect(once.get(0)).toBe(3);
   });
 
-  it("recomputes only after a contributing item is replaced", () => {
+  it("locks a speaker average and ignores later turns", () => {
     const cache = emptyAverageCache<{ n: number }, number>();
-    const valueA = { n: 2 };
-    const valueB = { n: 4 };
     const mean = (items: readonly { n: number }[]) =>
       items.reduce((sum, item) => sum + item.n, 0) / items.length;
     averagesBySpeaker(
       [
-        { turnId: "a", speaker: 0, value: valueA },
-        { turnId: "b", speaker: 0, value: valueB },
+        { turnId: "a", speaker: 0, value: { n: 2 } },
+        { turnId: "b", speaker: 0, value: { n: 4 } },
       ],
       (row) => row.value,
       mean,
@@ -87,14 +86,25 @@ describe("speakerScoreCache", () => {
     );
     const next = averagesBySpeaker(
       [
-        { turnId: "a", speaker: 0, value: valueA },
-        { turnId: "b", speaker: 0, value: { n: 8 } },
+        { turnId: "a", speaker: 0, value: { n: 2 } },
+        { turnId: "b", speaker: 0, value: { n: 4 } },
+        { turnId: "c", speaker: 0, value: { n: 90 } },
       ],
       (row) => row.value,
       mean,
       cache,
     );
-    expect(next.get(0)).toBe(5);
+    expect(next.get(0)).toBe(3);
+  });
+
+  it("keeps the first finalized score for the same text", () => {
+    const first = { turnId: "a", text: "hello", n: 1 };
+    const second = { turnId: "a", text: "hello", n: 2 };
+    const locked = lockFinalScore([first], second, 200);
+    expect(locked).toEqual([first]);
+    expect(
+      lockFinalScore([first], { turnId: "a", text: "hello there", n: 3 }, 200),
+    ).toEqual([{ turnId: "a", text: "hello there", n: 3 }]);
   });
 
   it("ignores transcript text in the speaker assignment stamp", () => {

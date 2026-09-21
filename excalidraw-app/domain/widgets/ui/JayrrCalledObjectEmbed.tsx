@@ -1,3 +1,5 @@
+import { TopErrorBoundary } from "../../../components/TopErrorBoundary";
+
 import { CaptionWidget } from "../objects/CaptionWidget";
 import { ClassifierWidget } from "../objects/ClassifierWidget";
 import { MarkdownWidget } from "../objects/MarkdownWidget";
@@ -41,4 +43,3 @@ export const JayrrCalledObjectEmbed = ({
     </TopErrorBoundary>
   );
 };
-import { TopErrorBoundary } from "../../../components/TopErrorBoundary";

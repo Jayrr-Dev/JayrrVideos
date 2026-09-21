@@ -115,9 +115,6 @@ const traitFromScore = (
   };
 };
 
-const labelFromTraits = (traits: Record<BigFiveId, BigFiveTrait>) =>
-  BIG5_BANDS.map((band) => `${band.id}${traits[band.id].score + 1}`).join(" ");
-
 const resultFromTraits = (
   traits: Record<BigFiveId, BigFiveTrait>,
 ): BigFiveResult => {
@@ -155,11 +152,8 @@ export const bigFiveFromAnswers = (
 
 const BIG5_MID = (LEVELS.length - 1) / 2;
 
-export const rankedBigFiveTraits = (
-  row: BigFiveResult,
-  count: number,
-): BigFiveTrait[] =>
-  BIG5_BANDS.map((band) => row.traits[band.id])
+const sortBigFiveTraits = (traits: Record<BigFiveId, BigFiveTrait>) =>
+  BIG5_BANDS.map((band) => traits[band.id])
     .filter((trait): trait is BigFiveTrait => !!trait)
     .sort((left, right) => {
       const delta =
@@ -168,8 +162,27 @@ export const rankedBigFiveTraits = (
         return delta;
       }
       return right.confidence - left.confidence;
-    })
-    .slice(0, Math.max(0, count));
+    });
+
+export const bigFiveChipLabel = (trait: BigFiveTrait) => {
+  if (trait.score < BIG5_MID) {
+    return `Low ${trait.name}`;
+  }
+  if (trait.score === BIG5_MID) {
+    return `Average ${trait.name}`;
+  }
+  return trait.name;
+};
+
+const labelFromTraits = (traits: Record<BigFiveId, BigFiveTrait>) => {
+  const winner = sortBigFiveTraits(traits)[0];
+  return winner ? bigFiveChipLabel(winner) : "Average";
+};
+
+export const rankedBigFiveTraits = (
+  row: BigFiveResult,
+  count: number,
+): BigFiveTrait[] => sortBigFiveTraits(row.traits).slice(0, Math.max(0, count));
 
 export const averageBigFive = (
   rows: readonly BigFiveResult[],

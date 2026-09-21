@@ -36,6 +36,17 @@ export type ContextResult = ContextStamp & {
 export type SummaryInput = { turns: ContextTurn[]; topics: TopicMemory[] };
 const words = (text: string) =>
   new Set(text.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) ?? []);
+export const shortTopicTitle = (text: string) => {
+  const parts = text.replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
+  if (!parts.length) {
+    return "New topic";
+  }
+  const compact = parts.slice(0, 6).join(" ");
+  if (parts.length <= 6 && compact.length <= 48) {
+    return compact;
+  }
+  return `${compact}…`;
+};
 let sessionCounter = 0;
 
 /** Session-only evidence. No labels or inferred personality enter model context. */
@@ -504,7 +515,7 @@ export class ConversationContext {
           topicId = `topic-${++this.topicCounter}`;
           this.topics.push({
             id: topicId,
-            title: turn.text.slice(0, 60),
+            title: shortTopicTitle(turn.text),
             summary: "",
             entities: [],
             unresolved: [],

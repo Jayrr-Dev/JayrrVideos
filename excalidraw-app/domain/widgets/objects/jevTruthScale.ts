@@ -6,7 +6,7 @@ export type TruthId =
   | "fabricated"
   | "false"
   | "misleading"
-  | "unclear"
+  | "neutral"
   | "plausible"
   | "supported"
   | "proven";
@@ -40,9 +40,9 @@ export const TRUTH_BANDS: readonly TruthBand[] = [
       "“This investment increased by 50%,” without mentioning that it had previously fallen by 80%.",
   },
   {
-    id: "unclear",
-    label: "Unclear",
-    what: "There isn’t enough good evidence to decide. Sources may conflict, important facts may be missing, or the claim may be too vague to test. “Unclear” doesn’t mean false. It means a fair conclusion can’t yet be made.",
+    id: "neutral",
+    label: "Neutral",
+    what: "There isn’t enough good evidence to decide. Sources may conflict, important facts may be missing, or the claim may be too vague to test. “Neutral” doesn’t mean false. It means a fair conclusion can’t yet be made.",
     example:
       "“This company will become profitable soon,” without defining “soon” or providing current financial records.",
   },
@@ -75,7 +75,7 @@ const TRUTH_TOP = TRUTH_BANDS.length - 1;
 export const TRUTH_QUESTION = {
   id: TRUTH_QUESTION_ID,
   type: "score" as const,
-  instructions: `How well does the claim in \`utterance\` match known facts and available evidence? Judge the claim itself, not whether the speaker meant to lie. Scale: Fabricated (invented), False (directly disproven), Misleading (some truth, wrong impression), Unclear (not enough to decide), Plausible (fits known facts, evidence thin), Supported (good evidence, open to correction), Proven (strong independent checkable evidence). Prefer Unclear over guessing. Do not pick Proven unless the evidence is direct and checkable. ${UTTERANCE_SCOPE}`,
+  instructions: `How well does the claim in \`utterance\` match known facts and available evidence? Judge the claim itself, not whether the speaker meant to lie. Scale: Fabricated (invented), False (directly disproven), Misleading (some truth, wrong impression), Neutral (not enough to decide), Plausible (fits known facts, evidence thin), Supported (good evidence, open to correction), Proven (strong independent checkable evidence). Prefer Neutral over guessing. Do not pick Proven unless the evidence is direct and checkable. ${UTTERANCE_SCOPE}`,
   levels: TRUTH_BANDS.map((band) => ({
     what: `${band.label}. ${band.what}`,
     examples: [band.example],

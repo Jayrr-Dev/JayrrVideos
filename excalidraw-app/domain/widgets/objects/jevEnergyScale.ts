@@ -250,6 +250,9 @@ const ENERGY_SCORE_GROUPS: readonly {
   },
 ];
 
+export const energyGroupIds = (id: EnergyId) =>
+  ENERGY_SCORE_GROUPS.find((group) => group.ids.includes(id))?.ids ?? [id];
+
 const ENERGY_SCORE_TOP = ENERGY_SCORE_GROUPS.length - 1;
 const ENERGY_BAND_BY_ID = new Map(
   ENERGY_BANDS.map((band) => [band.id, band] as const),
