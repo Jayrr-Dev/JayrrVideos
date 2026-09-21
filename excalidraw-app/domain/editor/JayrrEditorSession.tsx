@@ -17,6 +17,7 @@ import {
 import type { NonDeletedExcalidrawElement } from "@excalidraw/element/types";
 
 import { api, convexClient, isConvexLinked } from "../../convexClient";
+import type { EditorRecordingLookup } from "./editorProjectStore";
 
 import { jayrrLocalSoundUrl } from "../../sounds/jayrrSoundPlayback";
 
@@ -203,15 +204,53 @@ export const useJayrrEditorSession = () => {
 };
 
 export const JayrrEditorSession = ({ children }: { children: ReactNode }) => {
+  if (!isConvexLinked) {
+    return (
+      <JayrrEditorSessionView
+        authLoading={false}
+        canQuery={false}
+        recordings={undefined}
+      >
+        {children}
+      </JayrrEditorSessionView>
+    );
+  }
+
+  return <JayrrEditorSessionLinked>{children}</JayrrEditorSessionLinked>;
+};
+
+const JayrrEditorSessionLinked = ({ children }: { children: ReactNode }) => {
+  const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
+  const recordings = useQuery(
+    api.presentRecordings.listRecent,
+    isAuthenticated ? { limit: 40 } : "skip",
+  );
+
+  return (
+    <JayrrEditorSessionView
+      authLoading={authLoading}
+      canQuery={isAuthenticated}
+      recordings={recordings}
+    >
+      {children}
+    </JayrrEditorSessionView>
+  );
+};
+
+const JayrrEditorSessionView = ({
+  children,
+  authLoading,
+  canQuery,
+  recordings,
+}: {
+  children: ReactNode;
+  authLoading: boolean;
+  canQuery: boolean;
+  recordings: readonly EditorRecordingLookup[] | undefined;
+}) => {
   const apiExcal = useExcalidrawAPI();
   const { container } = useExcalidrawContainer();
   const ownerDocument = container?.ownerDocument ?? document;
-  const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
-  const canQuery = isConvexLinked && isAuthenticated;
-  const recordings = useQuery(
-    api.presentRecordings.listRecent,
-    canQuery ? { limit: 40 } : "skip",
-  );
 
   const [clips, setClips] = useState<EditorProjectClip[]>([]);
   const [stackLaneIds, setStackLaneIds] =

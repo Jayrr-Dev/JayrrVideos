@@ -167,6 +167,7 @@ export default defineConfig(({ mode }) => {
       woff2BrowserPlugin(),
       react(),
       checker({
+        enableBuild: false,
         typescript: true,
         eslint:
           envVars.VITE_APP_ENABLE_ESLINT === "false"
@@ -248,7 +249,7 @@ export default defineConfig(({ mode }) => {
               },
             },
           ],
-          maximumFileSizeToCacheInBytes: 2.3 * 1024 ** 2, // 2.3MB
+          maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         },
         manifest: {
           short_name: "Excalidraw",

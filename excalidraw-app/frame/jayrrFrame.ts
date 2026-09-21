@@ -33,11 +33,13 @@ export type JayrrFrameGrid = typeof JAYRR_FRAME_GRIDS[number];
 export type JayrrFrameSettings = {
   aspect: JayrrFrameAspect;
   grid: JayrrFrameGrid;
+  hideFromPresent: boolean;
 };
 
 const DEFAULT_SETTINGS: JayrrFrameSettings = {
   aspect: "free",
   grid: "none",
+  hideFromPresent: false,
 };
 
 export const canConfigureJayrrFrame = (element: ExcalidrawElement) =>
@@ -69,10 +71,15 @@ export const readJayrrFrame = (
   if (!data || typeof data !== "object") {
     return DEFAULT_SETTINGS;
   }
-  const bag = data as { aspect?: unknown; grid?: unknown };
+  const bag = data as {
+    aspect?: unknown;
+    grid?: unknown;
+    hideFromPresent?: unknown;
+  };
   return {
     aspect: isAspect(bag.aspect) ? bag.aspect : DEFAULT_SETTINGS.aspect,
     grid: isGrid(bag.grid) ? bag.grid : DEFAULT_SETTINGS.grid,
+    hideFromPresent: bag.hideFromPresent === true,
   };
 };
 
@@ -85,7 +92,8 @@ export const writeJayrrFrame = (
   };
   const isDefault =
     settings.aspect === DEFAULT_SETTINGS.aspect &&
-    settings.grid === DEFAULT_SETTINGS.grid;
+    settings.grid === DEFAULT_SETTINGS.grid &&
+    settings.hideFromPresent === DEFAULT_SETTINGS.hideFromPresent;
   if (isDefault) {
     delete customData[JAYRR_FRAME_KEY];
   } else {

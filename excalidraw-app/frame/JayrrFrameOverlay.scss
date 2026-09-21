@@ -78,6 +78,15 @@
   color: var(--text-primary-color);
 }
 
+.jayrr-frame-picker__check {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  color: var(--text-primary-color);
+  cursor: pointer;
+}
+
 .jayrr-frame-picker__select {
   width: 100%;
   text-align: start;

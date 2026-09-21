@@ -6,6 +6,23 @@ import { Field, Input } from "./Field";
 
 import "./JayrrAuthPage.scss";
 
+const signInErrorMessage = (caught: unknown) => {
+  const raw = caught instanceof Error ? caught.message : "";
+  if (raw.includes("InvalidSecret")) {
+    return "Wrong password.";
+  }
+  if (raw.includes("InvalidAccountId")) {
+    return "No account with that username.";
+  }
+  if (raw.includes("TooManyFailedAttempts")) {
+    return "Too many tries. Wait a minute and try again.";
+  }
+  if (raw.includes("already exists")) {
+    return "That username is already taken.";
+  }
+  return "Could not sign in.";
+};
+
 export const JayrrAuthPage = () => {
   const { signIn } = useAuthActions();
   const [flow, setFlow] = useState<"signIn" | "signUp">("signIn");
@@ -27,9 +44,7 @@ export const JayrrAuthPage = () => {
           setError(null);
           void signIn("password", formData)
             .catch((caught: unknown) => {
-              setError(
-                caught instanceof Error ? caught.message : "Could not sign in",
-              );
+              setError(signInErrorMessage(caught));
             })
             .finally(() => {
               setBusy(false);
