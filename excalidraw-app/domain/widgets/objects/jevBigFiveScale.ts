@@ -152,6 +152,24 @@ export const bigFiveFromAnswers = (
   return resultFromTraits(traits);
 };
 
+const BIG5_MID = (LEVELS.length - 1) / 2;
+
+export const rankedBigFiveTraits = (
+  row: BigFiveResult,
+  count: number,
+): BigFiveTrait[] =>
+  BIG5_BANDS.map((band) => row.traits[band.id])
+    .filter((trait): trait is BigFiveTrait => !!trait)
+    .sort((left, right) => {
+      const delta =
+        Math.abs(right.score - BIG5_MID) - Math.abs(left.score - BIG5_MID);
+      if (delta !== 0) {
+        return delta;
+      }
+      return right.confidence - left.confidence;
+    })
+    .slice(0, Math.max(0, count));
+
 export const averageBigFive = (
   rows: readonly BigFiveResult[],
 ): BigFiveResult | null => {

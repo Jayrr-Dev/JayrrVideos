@@ -78,8 +78,11 @@ const readSpeaker = (value: unknown) => {
   return null;
 };
 
-const readTimeMs = (value: unknown): number | null => {
+const readTimeMs = (value: unknown, unit: "ms" | "auto"): number | null => {
   if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
+    if (unit === "ms") {
+      return value;
+    }
     if (Number.isInteger(value) && value >= 100) {
       return value;
     }
@@ -97,6 +100,9 @@ const readTimeMs = (value: unknown): number | null => {
     }
     const plain = Number(trimmed);
     if (Number.isFinite(plain) && plain >= 0) {
+      if (unit === "ms") {
+        return plain;
+      }
       if (Number.isInteger(plain) && plain >= 100) {
         return plain;
       }
@@ -124,7 +130,8 @@ const readTimeMs = (value: unknown): number | null => {
 
 const stampTime = (stamp: WordStamp, keys: readonly (keyof WordStamp)[]) => {
   for (const key of keys) {
-    const ms = readTimeMs(stamp[key]);
+    const unit = MILLISECOND_KEYS.has(key) ? "ms" : "auto";
+    const ms = readTimeMs(stamp[key], unit);
     if (ms !== null) {
       return ms;
     }
@@ -132,40 +139,108 @@ const stampTime = (stamp: WordStamp, keys: readonly (keyof WordStamp)[]) => {
   return null;
 };
 
-export const turnsFromWords = (words: WordStamp[]): TranscriptTurn[] => {
-  const turns: TranscriptTurn[] = [];
+const stampWord = (stamp: WordStamp) => {
+  if (
+    typeof stamp.punctuated_word === "string" &&
+    stamp.punctuated_word.trim()
+  ) {
+    return stamp.punctuated_word.trim();
+  }
+  if (typeof stamp.word === "string" && stamp.word.trim()) {
+    return stamp.word.trim();
+  }
+  return "";
+};
+
+const fillNearbySpeakers = (
+  tokens: Array<{
+    speaker: number | null;
+    startMs: number | null;
+    endMs: number | null;
+  }>,
+) => {
+  let last: number | null = null;
   let lastEndMs: number | null = null;
-  for (const stamp of words) {
-    const token = typeof stamp.word === "string" ? stamp.word.trim() : "";
+  for (const token of tokens) {
+    const pauseMs =
+      token.startMs !== null && lastEndMs !== null
+        ? token.startMs - lastEndMs
+        : 0;
+    if (token.speaker === null && last !== null && pauseMs < PAUSE_SPLIT_MS) {
+      token.speaker = last;
+    }
+    if (token.speaker !== null) {
+      last = token.speaker;
+    }
+    lastEndMs = token.endMs ?? token.startMs ?? lastEndMs;
+  }
+  last = null;
+  let nextStartMs: number | null = null;
+  for (let index = tokens.length - 1; index >= 0; index -= 1) {
+    const token = tokens[index];
     if (!token) {
       continue;
     }
-    const speaker = readSpeaker(stamp.speaker) ?? readSpeaker(stamp.speaker_id);
+    const pauseMs =
+      nextStartMs !== null && token.endMs !== null
+        ? nextStartMs - token.endMs
+        : 0;
+    if (token.speaker === null && last !== null && pauseMs < PAUSE_SPLIT_MS) {
+      token.speaker = last;
+    }
+    if (token.speaker !== null) {
+      last = token.speaker;
+    }
+    nextStartMs = token.startMs ?? token.endMs ?? nextStartMs;
+  }
+};
+
+export const turnsFromWords = (words: WordStamp[]): TranscriptTurn[] => {
+  const tokens: Array<{
+    token: string;
+    speaker: number | null;
+    startMs: number | null;
+    endMs: number | null;
+  }> = [];
+  for (const stamp of words) {
+    const token = stampWord(stamp);
+    if (!token) {
+      continue;
+    }
     const startMs = stampTime(stamp, START_TIME_KEYS);
     const endMs = stampTime(stamp, END_TIME_KEYS) ?? startMs;
+    tokens.push({
+      token,
+      speaker: readSpeaker(stamp.speaker) ?? readSpeaker(stamp.speaker_id),
+      startMs,
+      endMs,
+    });
+  }
+  fillNearbySpeakers(tokens);
+  const turns: TranscriptTurn[] = [];
+  let lastEndMs: number | null = null;
+  for (const word of tokens) {
     const last = turns[turns.length - 1];
     const pauseMs =
-      startMs !== null && lastEndMs !== null ? startMs - lastEndMs : 0;
+      word.startMs !== null && lastEndMs !== null
+        ? word.startMs - lastEndMs
+        : 0;
     const newBubble =
-      !last || last.speaker !== speaker || pauseMs >= PAUSE_SPLIT_MS;
+      !last || last.speaker !== word.speaker || pauseMs >= PAUSE_SPLIT_MS;
     if (newBubble) {
       turns.push({
-        speaker,
-        text: token,
-        ...(startMs !== null ? { startMs } : {}),
-        ...(endMs !== null ? { endMs } : {}),
+        speaker: word.speaker,
+        text: word.token,
+        ...(word.startMs !== null ? { startMs: word.startMs } : {}),
+        ...(word.endMs !== null ? { endMs: word.endMs } : {}),
       });
     } else if (last) {
-      last.text = joinToken(last.text, token);
-      if (endMs !== null) {
-        last.endMs = endMs;
+      last.text = joinToken(last.text, word.token);
+      if (word.endMs !== null) {
+        last.endMs = word.endMs;
       }
     }
-    if (endMs !== null) {
-      lastEndMs = endMs;
-    } else if (startMs !== null) {
-      lastEndMs = startMs;
-    }
+    lastEndMs = word.endMs ?? word.startMs ?? lastEndMs;
   }
   return turns;
 };

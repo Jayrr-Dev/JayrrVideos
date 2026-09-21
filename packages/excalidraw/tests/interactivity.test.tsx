@@ -6,6 +6,7 @@ import { CODES, CURSOR_TYPE, POINTER_BUTTON } from "@excalidraw/common";
 import type { ExcalidrawElement } from "@excalidraw/element/types";
 
 import { actionZoomIn } from "../actions/actionCanvas";
+import { isEmbeddableInteraction } from "../appState";
 import { createPasteEvent, serializeAsClipboardJSON } from "../clipboard";
 import { DefaultSidebar, Excalidraw, Footer, MainMenu } from "../index";
 
@@ -1279,6 +1280,36 @@ describe("interaction={{ enabled: { embeds / interactiveContent } }}", () => {
     // consumed by the embed itself)
     mouse.clickAt(5, 5);
     expect(h.state.activeEmbeddable).toBe(null);
+  });
+
+  it("keeps an embed interactive after its element object is replaced", async () => {
+    await render(
+      <Excalidraw
+        interaction={{ enabled: { embeds: true } }}
+        validateEmbeddable={true}
+      />,
+    );
+    await waitFor(() => expect(h.state.width).toBe(200));
+    const embed = addEmbeddable();
+
+    mouse.reset();
+    mouse.clickAt(80, 65);
+    await waitFor(() => {
+      expect(h.state.activeEmbeddable).toMatchObject({ state: "active" });
+    });
+
+    const current = h.elements.find((element) => element.id === embed.id);
+    expect(current).toBeTruthy();
+    API.updateScene({
+      elements: [{ ...current!, customData: { flipped: true } }],
+    });
+
+    const replaced = h.elements.find((element) => element.id === embed.id);
+    expect(replaced).toBeTruthy();
+    expect(replaced).not.toBe(h.state.activeEmbeddable?.element);
+    expect(
+      isEmbeddableInteraction(h.state.activeEmbeddable, replaced, "active"),
+    ).toBe(true);
   });
 
   it("without embeds allowed, embeddables stay inert", async () => {

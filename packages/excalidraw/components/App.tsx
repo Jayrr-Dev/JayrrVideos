@@ -356,6 +356,7 @@ import { getShortcutFromShortcutName } from "../actions/shortcuts";
 import { trackEvent } from "../analytics";
 import {
   getDefaultAppState,
+  isEmbeddableInteraction,
   isEraserActive,
   isHandToolActive,
 } from "../appState";
@@ -1707,8 +1708,11 @@ class App extends React.Component<AppProps, AppState> {
     const iframeLikeElement = hitElement;
 
     if (
-      this.state.activeEmbeddable?.element === iframeLikeElement &&
-      this.state.activeEmbeddable?.state === "active"
+      isEmbeddableInteraction(
+        this.state.activeEmbeddable,
+        iframeLikeElement,
+        "active",
+      )
     ) {
       return true;
     }
@@ -1819,9 +1823,7 @@ class App extends React.Component<AppProps, AppState> {
       !event.shiftKey &&
       !event.metaKey &&
       !event.ctrlKey &&
-      (this.state.activeEmbeddable?.element !== el ||
-        this.state.activeEmbeddable?.state === "hover" ||
-        !this.state.activeEmbeddable) &&
+      !isEmbeddableInteraction(this.state.activeEmbeddable, el, "active") &&
       sceneX >= el.x + el.width / 3 &&
       sceneX <= el.x + (2 * el.width) / 3 &&
       sceneY >= el.y + el.height / 3 &&
@@ -2023,12 +2025,16 @@ class App extends React.Component<AppProps, AppState> {
             src = getEmbedLink(toValidURL(el.link || ""));
           }
 
-          const isActive =
-            this.state.activeEmbeddable?.element === el &&
-            this.state.activeEmbeddable?.state === "active";
-          const isHovered =
-            this.state.activeEmbeddable?.element === el &&
-            this.state.activeEmbeddable?.state === "hover";
+          const isActive = isEmbeddableInteraction(
+            this.state.activeEmbeddable,
+            el,
+            "active",
+          );
+          const isHovered = isEmbeddableInteraction(
+            this.state.activeEmbeddable,
+            el,
+            "hover",
+          );
 
           // Videos render into a larger offscreen buffer then counter-scale
           // so playback stays sharp when zoomed. Custom React embeds (Jayrr

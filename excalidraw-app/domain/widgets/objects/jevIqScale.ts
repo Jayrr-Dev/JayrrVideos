@@ -294,3 +294,24 @@ export const shadeFromComposite = (composite: number): IqShade => {
   const index = Math.min(IQ_TOP, Math.max(0, Math.round(composite * IQ_TOP)));
   return IQ_BANDS[index]?.shade ?? "white";
 };
+
+export const rankedIqComposites = (
+  composite: number,
+  count: number,
+): number[] => {
+  const index = Math.min(IQ_TOP, Math.max(0, Math.round(composite * IQ_TOP)));
+  const picked: number[] = [];
+  for (let dist = 0; picked.length < count && dist <= IQ_TOP; dist += 1) {
+    const candidates = dist === 0 ? [index] : [index + dist, index - dist];
+    for (const next of candidates) {
+      if (next < 0 || next > IQ_TOP) {
+        continue;
+      }
+      picked.push(next / IQ_TOP);
+      if (picked.length >= count) {
+        break;
+      }
+    }
+  }
+  return picked;
+};

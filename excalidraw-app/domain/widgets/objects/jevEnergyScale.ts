@@ -337,6 +337,33 @@ export const energyFromAnswers = (
   );
 };
 
+export const rankedEnergy = (
+  row: EnergyResult,
+  count: number,
+): EnergyResult[] => {
+  const index = ENERGY_BANDS.findIndex((band) => band.id === row.id);
+  const start = index < 0 ? 0 : index;
+  const picked: EnergyResult[] = [];
+  for (
+    let dist = 0;
+    picked.length < count && dist < ENERGY_BANDS.length;
+    dist += 1
+  ) {
+    const candidates = dist === 0 ? [start] : [start + dist, start - dist];
+    for (const next of candidates) {
+      const band = ENERGY_BANDS[next];
+      if (!band) {
+        continue;
+      }
+      picked.push(resultFromBand(band, row.confidence));
+      if (picked.length >= count) {
+        break;
+      }
+    }
+  }
+  return picked;
+};
+
 export const averageEnergy = (
   rows: readonly EnergyResult[],
 ): EnergyResult | null => {

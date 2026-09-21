@@ -217,7 +217,7 @@ export const EMOTIONS: readonly EmotionDef[] = CLUSTERS.flatMap((cluster) =>
 const EMOTION_BY_ID = new Map(EMOTIONS.map((row) => [row.id, row]));
 
 export const EMOTION_QUESTION_ID = "emotion";
-export const TOP_EMOTION_COUNT = 3;
+export const TOP_EMOTION_COUNT = 5;
 
 const emotionOptions = () => {
   const options: Record<string, string> = {};

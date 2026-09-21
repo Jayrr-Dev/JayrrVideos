@@ -81,6 +81,7 @@ import type {
   NonDeletedSceneElementsMap,
 } from "@excalidraw/element/types";
 
+import { isEmbeddableInteraction } from "../appState";
 import { renderSnaps } from "../renderer/renderSnaps";
 import { roundRect } from "../renderer/roundRect";
 import {
@@ -1940,9 +1941,11 @@ const _renderInteractiveScene = ({
             dashed: !!remoteClients || element.locked,
             cx,
             cy,
-            activeEmbeddable:
-              appState.activeEmbeddable?.element === element &&
-              appState.activeEmbeddable.state === "active",
+            activeEmbeddable: isEmbeddableInteraction(
+              appState.activeEmbeddable,
+              element,
+              "active",
+            ),
             padding:
               element.id === appState.croppingElementId ||
               isImageElement(element)

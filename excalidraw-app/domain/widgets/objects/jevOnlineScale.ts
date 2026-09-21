@@ -127,6 +127,28 @@ export const onlineFromAnswers = (
   );
 };
 
+export const rankedOnline = (
+  row: OnlineResult,
+  count: number,
+): OnlineResult[] => {
+  const picked: OnlineResult[] = [];
+  for (let dist = 0; picked.length < count && dist <= ONLINE_TOP; dist += 1) {
+    const candidates =
+      dist === 0 ? [row.score] : [row.score + dist, row.score - dist];
+    for (const next of candidates) {
+      const mapped = resultFromScore(next, row.confidence);
+      if (!mapped || picked.some((item) => item.id === mapped.id)) {
+        continue;
+      }
+      picked.push(mapped);
+      if (picked.length >= count) {
+        break;
+      }
+    }
+  }
+  return picked;
+};
+
 export const averageOnline = (
   rows: readonly OnlineResult[],
 ): OnlineResult | null => {

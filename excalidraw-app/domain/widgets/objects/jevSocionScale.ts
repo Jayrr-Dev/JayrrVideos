@@ -331,3 +331,19 @@ export const averageSocion = (
   }
   return resultFromProbabilities(probabilities, null);
 };
+
+export const rankedSocion = (
+  row: SocionResult,
+  count: number,
+): SocionResult[] => {
+  const ids = SOCION_TYPES.map((type) => type.id)
+    .filter((id) => (row.probabilities[id] ?? 0) > 0)
+    .sort(
+      (left, right) =>
+        (row.probabilities[right] ?? 0) - (row.probabilities[left] ?? 0),
+    )
+    .slice(0, Math.max(0, count));
+  return ids
+    .map((id) => resultFromProbabilities(row.probabilities, id))
+    .filter((item): item is SocionResult => item !== null);
+};

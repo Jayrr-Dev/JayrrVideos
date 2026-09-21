@@ -287,7 +287,7 @@ export const listenStreamTranscript = (
       return null;
     }
     const existing = speakerIds.get(speaker);
-    if (existing) {
+    if (existing !== undefined) {
       return existing;
     }
     const next = speakerIds.size + 1;

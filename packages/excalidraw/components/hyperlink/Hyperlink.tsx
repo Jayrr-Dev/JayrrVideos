@@ -37,6 +37,7 @@ import type {
 } from "@excalidraw/element/types";
 
 import { trackEvent } from "../../analytics";
+import { isEmbeddableInteraction } from "../../appState";
 import { getTooltipDiv, updateTooltipPosition } from "../../components/Tooltip";
 
 import { t } from "../../i18n";
@@ -113,7 +114,7 @@ export const Hyperlink = ({
     }
 
     if (isEmbeddableElement(element)) {
-      if (appState.activeEmbeddable?.element === element) {
+      if (isEmbeddableInteraction(appState.activeEmbeddable, element)) {
         setAppState({ activeEmbeddable: null });
       }
       if (!link) {

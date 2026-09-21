@@ -117,6 +117,28 @@ export const smartFromAnswers = (
   );
 };
 
+export const rankedSmart = (
+  row: SmartResult,
+  count: number,
+): SmartResult[] => {
+  const picked: SmartResult[] = [];
+  for (let dist = 0; picked.length < count && dist <= SMART_TOP; dist += 1) {
+    const candidates =
+      dist === 0 ? [row.score] : [row.score + dist, row.score - dist];
+    for (const next of candidates) {
+      const mapped = resultFromScore(next, row.confidence);
+      if (!mapped || picked.some((item) => item.id === mapped.id)) {
+        continue;
+      }
+      picked.push(mapped);
+      if (picked.length >= count) {
+        break;
+      }
+    }
+  }
+  return picked;
+};
+
 export const averageSmart = (
   rows: readonly SmartResult[],
 ): SmartResult | null => {

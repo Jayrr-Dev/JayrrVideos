@@ -117,6 +117,25 @@ export const hypeFromAnswers = (
   );
 };
 
+export const rankedHype = (row: HypeResult, count: number): HypeResult[] => {
+  const picked: HypeResult[] = [];
+  for (let dist = 0; picked.length < count && dist <= HYPE_TOP; dist += 1) {
+    const candidates =
+      dist === 0 ? [row.score] : [row.score + dist, row.score - dist];
+    for (const next of candidates) {
+      const mapped = resultFromScore(next, row.confidence);
+      if (!mapped || picked.some((item) => item.id === mapped.id)) {
+        continue;
+      }
+      picked.push(mapped);
+      if (picked.length >= count) {
+        break;
+      }
+    }
+  }
+  return picked;
+};
+
 export const averageHype = (rows: readonly HypeResult[]): HypeResult | null => {
   if (rows.length === 0) {
     return null;

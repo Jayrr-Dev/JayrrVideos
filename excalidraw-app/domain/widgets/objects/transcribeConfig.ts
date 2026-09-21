@@ -24,6 +24,28 @@ export type JevShowWhere = typeof JEV_SHOW_WHERE[number];
 
 export const DEFAULT_JEV_SHOW: JevShowWhere = "both";
 
+export const JEV_TOP_KEYS = JEV_SHOW_KEYS;
+
+export type JevTopKey = JevShowKey;
+
+export const JEV_TOP_MAX = 5;
+
+export const JEV_TOP_OPTIONS = [1, 2, 3, 4, 5] as const;
+
+export const DEFAULT_JEV_TOP: Record<JevTopKey, number> = {
+  iq: 1,
+  smart: 1,
+  hype: 1,
+  energy: 1,
+  online: 1,
+  socion: 1,
+  bigFive: 1,
+  mbti: 1,
+  mbtiAdvance: 2,
+  enneagram: 1,
+  emotion: 3,
+};
+
 export type TranscribeConfig = {
   contextEnabled?: boolean;
   configOpen?: boolean;
@@ -39,6 +61,7 @@ export type TranscribeConfig = {
   jevBigFive: boolean;
   jevEmotion: boolean;
   jevShow: Partial<Record<JevShowKey, JevShowWhere>>;
+  jevTop: Partial<Record<JevTopKey, number>>;
   sourceId: string;
 };
 
@@ -57,6 +80,7 @@ export const DEFAULT_TRANSCRIBE: TranscribeConfig = {
   jevBigFive: false,
   jevEmotion: false,
   jevShow: {},
+  jevTop: {},
   sourceId: "mic",
 };
 
@@ -83,6 +107,27 @@ const readJevShow = (
   }
   return next;
 };
+
+const clampTop = (value: number) =>
+  Math.min(JEV_TOP_MAX, Math.max(1, Math.round(value)));
+
+const readJevTop = (value: unknown): Partial<Record<JevTopKey, number>> => {
+  if (!value || typeof value !== "object") {
+    return {};
+  }
+  const bag = value as Record<string, unknown>;
+  const next: Partial<Record<JevTopKey, number>> = {};
+  for (const key of JEV_TOP_KEYS) {
+    const count = bag[key];
+    if (typeof count === "number" && Number.isFinite(count)) {
+      next[key] = clampTop(count);
+    }
+  }
+  return next;
+};
+
+export const jevTopCount = (config: TranscribeConfig, key: JevTopKey) =>
+  clampTop(config.jevTop[key] ?? DEFAULT_JEV_TOP[key]);
 
 export const jevShowWhere = (
   config: TranscribeConfig,
@@ -127,6 +172,7 @@ export const readTranscribeConfig = (
     jevBigFive: (bag as { jevBigFive?: unknown }).jevBigFive === true,
     jevEmotion: (bag as { jevEmotion?: unknown }).jevEmotion === true,
     jevShow: readJevShow((bag as { jevShow?: unknown }).jevShow),
+    jevTop: readJevTop((bag as { jevTop?: unknown }).jevTop),
     sourceId: typeof sourceId === "string" && sourceId ? sourceId : "mic",
   };
 };
@@ -155,6 +201,7 @@ export const writeTranscribeConfig = (
   bag.jevBigFive = config.jevBigFive;
   bag.jevEmotion = config.jevEmotion;
   bag.jevShow = config.jevShow;
+  bag.jevTop = config.jevTop;
   bag.sourceId = config.sourceId;
   return {
     ...(element.customData ?? {}),

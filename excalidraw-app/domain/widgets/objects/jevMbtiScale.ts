@@ -164,6 +164,64 @@ export const mbtiFromAnswers = (
   return resultFromPairs(pairs);
 };
 
+const pairProb = (
+  row: MbtiResult,
+  pairId: MbtiPairId,
+  letter: MbtiLetter,
+) => {
+  const pair = MBTI_PAIRS.find((item) => item.id === pairId);
+  const score = row.pairs[pairId];
+  if (!pair || !score) {
+    return 0;
+  }
+  if (letter === pair.left) {
+    return score.left;
+  }
+  if (letter === pair.right) {
+    return score.right;
+  }
+  return 0;
+};
+
+export const rankedMbti = (row: MbtiResult, count: number): MbtiResult[] => {
+  const lettersFor = {
+    ei: ["E", "I"],
+    sn: ["S", "N"],
+    tf: ["T", "F"],
+    jp: ["J", "P"],
+  } as const;
+  const combos: MbtiResult[] = [];
+  for (const ei of lettersFor.ei) {
+    for (const sn of lettersFor.sn) {
+      for (const tf of lettersFor.tf) {
+        for (const jp of lettersFor.jp) {
+          const letters = { ei, sn, tf, jp };
+          combos.push({
+            type: typeFromLetters(letters),
+            letters,
+            pairs: row.pairs,
+            confidence:
+              pairProb(row, "ei", ei) *
+              pairProb(row, "sn", sn) *
+              pairProb(row, "tf", tf) *
+              pairProb(row, "jp", jp),
+          });
+        }
+      }
+    }
+  }
+  combos.sort((left, right) => {
+    if (left.type === row.type) {
+      return -1;
+    }
+    if (right.type === row.type) {
+      return 1;
+    }
+    return right.confidence - left.confidence;
+  });
+  return combos.slice(0, Math.max(0, count));
+};
+
 export const averageMbti = (rows: readonly MbtiResult[]): MbtiResult | null => {
   if (rows.length === 0) {
     return null;

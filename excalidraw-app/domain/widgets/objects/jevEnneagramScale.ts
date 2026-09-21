@@ -198,3 +198,16 @@ export const averageEnnea = (
   }
   return resultFromProbabilities(probabilities, null);
 };
+
+export const rankedEnnea = (row: EnneaResult, count: number): EnneaResult[] => {
+  const ids = ENNEA_TYPES.map((type) => type.id)
+    .filter((id) => (row.probabilities[id] ?? 0) > 0)
+    .sort(
+      (left, right) =>
+        (row.probabilities[right] ?? 0) - (row.probabilities[left] ?? 0),
+    )
+    .slice(0, Math.max(0, count));
+  return ids
+    .map((id) => resultFromProbabilities(row.probabilities, id))
+    .filter((item): item is EnneaResult => item !== null);
+};

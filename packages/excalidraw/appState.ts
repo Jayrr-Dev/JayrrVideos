@@ -345,6 +345,22 @@ export const isHandToolActive = ({
   return activeTool.type === "hand";
 };
 
+/** Match by element id: scene updates replace the object, not the embed. */
+export const isEmbeddableInteraction = (
+  activeEmbeddable: AppState["activeEmbeddable"],
+  element: { id: string } | null | undefined,
+  state?: "hover" | "active",
+) => {
+  if (
+    !activeEmbeddable ||
+    !element ||
+    activeEmbeddable.element.id !== element.id
+  ) {
+    return false;
+  }
+  return state === undefined || activeEmbeddable.state === state;
+};
+
 /**
  * The device the wheel mappings follow for the given preference.
  *

@@ -274,3 +274,8 @@ export const averageAdvance = (
 
 export const advanceStackLabel = (row: MbtiAdvanceResult) =>
   `${row.dominant}-${row.auxiliary}`;
+
+export const rankedAdvanceFns = (
+  row: MbtiAdvanceResult,
+  count: number,
+): CogFn[] => row.stack.slice(0, Math.max(0, count));
