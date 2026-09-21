@@ -49,6 +49,7 @@
     width: 100%;
     padding: 1rem 0.75rem;
     position: relative;
+    flex-shrink: 0;
 
     &::after {
       content: "";
@@ -99,13 +100,14 @@
     display: flex;
     flex-direction: column;
     flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
     padding: 1rem 0;
 
     [role="tabpanel"] {
-      flex: 1;
-      outline: none;
-
       flex: 1 1 auto;
+      min-height: 0;
+      overflow: auto;
       display: flex;
       flex-direction: column;
       outline: none;
@@ -149,6 +151,8 @@
   .default-sidebar {
     display: flex;
     flex-direction: column;
+    min-height: 0;
+    height: 100%;
 
     .sidebar-triggers {
       $padding: 2px;
