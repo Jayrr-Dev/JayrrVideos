@@ -1,14 +1,15 @@
-import {
-  chevronLeftIcon,
-  helpIcon,
-} from "@excalidraw/excalidraw/components/icons";
+import { useExcalidrawAPI } from "@excalidraw/excalidraw";
+import { helpIcon } from "@excalidraw/excalidraw/components/icons";
 import { useAction, useQuery } from "convex/react";
-import { useId, useState, type FormEvent } from "react";
+import { useEffect, useId, useMemo, useState, type FormEvent } from "react";
+
+import type { BinaryFileData } from "@excalidraw/excalidraw/types";
 
 import { Button } from "../../components/ui/Button";
 import { Dialog, Tooltip } from "../../components/ui/editor";
 import { Field, Input } from "../../components/ui/Field";
 import { api } from "../../convexClient";
+import { LocalData } from "../../data/LocalData";
 import { formatRecordingQuality } from "../recordings/formatRecording";
 
 import "../../present/JayrrPresentPanel.scss";
@@ -21,10 +22,8 @@ import {
   type EditorStaticMediaKind,
 } from "./buildEditorTimeline";
 
-import type { Id } from "../../../convex/_generated/dataModel";
-
 const INFO =
-  "Pick a still from Docs, or search free Pexels photos, then add it to the sequence.";
+  "Pick an image from this board or Docs, or search free Pexels photos.";
 
 export type EditorStaticPick = {
   url: string;
@@ -46,17 +45,10 @@ type StockImage = {
   author: string;
 };
 
-type FolderRow = {
-  _id: Id<"presentRecordingFolders">;
-  name: string;
-  recordingCount: number;
-};
-
 type RecordingRow = {
-  _id: Id<"presentRecordings">;
+  _id: string;
   mimeType: string;
   url: string;
-  posterUrl: string | null;
   width: number | null;
   height: number | null;
   name: string | null;
@@ -72,33 +64,59 @@ type DocsStill = {
   height: number;
 };
 
-const stillFromRecording = (row: RecordingRow): DocsStill | null => {
-  const mime = row.mimeType.toLowerCase();
-  const label = row.name?.trim() || "Untitled";
-  const width = row.width && row.width > 0 ? row.width : 0;
-  const height = row.height && row.height > 0 ? row.height : 0;
-  if (mime.startsWith("image/")) {
-    return {
-      id: row._id,
-      url: row.url,
-      image: row.url,
-      label,
-      mediaKind: editorStaticMediaKindFromMime(mime),
-      width,
-      height,
-    };
+const labelFromMime = (mime: string) => {
+  const lower = mime.toLowerCase();
+  if (lower.includes("gif")) {
+    return "GIF";
   }
-  if (!row.posterUrl) {
+  if (lower.includes("svg")) {
+    return "SVG";
+  }
+  if (lower.includes("webp")) {
+    return "WebP";
+  }
+  if (lower.includes("jpeg") || lower.includes("jpg")) {
+    return "JPEG";
+  }
+  if (lower.includes("png")) {
+    return "PNG";
+  }
+  return "Image";
+};
+
+const stillFromFile = (file: BinaryFileData): DocsStill | null => {
+  const mime = file.mimeType.toLowerCase();
+  if (
+    !mime.startsWith("image/") ||
+    !file.dataURL ||
+    file.dataURL === "data:,"
+  ) {
     return null;
   }
   return {
-    id: row._id,
-    url: row.posterUrl,
-    image: row.posterUrl,
-    label,
-    mediaKind: "image",
-    width,
-    height,
+    id: `local-${file.id}`,
+    url: file.dataURL,
+    image: file.dataURL,
+    label: labelFromMime(mime),
+    mediaKind: editorStaticMediaKindFromMime(mime),
+    width: 0,
+    height: 0,
+  };
+};
+
+const stillFromRecording = (row: RecordingRow): DocsStill | null => {
+  const mime = row.mimeType.toLowerCase();
+  if (!mime.startsWith("image/")) {
+    return null;
+  }
+  return {
+    id: `doc-${row._id}`,
+    url: row.url,
+    image: row.url,
+    label: row.name?.trim() || labelFromMime(mime),
+    mediaKind: editorStaticMediaKindFromMime(mime),
+    width: row.width && row.width > 0 ? row.width : 0,
+    height: row.height && row.height > 0 ? row.height : 0,
   };
 };
 
@@ -112,7 +130,7 @@ const PickImageCard = ({
 }: {
   image: string;
   label: string;
-  quality: string;
+  quality: string | null;
   selected: boolean;
   onSelect: () => void;
   onAdd: () => void;
@@ -143,49 +161,6 @@ const PickImageCard = ({
   );
 };
 
-const PickFolderCard = ({
-  folder,
-  onOpen,
-}: {
-  folder: FolderRow;
-  onOpen: () => void;
-}) => {
-  const previews = useQuery(
-    api.presentRecordings.list,
-    folder.recordingCount > 0 ? { folderId: folder._id } : "skip",
-  );
-  const thumbs = (previews ?? [])
-    .map(stillFromRecording)
-    .filter((row): row is DocsStill => Boolean(row))
-    .slice(0, 4);
-  const empty =
-    folder.recordingCount === 0 || (previews && thumbs.length === 0);
-
-  return (
-    <li className="jayrr-scene-card">
-      <span className="jayrr-scene-card__name">{folder.name}</span>
-      <button
-        type="button"
-        className="jayrr-scene-card__preview"
-        aria-label={`Open ${folder.name}`}
-        onClick={onOpen}
-      >
-        {empty ? (
-          <span className="jayrr-scene-card__empty">Empty</span>
-        ) : (
-          <span className="jayrr-present__folder-thumbs">
-            {thumbs.map((row) => (
-              <span key={row.id} className="jayrr-present__folder-thumb">
-                <img src={row.image} alt="" />
-              </span>
-            ))}
-          </span>
-        )}
-      </button>
-    </li>
-  );
-};
-
 type JayrrEditorAddImageDialogProps = {
   canQuery: boolean;
   onClose: () => void;
@@ -198,33 +173,61 @@ export const JayrrEditorAddImageDialog = ({
   onPick,
 }: JayrrEditorAddImageDialogProps) => {
   const descriptionId = useId();
+  const excalidrawAPI = useExcalidrawAPI();
   const searchImages = useAction(api.stockImages.search);
   const [source, setSource] = useState<ImageSource>("docs");
   const [query, setQuery] = useState("");
   const [photos, setPhotos] = useState<StockImage[]>([]);
+  const [localFiles, setLocalFiles] = useState<BinaryFileData[]>([]);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [searched, setSearched] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [folderId, setFolderId] =
-    useState<Id<"presentRecordingFolders"> | null>(null);
+  const [localReady, setLocalReady] = useState(false);
 
-  const folders = useQuery(
-    api.presentRecordingFolders.list,
+  const recordings = useQuery(
+    api.presentRecordings.listImages,
     canQuery && source === "docs" ? {} : "skip",
   );
-  const recordings = useQuery(
-    api.presentRecordings.list,
-    canQuery && source === "docs"
-      ? { folderId: folderId ?? undefined }
-      : "skip",
-  );
+
+  useEffect(() => {
+    let cancelled = false;
+    void LocalData.listLocalImageFiles().then((files) => {
+      if (cancelled) {
+        return;
+      }
+      setLocalFiles(files);
+      setLocalReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const trimmed = query.trim();
-  const docsStills = (recordings ?? [])
-    .map(stillFromRecording)
-    .filter((row): row is DocsStill => Boolean(row));
-  const openFolder = folders?.find((folder) => folder._id === folderId) ?? null;
+  const docsStills = useMemo(() => {
+    const byId = new Map<string, DocsStill>();
+    for (const file of Object.values(excalidrawAPI?.getFiles() ?? {})) {
+      const still = stillFromFile(file);
+      if (still) {
+        byId.set(still.id, still);
+      }
+    }
+    for (const file of localFiles) {
+      const still = stillFromFile(file);
+      if (still && !byId.has(still.id)) {
+        byId.set(still.id, still);
+      }
+    }
+    for (const row of recordings ?? []) {
+      const still = stillFromRecording(row);
+      if (still) {
+        byId.set(still.id, still);
+      }
+    }
+    return [...byId.values()];
+  }, [excalidrawAPI, localFiles, recordings]);
+
   const selectedPhoto =
     photos.find((photo) => String(photo.id) === selectedKey) ?? null;
   const selectedDoc = docsStills.find((row) => row.id === selectedKey) ?? null;
@@ -234,7 +237,7 @@ export const JayrrEditorAddImageDialog = ({
     canSearch = true;
   }
   let canAdd = false;
-  if (canQuery && !busy) {
+  if (!busy) {
     if (source === "search" && selectedPhoto) {
       canAdd = true;
     }
@@ -338,12 +341,14 @@ export const JayrrEditorAddImageDialog = ({
   );
 
   let listBody;
-  if (!canQuery) {
-    listBody = (
-      <p className="jayrr-editor-add-stock__empty">Sign in to add images.</p>
-    );
-  } else if (source === "search") {
-    if (busy && photos.length === 0) {
+  if (source === "search") {
+    if (!canQuery) {
+      listBody = (
+        <p className="jayrr-editor-add-stock__empty">
+          Sign in to search images.
+        </p>
+      );
+    } else if (busy && photos.length === 0) {
       listBody = <p className="jayrr-editor-add-stock__empty">Searching…</p>;
     } else if (error && photos.length === 0) {
       listBody = <p className="jayrr-editor-add-stock__empty">{error}</p>;
@@ -360,51 +365,17 @@ export const JayrrEditorAddImageDialog = ({
     } else {
       listBody = renderPhotoGrid(photos);
     }
-  } else if (folders === undefined || recordings === undefined) {
-    listBody = <p className="jayrr-editor-add-stock__empty">Loading Docs…</p>;
-  } else if (folderId) {
-    if (docsStills.length === 0) {
-      listBody = (
-        <p className="jayrr-editor-add-stock__empty">
-          No stills in this folder yet.
-        </p>
-      );
-    } else {
-      listBody = renderDocsGrid(docsStills);
-    }
-  } else if (folders.length === 0 && docsStills.length === 0) {
+  } else if (!localReady || (canQuery && recordings === undefined)) {
+    listBody = <p className="jayrr-editor-add-stock__empty">Loading images…</p>;
+  } else if (docsStills.length === 0) {
     listBody = (
       <p className="jayrr-editor-add-stock__empty">
-        No stills in Docs yet. Record a clip or search stock photos.
+        No images on this board or in Docs. Drop an image on the canvas, or
+        search stock photos.
       </p>
     );
   } else {
-    listBody = (
-      <>
-        {folders.length > 0 ? (
-          <ul className="jayrr-scene-grid">
-            {folders.map((folder) => (
-              <PickFolderCard
-                key={folder._id}
-                folder={folder}
-                onOpen={() => {
-                  setFolderId(folder._id);
-                  setSelectedKey(null);
-                }}
-              />
-            ))}
-          </ul>
-        ) : null}
-        {docsStills.length > 0 ? (
-          <>
-            {folders.length > 0 ? (
-              <h3 className="jayrr-present__section-label">Unfiled</h3>
-            ) : null}
-            {renderDocsGrid(docsStills)}
-          </>
-        ) : null}
-      </>
-    );
+    listBody = renderDocsGrid(docsStills);
   }
 
   return (
@@ -470,24 +441,6 @@ export const JayrrEditorAddImageDialog = ({
             />
           </Field>
         ) : null}
-        {source === "docs" && folderId ? (
-          <div className="jayrr-editor-add-stock__folder-bar">
-            <button
-              type="button"
-              className="jayrr-present__back"
-              aria-label="Back to Docs"
-              onClick={() => {
-                setFolderId(null);
-                setSelectedKey(null);
-              }}
-            >
-              {chevronLeftIcon}
-            </button>
-            <span className="jayrr-editor-add-stock__folder-name">
-              {openFolder?.name ?? "Folder"}
-            </span>
-          </div>
-        ) : null}
         <div className="jayrr-editor-add-stock__body">{listBody}</div>
         {photos.length > 0 && error && source === "search" ? (
           <p className="jayrr-editor-add-stock__error">{error}</p>
@@ -511,7 +464,6 @@ export const JayrrEditorAddImageDialog = ({
                   return;
                 }
                 pickPhoto(selectedPhoto);
-                return;
               }
             }}
           >

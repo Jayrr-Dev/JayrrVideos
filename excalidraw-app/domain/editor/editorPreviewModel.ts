@@ -272,3 +272,32 @@ export const findEditorPreviewLayers = (
   }
   return { base, stacks: [], staticStacks: [] };
 };
+
+/** Prefer the linked preview; otherwise use any registered editor preview on the page. */
+export const resolveEditorPreviewLayers = (
+  elementId: string | null,
+  doc: Document,
+): EditorPreviewLayers | null => {
+  if (elementId) {
+    const linked = findEditorPreviewLayers(elementId, doc);
+    if (linked) {
+      return linked;
+    }
+  }
+  for (const layers of layerTargets.values()) {
+    return layers;
+  }
+  const embed = doc.querySelector<HTMLElement>(".jayrr-editor-preview-embed");
+  const fallbackId = embed?.getAttribute("data-element-id");
+  if (fallbackId && fallbackId !== elementId) {
+    return findEditorPreviewLayers(fallbackId, doc);
+  }
+  return null;
+};
+
+export const firstRegisteredPreviewElementId = () => {
+  for (const id of layerTargets.keys()) {
+    return id;
+  }
+  return null;
+};

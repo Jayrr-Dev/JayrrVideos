@@ -10,34 +10,34 @@
  *   (localStorage, indexedDB).
  */
 
-import { clearAppStateForLocalStorage } from "@excalidraw/excalidraw/appState";
 import {
   CANVAS_SEARCH_TAB,
   DEFAULT_SIDEBAR,
   MIME_TYPES,
   debounce,
 } from "@excalidraw/common";
+import { clearAppStateForLocalStorage } from "@excalidraw/excalidraw/appState";
 import {
   createStore,
-  entries,
   del,
+  entries,
+  get,
   getMany,
   set,
   setMany,
-  get,
 } from "idb-keyval";
 
 import { getNonDeletedElements } from "@excalidraw/element";
 
+import type { MaybePromise } from "@excalidraw/common/utility-types";
+import type { ExcalidrawElement, FileId } from "@excalidraw/element/types";
 import type { LibraryPersistedData } from "@excalidraw/excalidraw/data/library";
 import type { ImportedDataState } from "@excalidraw/excalidraw/data/types";
-import type { ExcalidrawElement, FileId } from "@excalidraw/element/types";
 import type {
   AppState,
   BinaryFileData,
   BinaryFiles,
 } from "@excalidraw/excalidraw/types";
-import type { MaybePromise } from "@excalidraw/common/utility-types";
 
 import { appJotaiStore, atom } from "../app-jotai";
 import { SAVE_TO_LOCAL_STORAGE_TIMEOUT, STORAGE_KEYS } from "../app_constants";
@@ -309,6 +309,30 @@ export class LocalData {
       return { savedFiles, erroredFiles };
     },
   });
+
+  static listLocalImageFiles = async (): Promise<BinaryFileData[]> => {
+    const rows = await entries(filesStore);
+    const out: BinaryFileData[] = [];
+    for (const [, data] of rows) {
+      if (!data || typeof data !== "object") {
+        continue;
+      }
+      const mime = Reflect.get(data, "mimeType");
+      const dataURL = Reflect.get(data, "dataURL");
+      const id = Reflect.get(data, "id");
+      if (typeof mime !== "string" || !mime.startsWith("image/")) {
+        continue;
+      }
+      if (typeof dataURL !== "string" || !dataURL || dataURL === "data:,") {
+        continue;
+      }
+      if (typeof id !== "string" || !id) {
+        continue;
+      }
+      out.push(data as BinaryFileData);
+    }
+    return out.sort((a, b) => (b.created ?? 0) - (a.created ?? 0));
+  };
 }
 export class LibraryIndexedDBAdapter {
   /** IndexedDB database and store name */

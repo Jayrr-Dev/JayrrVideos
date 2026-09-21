@@ -114,6 +114,23 @@ export const list = query({
   },
 });
 
+export const listImages = query({
+  args: {},
+  returns: v.array(recordingRow),
+  handler: async (ctx) => {
+    const user = await getCurrentUser(ctx);
+    const rows = await ctx.db
+      .query("presentRecordings")
+      .withIndex("by_user_and_created", (q) => q.eq("userId", user._id))
+      .order("desc")
+      .take(80);
+    return rows
+      .filter((row) => row.mimeType.toLowerCase().startsWith("image/"))
+      .slice(0, 40)
+      .map(mapRecording);
+  },
+});
+
 export const getMany = query({
   args: {
     recordingIds: v.array(v.id("presentRecordings")),

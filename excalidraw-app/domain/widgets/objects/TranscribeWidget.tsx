@@ -62,6 +62,7 @@ import {
 import {
   EMOTION_BANDS,
   EMOTION_QUESTION,
+  averageEmotions,
   emotionsFromAnswers,
   type EmotionPick,
 } from "./jevEmotionScale";
@@ -89,6 +90,7 @@ import {
 import {
   IQ_BANDS,
   IQ_QUESTIONS,
+  averageIqComposite,
   buildIqState,
   compositeFromAnswers,
   iqFromComposite,
@@ -142,11 +144,22 @@ import {
   type AudioSourceOption,
 } from "./listAudioSources";
 import {
+  DEFAULT_JEV_SHOW,
   DEFAULT_TRANSCRIBE,
+  jevScoreVisible,
+  jevShowWhere,
   readTranscribeConfig,
   writeTranscribeConfig,
+  type JevShowKey,
+  type JevShowWhere,
   type TranscribeConfig,
 } from "./transcribeConfig";
+
+const JEV_SHOW_OPTIONS: { id: JevShowWhere; label: string }[] = [
+  { id: "line", label: "Line" },
+  { id: "speaker", label: "Speaker" },
+  { id: "both", label: "Both" },
+];
 
 const LIVE_TURN_ID = "__live__";
 const LIVE_DEBOUNCE_MS = 300;
@@ -442,6 +455,8 @@ const JevCardHeader = ({
   pressed,
   ariaLabel,
   onToggle,
+  showWhere,
+  onShowWhere,
   container,
   children,
 }: {
@@ -449,6 +464,8 @@ const JevCardHeader = ({
   pressed: boolean;
   ariaLabel: string;
   onToggle: () => void;
+  showWhere?: JevShowWhere;
+  onShowWhere?: (next: JevShowWhere) => void;
   container: HTMLElement | null;
   children: ReactNode;
 }) => (
@@ -479,19 +496,40 @@ const JevCardHeader = ({
           </Popover.Portal>
         </Popover.Root>
       </div>
-      <button
-        type="button"
-        className={
-          pressed
-            ? "jayrr-called-embed__switch is-on"
-            : "jayrr-called-embed__switch"
-        }
-        aria-pressed={pressed}
-        aria-label={ariaLabel}
-        onClick={onToggle}
-      >
-        <span className="jayrr-called-embed__knob" />
-      </button>
+      <div className="jayrr-called-embed__title-actions">
+        <button
+          type="button"
+          className={
+            pressed
+              ? "jayrr-called-embed__switch is-on"
+              : "jayrr-called-embed__switch"
+          }
+          aria-pressed={pressed}
+          aria-label={ariaLabel}
+          onClick={onToggle}
+        >
+          <span className="jayrr-called-embed__knob" />
+        </button>
+        {onShowWhere ? (
+          <select
+            className="jayrr-called-embed__select jayrr-called-embed__select--show"
+            value={showWhere ?? DEFAULT_JEV_SHOW}
+            aria-label={`Where ${label} classes show`}
+            onChange={(event) => {
+              const next = event.target.value;
+              if (next === "line" || next === "speaker" || next === "both") {
+                onShowWhere(next);
+              }
+            }}
+          >
+            {JEV_SHOW_OPTIONS.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        ) : null}
+      </div>
     </div>
   </>
 );
@@ -655,45 +693,61 @@ const TurnBadges = ({
   }
   return (
     <div className="jayrr-called-embed__who-badges">
-      {config.jevEmotion
+      {jevScoreVisible(config, config.jevEmotion, "emotion", "line")
         ? emotions.map((emotion) => (
             <EmotionBadge key={emotion.id} emotion={emotion} />
           ))
         : null}
-      {config.jevIq ? (
+      {jevScoreVisible(config, config.jevIq, "iq", "line") ? (
         iqScore === undefined ? null : (
           <IqBadge composite={iqScore} />
         )
       ) : null}
-      {config.jevSmart ? smart ? <SmartBadge smart={smart} /> : null : null}
-      {config.jevHype ? hype ? <HypeBadge hype={hype} /> : null : null}
-      {config.jevEnergy ? (
+      {jevScoreVisible(config, config.jevSmart, "smart", "line") ? (
+        smart ? (
+          <SmartBadge smart={smart} />
+        ) : null
+      ) : null}
+      {jevScoreVisible(config, config.jevHype, "hype", "line") ? (
+        hype ? (
+          <HypeBadge hype={hype} />
+        ) : null
+      ) : null}
+      {jevScoreVisible(config, config.jevEnergy, "energy", "line") ? (
         energy ? (
           <EnergyBadge energy={energy} />
         ) : null
       ) : null}
-      {config.jevOnline ? (
+      {jevScoreVisible(config, config.jevOnline, "online", "line") ? (
         online ? (
           <OnlineBadge online={online} />
         ) : null
       ) : null}
-      {config.jevSocion ? (
+      {jevScoreVisible(config, config.jevSocion, "socion", "line") ? (
         socion ? (
           <SocionBadge socion={socion} />
         ) : null
       ) : null}
-      {config.jevBigFive ? (
+      {jevScoreVisible(config, config.jevBigFive, "bigFive", "line") ? (
         bigFive ? (
           <BigFiveBadge bigFive={bigFive} />
         ) : null
       ) : null}
-      {config.jevMbti ? mbti ? <MbtiBadge mbti={mbti} /> : null : null}
-      {config.jevMbtiAdvance ? (
+      {jevScoreVisible(config, config.jevMbti, "mbti", "line") ? (
+        mbti ? (
+          <MbtiBadge mbti={mbti} />
+        ) : null
+      ) : null}
+      {jevScoreVisible(config, config.jevMbtiAdvance, "mbtiAdvance", "line") ? (
         advance ? (
           <AdvanceBadge advance={advance} />
         ) : null
       ) : null}
-      {config.jevEnneagram ? ennea ? <EnneaBadge ennea={ennea} /> : null : null}
+      {jevScoreVisible(config, config.jevEnneagram, "enneagram", "line") ? (
+        ennea ? (
+          <EnneaBadge ennea={ennea} />
+        ) : null
+      ) : null}
     </div>
   );
 };
@@ -733,14 +787,20 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
   turnsRef.current = turns;
   const speakerScores = useMemo(() => {
     void conversation.version;
-    return config.contextEnabled
-      ? scores.filter(
-          (row) =>
-            conversation.context.results.get(row.turnId)?.topicId ===
-              conversation.topicId && conversation.topicId !== null,
-        )
-      : scores;
+    const base =
+      config.contextEnabled && conversation.topicId !== null
+        ? scores.filter(
+            (row) =>
+              conversation.context.results.get(row.turnId)?.topicId ===
+              conversation.topicId,
+          )
+        : scores;
+    if (!live) {
+      return base;
+    }
+    return [...base, live];
   }, [
+    live,
     scores,
     config.contextEnabled,
     conversation.context,
@@ -788,6 +848,16 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
     },
     [persist],
   );
+
+  const setJevShow = (key: JevShowKey, where: JevShowWhere) => {
+    applyConfig(
+      {
+        ...config,
+        jevShow: { ...config.jevShow, [key]: where },
+      },
+      true,
+    );
+  };
 
   const resetIq = useCallback(() => {
     generationRef.current += 1;
@@ -1249,6 +1319,26 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
     return map;
   }, [scores]);
 
+  const iqBySpeaker = useMemo(() => {
+    const groups = new Map<number, IqResult[]>();
+    for (const row of speakerScores) {
+      if (row.speaker === null || !row.result) {
+        continue;
+      }
+      const list = groups.get(row.speaker) ?? [];
+      list.push(row.result);
+      groups.set(row.speaker, list);
+    }
+    const map = new Map<number, number>();
+    for (const [speaker, rows] of groups) {
+      const average = averageIqComposite(rows);
+      if (average !== null) {
+        map.set(speaker, average);
+      }
+    }
+    return map;
+  }, [speakerScores]);
+
   const emotionByTurn = useMemo(() => {
     const map = new Map<string, EmotionPick[]>();
     for (const row of scores) {
@@ -1258,6 +1348,26 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
     }
     return map;
   }, [scores]);
+
+  const emotionBySpeaker = useMemo(() => {
+    const groups = new Map<number, EmotionPick[][]>();
+    for (const row of speakerScores) {
+      if (row.speaker === null || row.emotion.length === 0) {
+        continue;
+      }
+      const list = groups.get(row.speaker) ?? [];
+      list.push(row.emotion);
+      groups.set(row.speaker, list);
+    }
+    const map = new Map<number, EmotionPick[]>();
+    for (const [speaker, rows] of groups) {
+      const average = averageEmotions(rows);
+      if (average.length > 0) {
+        map.set(speaker, average);
+      }
+    }
+    return map;
+  }, [speakerScores]);
 
   const mbtiByTurn = useMemo(() => {
     const map = new Map<string, MbtiResult>();
@@ -1282,9 +1392,6 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
     for (const row of speakerScores) {
       add(row.speaker, row.mbti);
     }
-    if (live && !config.contextEnabled) {
-      add(live.speaker, live.mbti);
-    }
     const map = new Map<number, MbtiResult>();
     for (const [speaker, rows] of groups) {
       const average = averageMbti(rows);
@@ -1293,7 +1400,7 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
       }
     }
     return map;
-  }, [live, speakerScores, config.contextEnabled]);
+  }, [speakerScores]);
 
   const advanceByTurn = useMemo(() => {
     const map = new Map<string, MbtiAdvanceResult>();
@@ -1318,9 +1425,6 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
     for (const row of speakerScores) {
       add(row.speaker, row.advance);
     }
-    if (live && !config.contextEnabled) {
-      add(live.speaker, live.advance);
-    }
     const map = new Map<number, MbtiAdvanceResult>();
     for (const [speaker, rows] of groups) {
       const average = averageAdvance(rows);
@@ -1329,7 +1433,7 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
       }
     }
     return map;
-  }, [live, speakerScores, config.contextEnabled]);
+  }, [speakerScores]);
 
   const enneaByTurn = useMemo(() => {
     const map = new Map<string, EnneaResult>();
@@ -1354,9 +1458,6 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
     for (const row of speakerScores) {
       add(row.speaker, row.ennea);
     }
-    if (live && !config.contextEnabled) {
-      add(live.speaker, live.ennea);
-    }
     const map = new Map<number, EnneaResult>();
     for (const [speaker, rows] of groups) {
       const average = averageEnnea(rows);
@@ -1365,7 +1466,7 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
       }
     }
     return map;
-  }, [live, speakerScores, config.contextEnabled]);
+  }, [speakerScores]);
 
   const smartByTurn = useMemo(() => {
     const map = new Map<string, SmartResult>();
@@ -1390,9 +1491,6 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
     for (const row of speakerScores) {
       add(row.speaker, row.smart);
     }
-    if (live && !config.contextEnabled) {
-      add(live.speaker, live.smart);
-    }
     const map = new Map<number, SmartResult>();
     for (const [speaker, rows] of groups) {
       const average = averageSmart(rows);
@@ -1401,7 +1499,7 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
       }
     }
     return map;
-  }, [live, speakerScores, config.contextEnabled]);
+  }, [speakerScores]);
 
   const hypeByTurn = useMemo(() => {
     const map = new Map<string, HypeResult>();
@@ -1426,9 +1524,6 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
     for (const row of speakerScores) {
       add(row.speaker, row.hype);
     }
-    if (live && !config.contextEnabled) {
-      add(live.speaker, live.hype);
-    }
     const map = new Map<number, HypeResult>();
     for (const [speaker, rows] of groups) {
       const average = averageHype(rows);
@@ -1437,7 +1532,7 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
       }
     }
     return map;
-  }, [live, speakerScores, config.contextEnabled]);
+  }, [speakerScores]);
 
   const energyByTurn = useMemo(() => {
     const map = new Map<string, EnergyResult>();
@@ -1462,9 +1557,6 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
     for (const row of speakerScores) {
       add(row.speaker, row.energy);
     }
-    if (live && !config.contextEnabled) {
-      add(live.speaker, live.energy);
-    }
     const map = new Map<number, EnergyResult>();
     for (const [speaker, rows] of groups) {
       const average = averageEnergy(rows);
@@ -1473,7 +1565,7 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
       }
     }
     return map;
-  }, [live, speakerScores, config.contextEnabled]);
+  }, [speakerScores]);
 
   const onlineByTurn = useMemo(() => {
     const map = new Map<string, OnlineResult>();
@@ -1498,9 +1590,6 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
     for (const row of speakerScores) {
       add(row.speaker, row.online);
     }
-    if (live && !config.contextEnabled) {
-      add(live.speaker, live.online);
-    }
     const map = new Map<number, OnlineResult>();
     for (const [speaker, rows] of groups) {
       const average = averageOnline(rows);
@@ -1509,7 +1598,7 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
       }
     }
     return map;
-  }, [live, speakerScores, config.contextEnabled]);
+  }, [speakerScores]);
 
   const socionByTurn = useMemo(() => {
     const map = new Map<string, SocionResult>();
@@ -1534,9 +1623,6 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
     for (const row of speakerScores) {
       add(row.speaker, row.socion);
     }
-    if (live && !config.contextEnabled) {
-      add(live.speaker, live.socion);
-    }
     const map = new Map<number, SocionResult>();
     for (const [speaker, rows] of groups) {
       const average = averageSocion(rows);
@@ -1545,7 +1631,7 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
       }
     }
     return map;
-  }, [live, speakerScores, config.contextEnabled]);
+  }, [speakerScores]);
 
   const bigFiveByTurn = useMemo(() => {
     const map = new Map<string, BigFiveResult>();
@@ -1570,9 +1656,6 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
     for (const row of speakerScores) {
       add(row.speaker, row.bigFive);
     }
-    if (live && !config.contextEnabled) {
-      add(live.speaker, live.bigFive);
-    }
     const map = new Map<number, BigFiveResult>();
     for (const [speaker, rows] of groups) {
       const average = averageBigFive(rows);
@@ -1581,7 +1664,7 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
       }
     }
     return map;
-  }, [live, speakerScores, config.contextEnabled]);
+  }, [speakerScores]);
 
   const start = async () => {
     if (busy) {
@@ -1772,9 +1855,9 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
         <div className="jayrr-called-embed__cards">
           <div className="jayrr-called-embed__card">
             <JevCardHeader
-              label="Conversation context"
+              label="Topic tracking"
               pressed={!!config.contextEnabled}
-              ariaLabel="Show conversation topic view"
+              ariaLabel="Show conversation topic tracking"
               container={rootRef.current}
               onToggle={() =>
                 applyConfig(
@@ -1790,16 +1873,22 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
           </div>
           <div className="jayrr-called-embed__card">
             <JevCardHeader
-              label="Jev IQ"
+              label="Verbal IQ"
               pressed={!!config.jevIq}
-              ariaLabel="Show Jev IQ view"
+              ariaLabel="Score speech with verbal IQ"
               container={rootRef.current}
+              showWhere={jevShowWhere(config, "iq")}
+              onShowWhere={(where) => setJevShow("iq", where)}
               onToggle={() => {
                 const next = { ...config, jevIq: !config.jevIq };
                 resetIq();
                 applyConfig(next, true);
               }}
             >
+              <div className="jayrr-called-embed__hint">
+                Scores this line’s reasoning density on a 70–160 verbal IQ
+                scale.
+              </div>
               <div className="jayrr-called-embed__bands">
                 {IQ_BANDS.map((band) => (
                   <span
@@ -1814,16 +1903,21 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
           </div>
           <div className="jayrr-called-embed__card">
             <JevCardHeader
-              label="Jev Smart"
+              label="Situational smarts"
               pressed={!!config.jevSmart}
-              ariaLabel="Score speech with Jev Smart"
+              ariaLabel="Score speech with situational smarts"
               container={rootRef.current}
+              showWhere={jevShowWhere(config, "smart")}
+              onShowWhere={(where) => setJevShow("smart", where)}
               onToggle={() => {
                 const next = { ...config, jevSmart: !config.jevSmart };
                 resetIq();
                 applyConfig(next, true);
               }}
             >
+              <div className="jayrr-called-embed__hint">
+                Scores how clearly this line understands what is going on.
+              </div>
               <div className="jayrr-called-embed__bands jayrr-called-embed__bands--hype">
                 {SMART_BANDS.map((band) => (
                   <span
@@ -1839,16 +1933,21 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
           </div>
           <div className="jayrr-called-embed__card">
             <JevCardHeader
-              label="Jev Hype"
+              label="Attention pull"
               pressed={!!config.jevHype}
-              ariaLabel="Score speech with the hype meter"
+              ariaLabel="Score speech with attention pull"
               container={rootRef.current}
+              showWhere={jevShowWhere(config, "hype")}
+              onShowWhere={(where) => setJevShow("hype", where)}
               onToggle={() => {
                 const next = { ...config, jevHype: !config.jevHype };
                 resetIq();
                 applyConfig(next, true);
               }}
             >
+              <div className="jayrr-called-embed__hint">
+                Scores how strongly this line would hold a listener’s attention.
+              </div>
               <div className="jayrr-called-embed__bands jayrr-called-embed__bands--hype">
                 {HYPE_BANDS.map((band) => (
                   <span
@@ -1864,16 +1963,21 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
           </div>
           <div className="jayrr-called-embed__card">
             <JevCardHeader
-              label="Jev Energy"
+              label="Consciousness map"
               pressed={!!config.jevEnergy}
-              ariaLabel="Score speech with Dodson energy levels"
+              ariaLabel="Score speech with the Hawkins consciousness map"
               container={rootRef.current}
+              showWhere={jevShowWhere(config, "energy")}
+              onShowWhere={(where) => setJevShow("energy", where)}
               onToggle={() => {
                 const next = { ...config, jevEnergy: !config.jevEnergy };
                 resetIq();
                 applyConfig(next, true);
               }}
             >
+              <div className="jayrr-called-embed__hint">
+                Scores this line on Hawkins consciousness levels (30–1000).
+              </div>
               <div className="jayrr-called-embed__bands jayrr-called-embed__bands--energy">
                 {ENERGY_BANDS.map((band) => (
                   <span
@@ -1889,16 +1993,22 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
           </div>
           <div className="jayrr-called-embed__card">
             <JevCardHeader
-              label="Jev Online"
+              label="Online civility"
               pressed={!!config.jevOnline}
-              ariaLabel="Score speech with online behaviour levels"
+              ariaLabel="Score speech with online civility"
               container={rootRef.current}
+              showWhere={jevShowWhere(config, "online")}
+              onShowWhere={(where) => setJevShow("online", where)}
               onToggle={() => {
                 const next = { ...config, jevOnline: !config.jevOnline };
                 resetIq();
                 applyConfig(next, true);
               }}
             >
+              <div className="jayrr-called-embed__hint">
+                Scores how this line treats other people, from troll to
+                wholesome.
+              </div>
               <div className="jayrr-called-embed__bands jayrr-called-embed__bands--online">
                 {ONLINE_BANDS.map((band) => (
                   <span
@@ -1914,16 +2024,21 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
           </div>
           <div className="jayrr-called-embed__card">
             <JevCardHeader
-              label="Jev Socion"
+              label="Socionics type"
               pressed={!!config.jevSocion}
-              ariaLabel="Score speech with socionic types"
+              ariaLabel="Score speech with socionics type"
               container={rootRef.current}
+              showWhere={jevShowWhere(config, "socion")}
+              onShowWhere={(where) => setJevShow("socion", where)}
               onToggle={() => {
                 const next = { ...config, jevSocion: !config.jevSocion };
                 resetIq();
                 applyConfig(next, true);
               }}
             >
+              <div className="jayrr-called-embed__hint">
+                Picks the socionics Model A type this line is using.
+              </div>
               <div className="jayrr-called-embed__bands jayrr-called-embed__bands--socion">
                 {SOCION_BANDS.map((band) => (
                   <span
@@ -1941,16 +2056,22 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
           </div>
           <div className="jayrr-called-embed__card">
             <JevCardHeader
-              label="Jev Big Five"
+              label="Big Five traits"
               pressed={!!config.jevBigFive}
               ariaLabel="Score speech with Big Five traits"
               container={rootRef.current}
+              showWhere={jevShowWhere(config, "bigFive")}
+              onShowWhere={(where) => setJevShow("bigFive", where)}
               onToggle={() => {
                 const next = { ...config, jevBigFive: !config.jevBigFive };
                 resetIq();
                 applyConfig(next, true);
               }}
             >
+              <div className="jayrr-called-embed__hint">
+                Scores Openness, Conscientiousness, Extraversion, Agreeableness,
+                and Neuroticism in this line.
+              </div>
               <div className="jayrr-called-embed__bands jayrr-called-embed__bands--big5">
                 {BIG5_BANDS.map((band) => (
                   <span
@@ -1966,16 +2087,22 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
           </div>
           <div className="jayrr-called-embed__card">
             <JevCardHeader
-              label="Jev MBTI"
+              label="MBTI letters"
               pressed={!!config.jevMbti}
-              ariaLabel="Score speech with Jev MBTI"
+              ariaLabel="Score speech with MBTI letters"
               container={rootRef.current}
+              showWhere={jevShowWhere(config, "mbti")}
+              onShowWhere={(where) => setJevShow("mbti", where)}
               onToggle={() => {
                 const next = { ...config, jevMbti: !config.jevMbti };
                 resetIq();
                 applyConfig(next, true);
               }}
             >
+              <div className="jayrr-called-embed__hint">
+                Picks Extraversion/Introversion, Sensing/Intuition,
+                Thinking/Feeling, and Judging/Perceiving from this line.
+              </div>
               <div className="jayrr-called-embed__bands jayrr-called-embed__bands--pairs">
                 {MBTI_BANDS.map((band) => (
                   <span
@@ -1990,10 +2117,12 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
           </div>
           <div className="jayrr-called-embed__card">
             <JevCardHeader
-              label="Jev Advance"
+              label="MBTI functions"
               pressed={!!config.jevMbtiAdvance}
-              ariaLabel="Score speech with advanced MBTI cognitive functions"
+              ariaLabel="Score speech with MBTI cognitive functions"
               container={rootRef.current}
+              showWhere={jevShowWhere(config, "mbtiAdvance")}
+              onShowWhere={(where) => setJevShow("mbtiAdvance", where)}
               onToggle={() => {
                 const next = {
                   ...config,
@@ -2003,6 +2132,10 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
                 applyConfig(next, true);
               }}
             >
+              <div className="jayrr-called-embed__hint">
+                Picks the Jungian cognitive function this line is using (Se, Si,
+                Ne, Ni, Te, Ti, Fe, Fi).
+              </div>
               <div className="jayrr-called-embed__bands jayrr-called-embed__bands--pairs">
                 {COG_BANDS.map((fn) => (
                   <span
@@ -2017,10 +2150,12 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
           </div>
           <div className="jayrr-called-embed__card">
             <JevCardHeader
-              label="Jev Enneagram"
+              label="Enneagram type"
               pressed={!!config.jevEnneagram}
-              ariaLabel="Score speech with Enneagram types"
+              ariaLabel="Score speech with Enneagram type"
               container={rootRef.current}
+              showWhere={jevShowWhere(config, "enneagram")}
+              onShowWhere={(where) => setJevShow("enneagram", where)}
               onToggle={() => {
                 const next = {
                   ...config,
@@ -2030,6 +2165,10 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
                 applyConfig(next, true);
               }}
             >
+              <div className="jayrr-called-embed__hint">
+                Picks the Enneagram habit of attention this line shows (types
+                1–9).
+              </div>
               <div className="jayrr-called-embed__bands jayrr-called-embed__bands--ennea">
                 {ENNEA_BANDS.map((band) => (
                   <span
@@ -2045,16 +2184,21 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
           </div>
           <div className="jayrr-called-embed__card">
             <JevCardHeader
-              label="Jev Emotion"
+              label="Emotion labels"
               pressed={!!config.jevEmotion}
-              ariaLabel="Score speech with Jev Emotion"
+              ariaLabel="Score speech with emotion labels"
               container={rootRef.current}
+              showWhere={jevShowWhere(config, "emotion")}
+              onShowWhere={(where) => setJevShow("emotion", where)}
               onToggle={() => {
                 const next = { ...config, jevEmotion: !config.jevEmotion };
                 resetIq();
                 applyConfig(next, true);
               }}
             >
+              <div className="jayrr-called-embed__hint">
+                Labels the feeling this line carries.
+              </div>
               <div className="jayrr-called-embed__bands jayrr-called-embed__bands--emotion">
                 {EMOTION_BANDS.map((band) => (
                   <span
@@ -2155,21 +2299,21 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
                             </button>
                           </div>
                         )}
-                        <TurnBadges
-                          config={config}
-                          emotions={emotions}
-                          iqScore={iqScore}
-                          smart={smart}
-                          hype={hype}
-                          energy={energy}
-                          online={online}
-                          socion={socion}
-                          bigFive={bigFive}
-                          mbti={mbti}
-                          advance={advance}
-                          ennea={ennea}
-                        />
                         <div className="jayrr-called-embed__bubble">
+                          <TurnBadges
+                            config={config}
+                            emotions={emotions}
+                            iqScore={iqScore}
+                            smart={smart}
+                            hype={hype}
+                            energy={energy}
+                            online={online}
+                            socion={socion}
+                            bigFive={bigFive}
+                            mbti={mbti}
+                            advance={advance}
+                            ennea={ennea}
+                          />
                           {turn.text}
                         </div>
                       </div>
@@ -2188,7 +2332,9 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
                 config.jevOnline ||
                 config.jevSocion ||
                 config.jevBigFive ||
-                config.jevSmart
+                config.jevSmart ||
+                config.jevIq ||
+                config.jevEmotion
                   ? "jayrr-called-embed__now jayrr-called-embed__now--mbti"
                   : "jayrr-called-embed__now"
               }
@@ -2199,33 +2345,96 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
                   const speakerKey =
                     speaker === null ? "unknown" : String(speaker);
                   const liveNow = liveSpeaker === speaker;
-                  const speakerMbti = config.jevMbti
-                    ? mbtiBySpeaker.get(speaker)
-                    : undefined;
-                  const speakerAdvance = config.jevMbtiAdvance
-                    ? advanceBySpeaker.get(speaker)
-                    : undefined;
-                  const speakerEnnea = config.jevEnneagram
-                    ? enneaBySpeaker.get(speaker)
-                    : undefined;
-                  const speakerHype = config.jevHype
-                    ? hypeBySpeaker.get(speaker)
-                    : undefined;
-                  const speakerEnergy = config.jevEnergy
-                    ? energyBySpeaker.get(speaker)
-                    : undefined;
-                  const speakerOnline = config.jevOnline
-                    ? onlineBySpeaker.get(speaker)
-                    : undefined;
-                  const speakerSocion = config.jevSocion
-                    ? socionBySpeaker.get(speaker)
-                    : undefined;
-                  const speakerBigFive = config.jevBigFive
-                    ? bigFiveBySpeaker.get(speaker)
-                    : undefined;
-                  const speakerSmart = config.jevSmart
-                    ? smartBySpeaker.get(speaker)
-                    : undefined;
+                  const speakerIq =
+                    speaker !== null &&
+                    jevScoreVisible(config, config.jevIq, "iq", "speaker")
+                      ? iqBySpeaker.get(speaker)
+                      : undefined;
+                  const speakerEmotions =
+                    speaker !== null &&
+                    jevScoreVisible(
+                      config,
+                      config.jevEmotion,
+                      "emotion",
+                      "speaker",
+                    )
+                      ? emotionBySpeaker.get(speaker)
+                      : undefined;
+                  const speakerMbti =
+                    speaker !== null &&
+                    jevScoreVisible(config, config.jevMbti, "mbti", "speaker")
+                      ? mbtiBySpeaker.get(speaker)
+                      : undefined;
+                  const speakerAdvance =
+                    speaker !== null &&
+                    jevScoreVisible(
+                      config,
+                      config.jevMbtiAdvance,
+                      "mbtiAdvance",
+                      "speaker",
+                    )
+                      ? advanceBySpeaker.get(speaker)
+                      : undefined;
+                  const speakerEnnea =
+                    speaker !== null &&
+                    jevScoreVisible(
+                      config,
+                      config.jevEnneagram,
+                      "enneagram",
+                      "speaker",
+                    )
+                      ? enneaBySpeaker.get(speaker)
+                      : undefined;
+                  const speakerHype =
+                    speaker !== null &&
+                    jevScoreVisible(config, config.jevHype, "hype", "speaker")
+                      ? hypeBySpeaker.get(speaker)
+                      : undefined;
+                  const speakerEnergy =
+                    speaker !== null &&
+                    jevScoreVisible(
+                      config,
+                      config.jevEnergy,
+                      "energy",
+                      "speaker",
+                    )
+                      ? energyBySpeaker.get(speaker)
+                      : undefined;
+                  const speakerOnline =
+                    speaker !== null &&
+                    jevScoreVisible(
+                      config,
+                      config.jevOnline,
+                      "online",
+                      "speaker",
+                    )
+                      ? onlineBySpeaker.get(speaker)
+                      : undefined;
+                  const speakerSocion =
+                    speaker !== null &&
+                    jevScoreVisible(
+                      config,
+                      config.jevSocion,
+                      "socion",
+                      "speaker",
+                    )
+                      ? socionBySpeaker.get(speaker)
+                      : undefined;
+                  const speakerBigFive =
+                    speaker !== null &&
+                    jevScoreVisible(
+                      config,
+                      config.jevBigFive,
+                      "bigFive",
+                      "speaker",
+                    )
+                      ? bigFiveBySpeaker.get(speaker)
+                      : undefined;
+                  const speakerSmart =
+                    speaker !== null &&
+                    jevScoreVisible(config, config.jevSmart, "smart", "speaker")
+                      ? smartBySpeaker.get(speaker)
+                      : undefined;
                   const nameControl =
                     speaker === null ? (
                       <span
@@ -2274,6 +2483,14 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
                       className="jayrr-called-embed__now-row"
                     >
                       {nameControl}
+                      {speakerIq === undefined ? null : (
+                        <IqBadge composite={speakerIq} />
+                      )}
+                      {speakerEmotions
+                        ? speakerEmotions.map((emotion) => (
+                            <EmotionBadge key={emotion.id} emotion={emotion} />
+                          ))
+                        : null}
                       {speakerSmart ? (
                         <SmartBadge smart={speakerSmart} />
                       ) : null}

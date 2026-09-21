@@ -844,14 +844,14 @@ const ExcalidrawWrapper = () => {
     Required<ExcalidrawProps>["renderEmbeddable"]
   >(
     (element) => {
+      if (isJayrrEditorPreviewElement(element)) {
+        return <JayrrEditorPreviewEmbed elementId={element.id} />;
+      }
       const calledKind = readCalledObjectKind(element);
       if (calledKind) {
         return (
           <JayrrCalledObjectEmbed kind={calledKind} elementId={element.id} />
         );
-      }
-      if (isJayrrEditorPreviewLink(element.link)) {
-        return <JayrrEditorPreviewEmbed elementId={element.id} />;
       }
       if (element.link && DIRECT_VIDEO_LINK.test(element.link)) {
         return (

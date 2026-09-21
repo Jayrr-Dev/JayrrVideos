@@ -580,6 +580,44 @@ export const restoreProjectClips = (
   return restored;
 };
 
+export const attachRecordingMedia = (
+  clips: readonly EditorProjectClip[],
+  recordings: readonly EditorRecordingLookup[] | null,
+): EditorProjectClip[] => {
+  if (!recordings || recordings.length === 0) {
+    return clips as EditorProjectClip[];
+  }
+  const byId = new Map(recordings.map((row) => [row._id, row]));
+  let changed = false;
+  const next = clips.map((clip) => {
+    if (
+      (clip.type !== EDITOR_CLIP_TYPE && clip.type !== EDITOR_AUDIO_TYPE) ||
+      !clip.recordingId
+    ) {
+      return clip;
+    }
+    const row = byId.get(clip.recordingId);
+    if (!row) {
+      return clip;
+    }
+    const url = clip.url || row.url;
+    if (clip.type === EDITOR_CLIP_TYPE) {
+      const posterUrl = clip.posterUrl || row.posterUrl;
+      if (url === clip.url && posterUrl === clip.posterUrl) {
+        return clip;
+      }
+      changed = true;
+      return { ...clip, url, posterUrl };
+    }
+    if (url === clip.url) {
+      return clip;
+    }
+    changed = true;
+    return { ...clip, url };
+  });
+  return changed ? next : (clips as EditorProjectClip[]);
+};
+
 export const stackLanesForClips = (
   clips: readonly EditorProjectClip[],
   current: readonly string[] = [],

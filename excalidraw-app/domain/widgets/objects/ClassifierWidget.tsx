@@ -772,7 +772,7 @@ export const ClassifierWidget = ({ elementId }: { elementId: string }) => {
                 )
               }
             />
-            Conversation context (preview)
+            Topic tracking (preview)
           </label>
           <label className="jayrr-called-embed__field">
             <span>Source</span>

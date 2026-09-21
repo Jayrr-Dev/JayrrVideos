@@ -274,6 +274,17 @@ const IQ_MIN = 70;
 const IQ_MAX = 160;
 const IQ_TOP = IQ_BANDS.length - 1;
 
+export const averageIqComposite = (rows: readonly IqResult[]): number | null => {
+  const substantive = rows.filter((row) => row.substantive);
+  if (substantive.length === 0) {
+    return null;
+  }
+  return (
+    substantive.reduce((sum, row) => sum + row.composite, 0) /
+    substantive.length
+  );
+};
+
 export const iqFromComposite = (composite: number) => {
   const clamped = Math.min(1, Math.max(0, composite));
   return Math.round(IQ_MIN + clamped * (IQ_MAX - IQ_MIN));

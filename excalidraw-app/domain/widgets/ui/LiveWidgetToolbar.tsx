@@ -4,6 +4,7 @@ import {
   TextIcon,
   TrashIcon,
 } from "@excalidraw/excalidraw/components/icons";
+
 import type { PointerEvent, ReactNode } from "react";
 
 import type { AudioSourceOption } from "../objects/listAudioSources";
@@ -24,7 +25,8 @@ const PauseGlyph = (
   </svg>
 );
 
-const ICON_ACTION = "jayrr-called-hyperlink__action jayrr-called-hyperlink__action--icon";
+const ICON_ACTION =
+  "jayrr-called-hyperlink__action jayrr-called-hyperlink__action--icon";
 
 type LiveStatus = {
   listening: boolean;

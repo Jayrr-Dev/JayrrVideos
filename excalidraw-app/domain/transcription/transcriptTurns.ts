@@ -7,14 +7,17 @@ export type TranscriptTurn = {
 
 type WordStamp = {
   word?: unknown;
+  punctuated_word?: unknown;
   speaker?: unknown;
   speaker_id?: unknown;
   startMs?: unknown;
+  startTimeMs?: unknown;
   startTime?: unknown;
   startOffset?: unknown;
   start?: unknown;
   start_time?: unknown;
   endMs?: unknown;
+  endTimeMs?: unknown;
   endTime?: unknown;
   endOffset?: unknown;
   end?: unknown;
@@ -25,6 +28,7 @@ type WordStamp = {
 const PAUSE_SPLIT_MS = 2200;
 
 const START_TIME_KEYS = [
+  "startTimeMs",
   "startMs",
   "startTime",
   "startOffset",
@@ -33,12 +37,20 @@ const START_TIME_KEYS = [
 ] as const;
 
 const END_TIME_KEYS = [
+  "endTimeMs",
   "endMs",
   "endTime",
   "endOffset",
   "end",
   "end_time",
 ] as const;
+
+const MILLISECOND_KEYS = new Set([
+  "startTimeMs",
+  "endTimeMs",
+  "startMs",
+  "endMs",
+]);
 
 const joinToken = (left: string, right: string) => {
   if (!left) {

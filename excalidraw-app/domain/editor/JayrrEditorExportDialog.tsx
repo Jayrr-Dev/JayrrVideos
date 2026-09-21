@@ -76,9 +76,8 @@ export const JayrrEditorExportDialog = ({
   const formId = useId();
   const descriptionId = `${formId}-description`;
   const [name, setName] = useState("Optimized video");
-  const [folderId, setFolderId] = useState<
-    Id<"presentRecordingFolders"> | null
-  >(getOpenRecordingFolderId());
+  const [folderId, setFolderId] =
+    useState<Id<"presentRecordingFolders"> | null>(getOpenRecordingFolderId());
 
   const folders = useQuery(
     api.presentRecordingFolders.list,

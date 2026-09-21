@@ -32,9 +32,9 @@ import {
   syncEditorClipCutout,
 } from "./editorClipCutout";
 import {
-  findEditorPreviewLayers,
   getEditorPreviewAudio,
   registerEditorPreviewSound,
+  resolveEditorPreviewLayers,
   subscribeEditorPreviewVideos,
   type EditorPreviewLayers,
 } from "./editorPreviewModel";
@@ -135,17 +135,25 @@ const overlayVisualOnLaneAtTime = (
 /** Start warming the next cut this far before the boundary. */
 const PREFETCH_LEAD_MS = 900;
 
+const WAIT_DATA_MS = 4000;
+const SEEK_WAIT_MS = 1500;
+
 const waitForData = (video: HTMLVideoElement) =>
   new Promise<void>((resolve) => {
     if (video.readyState >= 2) {
       resolve();
       return;
     }
-    const onReady = () => {
+    const finish = () => {
+      window.clearTimeout(timer);
       video.removeEventListener("loadeddata", onReady);
+      video.removeEventListener("error", onReady);
       resolve();
     };
+    const onReady = () => finish();
+    const timer = window.setTimeout(finish, WAIT_DATA_MS);
     video.addEventListener("loadeddata", onReady);
+    video.addEventListener("error", onReady);
   });
 
 const sourceOffsetSec = (clip: EditorClip, timeMs: number) =>
@@ -160,22 +168,23 @@ const seekVideo = async (video: HTMLVideoElement, offsetSec: number) => {
     return;
   }
   await new Promise<void>((resolve) => {
-    const onSeeked = () => {
+    const finish = () => {
+      window.clearTimeout(timer);
       video.removeEventListener("seeked", onSeeked);
       resolve();
     };
+    const onSeeked = () => finish();
+    const timer = window.setTimeout(finish, SEEK_WAIT_MS);
     video.addEventListener("seeked", onSeeked);
     try {
       video.currentTime = target;
     } catch {
-      video.removeEventListener("seeked", onSeeked);
-      resolve();
+      finish();
       return;
     }
     // Some browsers skip seeked when already near the target.
     if (!video.seeking) {
-      video.removeEventListener("seeked", onSeeked);
-      resolve();
+      finish();
     }
   });
 };
@@ -280,11 +289,7 @@ export const useEditorPlayback = ({
   docRef.current = ownerDocument;
 
   const resolveLayers = useCallback((): EditorPreviewLayers | null => {
-    const id = previewIdRef.current;
-    if (!id) {
-      return null;
-    }
-    return findEditorPreviewLayers(id, docRef.current);
+    return resolveEditorPreviewLayers(previewIdRef.current, docRef.current);
   }, []);
 
   const getActiveBase = useCallback((layers: EditorPreviewLayers) => {
@@ -322,6 +327,9 @@ export const useEditorPlayback = ({
   const prepareSrc = useCallback(
     async (video: HTMLVideoElement, url: string, clipMuted = false) => {
       applyVideoMix(video, clipMuted);
+      if (!url) {
+        return;
+      }
       if (video.crossOrigin !== "anonymous") {
         video.crossOrigin = "anonymous";
       }
@@ -414,6 +422,12 @@ export const useEditorPlayback = ({
         setLayerVisible(video, false);
         return clip.id;
       }
+      if (!clip.url) {
+        applyVideoMix(video, false);
+        video.pause();
+        setLayerVisible(video, false);
+        return null;
+      }
       await prepareSrc(video, clip.url, clipIsMuted(clip));
       applyVideoMix(video, clipIsMuted(clip));
       await seekVideo(video, sourceOffsetSec(clip, timeMs));
@@ -468,6 +482,18 @@ export const useEditorPlayback = ({
           setLayerVisible(idle, false);
         }
         return clip.id;
+      }
+
+      if (!clip.url) {
+        applyVideoMix(active, false);
+        active.pause();
+        setLayerVisible(active, false);
+        if (idle) {
+          applyVideoMix(idle, false);
+          idle.pause();
+          setLayerVisible(idle, false);
+        }
+        return null;
       }
 
       // Same file (including cut siblings): keep the visible frame, just seek.
@@ -835,13 +861,21 @@ export const useEditorPlayback = ({
       return;
     }
     const now = performance.now();
-    const elapsed = lastTickRef.current ? now - lastTickRef.current : 0;
+    const rawElapsed = lastTickRef.current ? now - lastTickRef.current : 0;
+    const elapsed = Math.min(48, Math.max(0, rawElapsed));
     lastTickRef.current = now;
     const timelineNow = timelineRef.current;
     const masterMs = syncFromMaster();
+    const layersNow = resolveLayers();
+    const masterVideo = layersNow ? getActiveBase(layersNow) : null;
+    const useMaster =
+      masterMs != null &&
+      masterVideo != null &&
+      !masterVideo.paused &&
+      !masterVideo.ended;
     const nextMs = Math.min(
       timelineNow.totalMs,
-      masterMs ?? timeRef.current + elapsed,
+      useMaster ? masterMs : timeRef.current + elapsed,
     );
     const prevMs = timeRef.current;
     timeRef.current = nextMs;
@@ -907,10 +941,10 @@ export const useEditorPlayback = ({
           ) ?? null
         : null;
       if (sequenceClip && baseClipIdRef.current === sequenceClip.id) {
-        const active = layers.base;
+        const active = getActiveBase(layers);
         applyVideoMix(active, clipIsMuted(sequenceClip));
         const expected = sourceOffsetSec(sequenceClip, nextMs);
-        if (Math.abs(active.currentTime - expected) > 0.12) {
+        if (Math.abs(active.currentTime - expected) > 0.35) {
           seekVideo(active, expected);
         }
         setLayerVisible(
@@ -919,13 +953,16 @@ export const useEditorPlayback = ({
           baseBlendAtTime(nextMs, coveringOverlap),
           clipHasRemoveBg(sequenceClip),
         );
+        if (playingRef.current && active.paused) {
+          void active.play().catch(() => {});
+        }
         if (sameLaneSequence && layers.baseAlt) {
           const incoming = timelineNow.sequence.find(
             (clip) => clip.id === sameLaneSequence.rightClipId,
           );
           if (incoming) {
             const expectedIn = sourceOffsetSec(incoming, nextMs);
-            if (Math.abs(layers.baseAlt.currentTime - expectedIn) > 0.12) {
+            if (Math.abs(layers.baseAlt.currentTime - expectedIn) > 0.35) {
               seekVideo(layers.baseAlt, expectedIn);
             }
             setLayerVisible(
@@ -934,6 +971,9 @@ export const useEditorPlayback = ({
               stackBlendAtTime(incoming, nextMs, sameLaneSequence, true),
               clipHasRemoveBg(incoming),
             );
+            if (playingRef.current && layers.baseAlt.paused) {
+              void layers.baseAlt.play().catch(() => {});
+            }
           }
         } else if (!sameLaneSequence) {
           prefetchNextBase(layers, nextMs);
@@ -951,7 +991,7 @@ export const useEditorPlayback = ({
         }
         applyVideoMix(video, clipIsMuted(clip));
         const expected = sourceOffsetSec(clip, nextMs);
-        if (Math.abs(video.currentTime - expected) > 0.12) {
+        if (Math.abs(video.currentTime - expected) > 0.35) {
           seekVideo(video, expected);
         }
         const overlap = overlapAtTime(overlaps, clip.id, nextMs);
@@ -961,11 +1001,15 @@ export const useEditorPlayback = ({
           stackBlendAtTime(clip, nextMs, overlap, Boolean(sequenceClip)),
           clipHasRemoveBg(clip),
         );
+        if (playingRef.current && video.paused) {
+          void video.play().catch(() => {});
+        }
       });
     }
     rafRef.current = requestAnimationFrame(tick);
   }, [
     applyProgram,
+    getActiveBase,
     prefetchNextBase,
     resolveLayers,
     stopAtEnd,
@@ -1015,7 +1059,7 @@ export const useEditorPlayback = ({
     if (!editorHasClips(timelineRef.current)) {
       return;
     }
-    if (timelineHasVideo(timelineRef.current) && !previewIdRef.current) {
+    if (timelineHasVideo(timelineRef.current) && !resolveLayers()) {
       return;
     }
     if (timeRef.current >= timelineRef.current.totalMs) {
@@ -1027,15 +1071,15 @@ export const useEditorPlayback = ({
     }
     playingRef.current = true;
     setPlaying(true);
-    lastTickRef.current = performance.now();
     void applyProgram(timeRef.current, true).then(() => {
       if (!playingRef.current) {
         return;
       }
+      lastTickRef.current = performance.now();
       stopRaf();
       rafRef.current = requestAnimationFrame(tick);
     });
-  }, [applyProgram, stopRaf, tick]);
+  }, [applyProgram, resolveLayers, stopRaf, tick]);
 
   const togglePlay = useCallback(() => {
     if (playingRef.current) {

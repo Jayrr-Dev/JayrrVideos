@@ -132,7 +132,7 @@ export const ConversationIndicators = ({
   return (
     <div
       className="jayrr-called-embed__stack jayrr-called-embed__stack--compact"
-      aria-label="Conversation context"
+      aria-label="Topic tracking"
     >
       <label className="jayrr-called-embed__field">
         <span>Conversation topic</span>

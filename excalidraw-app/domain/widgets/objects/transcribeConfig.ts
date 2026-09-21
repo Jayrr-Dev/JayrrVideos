@@ -2,6 +2,28 @@ import type { ExcalidrawElement } from "@excalidraw/element/types";
 
 import { JAYRR_CALLED_OBJECT_KEY } from "../model";
 
+export const JEV_SHOW_KEYS = [
+  "iq",
+  "smart",
+  "hype",
+  "energy",
+  "online",
+  "socion",
+  "bigFive",
+  "mbti",
+  "mbtiAdvance",
+  "enneagram",
+  "emotion",
+] as const;
+
+export type JevShowKey = typeof JEV_SHOW_KEYS[number];
+
+export const JEV_SHOW_WHERE = ["line", "speaker", "both"] as const;
+
+export type JevShowWhere = typeof JEV_SHOW_WHERE[number];
+
+export const DEFAULT_JEV_SHOW: JevShowWhere = "both";
+
 export type TranscribeConfig = {
   contextEnabled?: boolean;
   configOpen?: boolean;
@@ -16,6 +38,7 @@ export type TranscribeConfig = {
   jevSocion: boolean;
   jevBigFive: boolean;
   jevEmotion: boolean;
+  jevShow: Partial<Record<JevShowKey, JevShowWhere>>;
   sourceId: string;
 };
 
@@ -33,7 +56,50 @@ export const DEFAULT_TRANSCRIBE: TranscribeConfig = {
   jevSocion: false,
   jevBigFive: false,
   jevEmotion: false,
+  jevShow: {},
   sourceId: "mic",
+};
+
+const readShowWhere = (value: unknown): JevShowWhere | null => {
+  if (value === "line" || value === "speaker" || value === "both") {
+    return value;
+  }
+  return null;
+};
+
+const readJevShow = (
+  value: unknown,
+): Partial<Record<JevShowKey, JevShowWhere>> => {
+  if (!value || typeof value !== "object") {
+    return {};
+  }
+  const bag = value as Record<string, unknown>;
+  const next: Partial<Record<JevShowKey, JevShowWhere>> = {};
+  for (const key of JEV_SHOW_KEYS) {
+    const where = readShowWhere(bag[key]);
+    if (where) {
+      next[key] = where;
+    }
+  }
+  return next;
+};
+
+export const jevShowWhere = (
+  config: TranscribeConfig,
+  key: JevShowKey,
+): JevShowWhere => config.jevShow[key] ?? DEFAULT_JEV_SHOW;
+
+export const jevScoreVisible = (
+  config: TranscribeConfig,
+  enabled: boolean,
+  key: JevShowKey,
+  place: "line" | "speaker",
+) => {
+  if (!enabled) {
+    return false;
+  }
+  const where = jevShowWhere(config, key);
+  return where === "both" || where === place;
 };
 
 export const readTranscribeConfig = (
@@ -60,6 +126,7 @@ export const readTranscribeConfig = (
     jevSocion: (bag as { jevSocion?: unknown }).jevSocion === true,
     jevBigFive: (bag as { jevBigFive?: unknown }).jevBigFive === true,
     jevEmotion: (bag as { jevEmotion?: unknown }).jevEmotion === true,
+    jevShow: readJevShow((bag as { jevShow?: unknown }).jevShow),
     sourceId: typeof sourceId === "string" && sourceId ? sourceId : "mic",
   };
 };
@@ -87,6 +154,7 @@ export const writeTranscribeConfig = (
   bag.jevSocion = config.jevSocion;
   bag.jevBigFive = config.jevBigFive;
   bag.jevEmotion = config.jevEmotion;
+  bag.jevShow = config.jevShow;
   bag.sourceId = config.sourceId;
   return {
     ...(element.customData ?? {}),

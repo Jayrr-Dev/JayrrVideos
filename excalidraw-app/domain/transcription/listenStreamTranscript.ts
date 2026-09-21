@@ -607,6 +607,8 @@ export const listenStreamTranscript = (
                 language: "en",
                 sampleRateHertz,
                 numberOfChannels: 1,
+                includeWordTimestamps: true,
+                enableSpeakerDiarization: true,
               },
             });
           }

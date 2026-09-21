@@ -52,6 +52,7 @@ import {
   setEditorPreviewAudio,
 } from "./editorPreviewModel";
 import {
+  attachRecordingMedia,
   normalizeEditorProjectName,
   parseStoredEditorClips,
   parseStoredEditorView,
@@ -204,7 +205,7 @@ export const JayrrEditorSession = ({ children }: { children: ReactNode }) => {
   const apiExcal = useExcalidrawAPI();
   const { container } = useExcalidrawContainer();
   const ownerDocument = container?.ownerDocument ?? document;
-  const { isAuthenticated } = useConvexAuth();
+  const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
   const canQuery = isConvexLinked && isAuthenticated;
   const recordings = useQuery(
     api.presentRecordings.listRecent,
@@ -237,6 +238,7 @@ export const JayrrEditorSession = ({ children }: { children: ReactNode }) => {
     Record<string, boolean>
   >({});
   const hydratedRef = useRef(false);
+  const lastSelectedElementIdRef = useRef<string | null>(null);
   const clipsRef = useRef(clips);
   const stackLaneIdsRef = useRef(stackLaneIds);
   const skipHistoryRef = useRef(false);
@@ -269,44 +271,59 @@ export const JayrrEditorSession = ({ children }: { children: ReactNode }) => {
   }, []);
 
   useEffect(() => {
-    if (!apiExcal) {
+    if (!apiExcal || !previewElementId) {
       return;
     }
-    const elements = apiExcal.getSceneElements();
-    if (previewElementId) {
-      const exists = elements.some(
-        (element) => element.id === previewElementId,
-      );
-      if (exists) {
-        return;
-      }
-      setPreviewElementId(null);
-      writeStoredPreviewId(null);
+    const exists = apiExcal
+      .getSceneElements()
+      .some((element) => element.id === previewElementId);
+    if (exists) {
+      return;
+    }
+    setPreviewElementId(null);
+    writeStoredPreviewId(null);
+  }, [apiExcal, previewElementId, selectedElementIds]);
+
+  useEffect(() => {
+    if (!apiExcal) {
+      return;
     }
     const selected = Object.keys(selectedElementIds).filter(
       (id) => selectedElementIds[id],
     );
-    if (selected.length !== 1) {
+    const selectedId = selected.length === 1 ? selected[0] ?? null : null;
+    const previousId = lastSelectedElementIdRef.current;
+    lastSelectedElementIdRef.current = selectedId;
+    if (!selectedId || selectedId === previousId) {
       return;
     }
-    const picked = elements.find((element) => element.id === selected[0]);
+    const picked = apiExcal
+      .getSceneElements()
+      .find((element) => element.id === selectedId);
     if (picked && isJayrrEditorPreviewElement(picked)) {
       linkPreview(picked.id);
     }
-  }, [apiExcal, linkPreview, previewElementId, selectedElementIds]);
+  }, [apiExcal, linkPreview, selectedElementIds]);
 
   useEffect(() => {
     if (hydratedRef.current) {
       return;
     }
-    if (canQuery && recordings === undefined) {
-      return;
-    }
-    hydratedRef.current = true;
     const stored = readStoredClips();
     if (stored.length === 0) {
+      hydratedRef.current = true;
       return;
     }
+    const needsRecordings = stored.some((item) => item.recordingId);
+    if (needsRecordings) {
+      if (authLoading) {
+        return;
+      }
+      if (canQuery && recordings === undefined) {
+        return;
+      }
+    }
+    hydratedRef.current = true;
     const restored = restoreProjectClips(stored, recordings ?? null);
     if (restored.length > 0) {
       setClips(restored);
@@ -319,7 +336,14 @@ export const JayrrEditorSession = ({ children }: { children: ReactNode }) => {
         return next;
       });
     }
-  }, [canQuery, recordings]);
+  }, [authLoading, canQuery, recordings]);
+
+  useEffect(() => {
+    if (!recordings) {
+      return;
+    }
+    setClips((current) => attachRecordingMedia(current, recordings));
+  }, [recordings]);
 
   const timeline = useMemo(() => buildEditorTimeline(clips), [clips]);
   const { currentTimeMs, playing, play, pause, stop, seek, togglePlay } =
@@ -570,8 +594,9 @@ export const JayrrEditorSession = ({ children }: { children: ReactNode }) => {
   const clearPreviewLink = useCallback(() => {
     setPreviewElementId(null);
     writeStoredPreviewId(null);
+    writeStoredEditorView({ ...snapshotView(), previewElementId: null });
     stop();
-  }, [stop]);
+  }, [snapshotView, stop]);
 
   const focusPreview = useCallback(() => {
     if (!apiExcal || !previewElementId) {

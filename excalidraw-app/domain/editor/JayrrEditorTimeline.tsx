@@ -1282,7 +1282,6 @@ const ClipFace = ({
   const skipFilmstrip =
     isSound ||
     clip.type === EDITOR_HTML_TYPE ||
-    clip.type === EDITOR_HTML_TYPE ||
     clip.type === EDITOR_STATIC_TYPE;
   const frames = useClipFilmstripFrames(
     clip,

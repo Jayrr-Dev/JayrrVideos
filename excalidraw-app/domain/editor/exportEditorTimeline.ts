@@ -188,15 +188,18 @@ const startVisualCapture = (
   };
 };
 
+type AudioWindow = Window &
+  typeof globalThis & {
+    webkitAudioContext?: typeof AudioContext;
+  };
+
 const mixAudioTracks = (
   videos: readonly HTMLVideoElement[],
   sounds: readonly HTMLAudioElement[],
   ownerWindow: Window,
 ) => {
-  const AudioCtx =
-    ownerWindow.AudioContext ||
-    (ownerWindow as Window & { webkitAudioContext?: typeof AudioContext })
-      .webkitAudioContext;
+  const view = ownerWindow as AudioWindow;
+  const AudioCtx = view.AudioContext || view.webkitAudioContext;
   if (!AudioCtx) {
     return { stream: new MediaStream(), stop: () => undefined };
   }

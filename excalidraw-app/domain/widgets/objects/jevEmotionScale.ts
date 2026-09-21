@@ -321,3 +321,25 @@ export const emotionsFromAnswers = (
 export const emotionFromAnswers = (
   answers: ReadonlyArray<{ id: string; type: string }>,
 ): EmotionPick | null => emotionsFromAnswers(answers)[0] ?? null;
+
+/** Mean confidence per emotion across turns. Missing turns count as 0. */
+export const averageEmotions = (
+  turns: readonly EmotionPick[][],
+): EmotionPick[] => {
+  if (turns.length === 0) {
+    return [];
+  }
+  const sums = new Map<string, number>();
+  for (const picks of turns) {
+    for (const pick of picks) {
+      sums.set(pick.id, (sums.get(pick.id) ?? 0) + pick.confidence);
+    }
+  }
+  return [...sums.entries()]
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, 1)
+    .map(([id, total]) =>
+      pickFromId(id, { [id]: total / turns.length }, total / turns.length),
+    )
+    .filter((row): row is EmotionPick => row !== null);
+};
