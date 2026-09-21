@@ -10,11 +10,13 @@ import {
   editorLanes,
   moveClipsByLayer,
   moveEditorClip,
-  resizeEditorClip,
   removeStackLane,
+  resizeEditorClip,
+  restoreEditorClipEdge,
   returnClipsAudio,
   separateClipsAudio,
   SEQUENCE_LANE_ID,
+  setClipsRemoveBg,
   snapClipStart,
   stackBlendAtTime,
   type EditorVideoClip,
@@ -222,6 +224,92 @@ describe("resizeEditorClip", () => {
     });
     expect(next?.[0]).toEqual(
       expect.objectContaining({
+        durationMs: 1800,
+        sourceOffsetMs: 200,
+      }),
+    );
+  });
+
+  it("does not stretch a clip past the original source", () => {
+    const clips = [
+      clip("a", 2000, {
+        laneStartMs: 0,
+        sourceOffsetMs: 0,
+        sourceDurationMs: 2000,
+      }),
+    ];
+    const next = resizeEditorClip({
+      clips,
+      clipId: "a",
+      edge: "end",
+      edgeMs: 8000,
+    });
+    expect(next).toBeNull();
+  });
+
+  it("does not stretch a static clip past its original duration", () => {
+    const clips = [
+      {
+        id: "still",
+        type: "static" as const,
+        url: "https://example.com/still.jpg",
+        mediaKind: "image" as const,
+        label: "Still",
+        durationMs: 3000,
+        sourceDurationMs: 3000,
+        laneId: SEQUENCE_LANE_ID,
+        laneStartMs: 0,
+      },
+    ];
+    const next = resizeEditorClip({
+      clips,
+      clipId: "still",
+      edge: "end",
+      edgeMs: 8000,
+    });
+    expect(next).toBeNull();
+  });
+});
+
+describe("restoreEditorClipEdge", () => {
+  it("restores the original in-point on the start edge", () => {
+    const clips = [
+      clip("a", 1500, {
+        laneStartMs: 800,
+        sourceOffsetMs: 500,
+        sourceDurationMs: 2000,
+      }),
+    ];
+    const next = restoreEditorClipEdge({
+      clips,
+      clipId: "a",
+      edge: "start",
+    });
+    expect(next?.[0]).toEqual(
+      expect.objectContaining({
+        laneStartMs: 300,
+        durationMs: 2000,
+        sourceOffsetMs: 0,
+      }),
+    );
+  });
+
+  it("restores the original out-point on the end edge", () => {
+    const clips = [
+      clip("a", 800, {
+        laneStartMs: 100,
+        sourceOffsetMs: 200,
+        sourceDurationMs: 2000,
+      }),
+    ];
+    const next = restoreEditorClipEdge({
+      clips,
+      clipId: "a",
+      edge: "end",
+    });
+    expect(next?.[0]).toEqual(
+      expect.objectContaining({
+        laneStartMs: 100,
         durationMs: 1800,
         sourceOffsetMs: 200,
       }),
@@ -658,5 +746,25 @@ describe("returnClipsAudio", () => {
     }
     expect(clipHasReturnableAudio(split?.clips ?? [], video)).toBe(true);
     expect(clipHasReturnableAudio(split?.clips ?? [], audio)).toBe(true);
+  });
+});
+
+describe("setClipsRemoveBg", () => {
+  it("sets and clears removeBg on video clips only", () => {
+    const on = setClipsRemoveBg(
+      [clip("a", 1000), clip("b", 800, { laneId: "stack-1" })],
+      ["a"],
+      true,
+    );
+    expect(on?.find((item) => item.id === "a")).toEqual(
+      expect.objectContaining({ removeBg: true }),
+    );
+    expect(on?.find((item) => item.id === "b")).toEqual(
+      expect.not.objectContaining({ removeBg: true }),
+    );
+    const off = setClipsRemoveBg(on ?? [], ["a"], false);
+    expect(off?.find((item) => item.id === "a")).toEqual(
+      expect.not.objectContaining({ removeBg: true }),
+    );
   });
 });

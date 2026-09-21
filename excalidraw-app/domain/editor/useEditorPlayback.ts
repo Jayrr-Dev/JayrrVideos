@@ -9,8 +9,10 @@ import {
   collectLaneOverlaps,
   editorHasClips,
   isEditorAudioLikeClip,
+  isEditorClocklessVisual,
   isEditorHtmlClip,
   isEditorSoundClip,
+  isEditorStaticClip,
   isEditorVideoClip,
   isSameLaneOverlap,
   overlapAtTime,
@@ -26,8 +28,13 @@ import {
   type LayerBlend,
 } from "./buildEditorTimeline";
 import {
+  getEditorPreviewCutoutCanvas,
+  syncEditorClipCutout,
+} from "./editorClipCutout";
+import {
   findEditorPreviewLayers,
   getEditorPreviewAudio,
+  registerEditorPreviewSound,
   subscribeEditorPreviewVideos,
   type EditorPreviewLayers,
 } from "./editorPreviewModel";
@@ -43,23 +50,34 @@ type UseEditorPlaybackOpts = {
 
 const LAYER_ON = "is-on";
 
-const applyBlend = (video: HTMLVideoElement, blend: LayerBlend | null) => {
+const clipHasRemoveBg = (clip: EditorClip | null | undefined) =>
+  Boolean(clip && isEditorVideoClip(clip) && clip.removeBg);
+
+const applyBlendToNode = (node: HTMLElement, blend: LayerBlend | null) => {
   if (!blend) {
-    video.style.removeProperty("--jayrr-layer-opacity");
-    video.style.removeProperty("clip-path");
-    video.style.removeProperty("mix-blend-mode");
+    node.style.removeProperty("--jayrr-layer-opacity");
+    node.style.removeProperty("clip-path");
+    node.style.removeProperty("mix-blend-mode");
     return;
   }
-  video.style.setProperty("--jayrr-layer-opacity", String(blend.opacity));
+  node.style.setProperty("--jayrr-layer-opacity", String(blend.opacity));
   if (blend.clipPath) {
-    video.style.clipPath = blend.clipPath;
+    node.style.clipPath = blend.clipPath;
   } else {
-    video.style.removeProperty("clip-path");
+    node.style.removeProperty("clip-path");
   }
   if (blend.mixBlendMode) {
-    video.style.mixBlendMode = blend.mixBlendMode;
+    node.style.mixBlendMode = blend.mixBlendMode;
   } else {
-    video.style.removeProperty("mix-blend-mode");
+    node.style.removeProperty("mix-blend-mode");
+  }
+};
+
+const applyBlend = (video: HTMLVideoElement, blend: LayerBlend | null) => {
+  const canvas = getEditorPreviewCutoutCanvas(video);
+  const targets: HTMLElement[] = canvas ? [video, canvas] : [video];
+  for (const node of targets) {
+    applyBlendToNode(node, blend);
   }
 };
 
@@ -67,13 +85,53 @@ const setLayerVisible = (
   video: HTMLVideoElement,
   on: boolean,
   blend?: LayerBlend | null,
+  removeBg = false,
 ) => {
   video.classList.toggle(LAYER_ON, on);
   applyBlend(
     video,
     on ? blend ?? { opacity: 1, clipPath: null, mixBlendMode: null } : null,
   );
+  syncEditorClipCutout(video, on && removeBg);
 };
+
+const setStillVisible = (
+  image: HTMLImageElement | null | undefined,
+  on: boolean,
+  blend?: LayerBlend | null,
+) => {
+  if (!image) {
+    return;
+  }
+  image.classList.toggle(LAYER_ON, on);
+  applyBlendToNode(
+    image,
+    on ? blend ?? { opacity: 1, clipPath: null, mixBlendMode: null } : null,
+  );
+};
+
+const applyStillSrc = (image: HTMLImageElement, url: string) => {
+  if (image.getAttribute("src") !== url) {
+    image.src = url;
+  }
+};
+
+const hideStills = (layers: EditorPreviewLayers) => {
+  setStillVisible(layers.staticBase, false);
+  for (const image of layers.staticStacks ?? []) {
+    setStillVisible(image, false);
+  }
+};
+
+const overlayVisualOnLaneAtTime = (
+  overlays: readonly EditorClip[],
+  laneId: string,
+  timeMs: number,
+) =>
+  visualClipAtTime(
+    overlays.filter((clip) => clipLaneId(clip) === laneId),
+    timeMs,
+  );
 /** Start warming the next cut this far before the boundary. */
 const PREFETCH_LEAD_MS = 900;
 
@@ -264,6 +322,9 @@ export const useEditorPlayback = ({
   const prepareSrc = useCallback(
     async (video: HTMLVideoElement, url: string, clipMuted = false) => {
       applyVideoMix(video, clipMuted);
+      if (video.crossOrigin !== "anonymous") {
+        video.crossOrigin = "anonymous";
+      }
       if (videoHasUrl(video, url) && video.readyState >= 2) {
         return;
       }
@@ -297,6 +358,7 @@ export const useEditorPlayback = ({
           audio = doc.createElement("audio");
           audio.preload = "auto";
           soundNodesRef.current.set(clip.id, audio);
+          registerEditorPreviewSound(clip.id, audio);
         }
         audio.volume = mix.volume;
         audio.muted = mix.muted;
@@ -346,7 +408,7 @@ export const useEditorPlayback = ({
         setLayerVisible(video, false);
         return null;
       }
-      if (isEditorHtmlClip(clip)) {
+      if (isEditorClocklessVisual(clip)) {
         applyVideoMix(video, false);
         video.pause();
         setLayerVisible(video, false);
@@ -355,7 +417,7 @@ export const useEditorPlayback = ({
       await prepareSrc(video, clip.url, clipIsMuted(clip));
       applyVideoMix(video, clipIsMuted(clip));
       await seekVideo(video, sourceOffsetSec(clip, timeMs));
-      setLayerVisible(video, true, blend);
+      setLayerVisible(video, true, blend, clipHasRemoveBg(clip));
       if (shouldPlay) {
         try {
           await video.play();
@@ -396,7 +458,7 @@ export const useEditorPlayback = ({
         return null;
       }
 
-      if (isEditorHtmlClip(clip)) {
+      if (isEditorClocklessVisual(clip)) {
         applyVideoMix(active, false);
         active.pause();
         setLayerVisible(active, false);
@@ -412,7 +474,7 @@ export const useEditorPlayback = ({
       if (videoHasUrl(active, clip.url) && active.readyState >= 2) {
         applyVideoMix(active, clipIsMuted(clip));
         await seekVideo(active, sourceOffsetSec(clip, timeMs));
-        setLayerVisible(active, true, blend);
+        setLayerVisible(active, true, blend, clipHasRemoveBg(clip));
         if (idle) {
           setLayerVisible(idle, false);
           idle.pause();
@@ -447,7 +509,7 @@ export const useEditorPlayback = ({
         } else {
           idle.pause();
         }
-        setLayerVisible(idle, true, blend);
+        setLayerVisible(idle, true, blend, clipHasRemoveBg(clip));
         setLayerVisible(active, false);
         active.pause();
         baseActiveIsAltRef.current = idle === layers.baseAlt;
@@ -522,7 +584,11 @@ export const useEditorPlayback = ({
         return;
       }
       const next = nextSequenceClip(timelineRef.current.sequence, current);
-      if (!next || isEditorHtmlClip(next) || isEditorHtmlClip(current)) {
+      if (
+        !next ||
+        isEditorClocklessVisual(next) ||
+        isEditorClocklessVisual(current)
+      ) {
         return;
       }
       if (next.url === current.url) {
@@ -566,7 +632,7 @@ export const useEditorPlayback = ({
       const { sequence, overlays } = timelineRef.current;
       const sequenceClip = visualClipAtTime(sequence, timeMs);
       const laneClips = stackLaneIdsRef.current.map((laneId) =>
-        overlayVideoOnLaneAtTime(overlays, laneId, timeMs),
+        overlayVisualOnLaneAtTime(overlays, laneId, timeMs),
       );
       const firstOverlay = laneClips.find((clip) => clip) ?? null;
       const orphanOverlay =
@@ -603,6 +669,7 @@ export const useEditorPlayback = ({
           setLayerVisible(stack, false);
         }
         setCompositionOn(layers.composition ?? null, false);
+        hideStills(layers);
         htmlClipIdRef.current = null;
         baseClipIdRef.current = null;
         stackClipIdsRef.current = layers.stacks.map(() => null);
@@ -627,6 +694,17 @@ export const useEditorPlayback = ({
         setCompositionOn(frame, false);
       }
 
+      if (baseClip && isEditorStaticClip(baseClip) && layers.staticBase) {
+        applyStillSrc(layers.staticBase, baseClip.url);
+        setStillVisible(
+          layers.staticBase,
+          true,
+          baseBlendAtTime(timeMs, coveringOverlap),
+        );
+      } else {
+        setStillVisible(layers.staticBase, false);
+      }
+
       const outgoing = sameLaneSequence
         ? sequence.find((clip) => clip.id === sameLaneSequence.leftClipId)
         : null;
@@ -640,8 +718,8 @@ export const useEditorPlayback = ({
         incoming &&
         !isEditorAudioLikeClip(outgoing) &&
         !isEditorAudioLikeClip(incoming) &&
-        !isEditorHtmlClip(outgoing) &&
-        !isEditorHtmlClip(incoming)
+        !isEditorClocklessVisual(outgoing) &&
+        !isEditorClocklessVisual(incoming)
       ) {
         nextBaseId = await applySameLaneSequence(
           layers,
@@ -677,18 +755,26 @@ export const useEditorPlayback = ({
         }
         const clip = laneClips[index] ?? null;
         const overlap = clip ? overlapAtTime(overlaps, clip.id, timeMs) : null;
+        const blend = clip
+          ? stackBlendAtTime(clip, timeMs, overlap, Boolean(sequenceClip))
+          : null;
         nextStackIds.push(
           await applyClipToLayer(
             video,
             clip,
             timeMs,
             shouldPlay,
-            clip
-              ? stackBlendAtTime(clip, timeMs, overlap, Boolean(sequenceClip))
-              : null,
+            blend,
             !baseClip && clip !== null && clip === firstOverlay,
           ),
         );
+        const still = layers.staticStacks?.[index];
+        if (clip && isEditorStaticClip(clip) && still) {
+          applyStillSrc(still, clip.url);
+          setStillVisible(still, true, blend);
+        } else {
+          setStillVisible(still, false);
+        }
       }
       stackClipIdsRef.current = nextStackIds;
 
@@ -827,7 +913,12 @@ export const useEditorPlayback = ({
         if (Math.abs(active.currentTime - expected) > 0.12) {
           seekVideo(active, expected);
         }
-        setLayerVisible(active, true, baseBlendAtTime(nextMs, coveringOverlap));
+        setLayerVisible(
+          active,
+          true,
+          baseBlendAtTime(nextMs, coveringOverlap),
+          clipHasRemoveBg(sequenceClip),
+        );
         if (sameLaneSequence && layers.baseAlt) {
           const incoming = timelineNow.sequence.find(
             (clip) => clip.id === sameLaneSequence.rightClipId,
@@ -841,6 +932,7 @@ export const useEditorPlayback = ({
               layers.baseAlt,
               true,
               stackBlendAtTime(incoming, nextMs, sameLaneSequence, true),
+              clipHasRemoveBg(incoming),
             );
           }
         } else if (!sameLaneSequence) {
@@ -867,6 +959,7 @@ export const useEditorPlayback = ({
           video,
           true,
           stackBlendAtTime(clip, nextMs, overlap, Boolean(sequenceClip)),
+          clipHasRemoveBg(clip),
         );
       });
     }
@@ -914,6 +1007,7 @@ export const useEditorPlayback = ({
       for (const stack of layers.stacks) {
         setLayerVisible(stack, false);
       }
+      hideStills(layers);
     }
   }, [pause, resolveLayers]);
 

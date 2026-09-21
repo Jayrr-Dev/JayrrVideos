@@ -130,12 +130,18 @@ export const EDITOR_CLIP_TYPE = "clip" as const;
 export const EDITOR_SOUND_TYPE = "sound" as const;
 export const EDITOR_AUDIO_TYPE = "audio" as const;
 export const EDITOR_HTML_TYPE = "html" as const;
+export const EDITOR_STATIC_TYPE = "static" as const;
+export const EDITOR_STATIC_DURATION_MS = 3000;
+export const EDITOR_STATIC_MEDIA_KINDS = ["image", "svg", "gif"] as const;
+
+export type EditorStaticMediaKind = typeof EDITOR_STATIC_MEDIA_KINDS[number];
 
 export type EditorTimelineItemType =
   | typeof EDITOR_CLIP_TYPE
   | typeof EDITOR_SOUND_TYPE
   | typeof EDITOR_AUDIO_TYPE
-  | typeof EDITOR_HTML_TYPE;
+  | typeof EDITOR_HTML_TYPE
+  | typeof EDITOR_STATIC_TYPE;
 
 export const isEditorClipType = (
   value: unknown,
@@ -153,13 +159,48 @@ export const isEditorHtmlType = (
   value: unknown,
 ): value is typeof EDITOR_HTML_TYPE => value === EDITOR_HTML_TYPE;
 
+export const isEditorStaticType = (
+  value: unknown,
+): value is typeof EDITOR_STATIC_TYPE => value === EDITOR_STATIC_TYPE;
+
+export const isEditorStaticMediaKind = (
+  value: unknown,
+): value is EditorStaticMediaKind =>
+  typeof value === "string" &&
+  (EDITOR_STATIC_MEDIA_KINDS as readonly string[]).includes(value);
+
 export const isEditorItemType = (
   value: unknown,
 ): value is EditorTimelineItemType =>
   isEditorClipType(value) ||
   isEditorSoundType(value) ||
   isEditorAudioType(value) ||
-  isEditorHtmlType(value);
+  isEditorHtmlType(value) ||
+  isEditorStaticType(value);
+
+export const editorStaticMediaKind = (url: string): EditorStaticMediaKind => {
+  const path = url.split("?")[0]?.toLowerCase() ?? "";
+  if (path.endsWith(".gif")) {
+    return "gif";
+  }
+  if (path.endsWith(".svg")) {
+    return "svg";
+  }
+  return "image";
+};
+
+export const editorStaticMediaKindFromMime = (
+  mime: string,
+): EditorStaticMediaKind => {
+  const lower = mime.toLowerCase();
+  if (lower.includes("gif")) {
+    return "gif";
+  }
+  if (lower.includes("svg")) {
+    return "svg";
+  }
+  return "image";
+};
 
 export type EditorSoundSource = {
   soundId: string;
@@ -217,12 +258,25 @@ export type EditorHtmlClip = EditorItemPlacement & {
   height?: number;
 };
 
+export type EditorStaticClip = EditorItemPlacement & {
+  type: typeof EDITOR_STATIC_TYPE;
+  url: string;
+  label: string;
+  durationMs: number;
+  mediaKind: EditorStaticMediaKind;
+  sourceOffsetMs?: number;
+  sourceDurationMs?: number;
+  width?: number;
+  height?: number;
+};
+
 /** User-ordered item on the timeline (before layout). */
 export type EditorProjectClip =
   | EditorVideoClip
   | EditorSoundClip
   | EditorAudioClip
-  | EditorHtmlClip;
+  | EditorHtmlClip
+  | EditorStaticClip;
 
 export const isEditorVideoClip = (
   clip: EditorProjectClip,
@@ -240,15 +294,24 @@ export const isEditorHtmlClip = (
   clip: EditorProjectClip,
 ): clip is EditorHtmlClip => clip.type === EDITOR_HTML_TYPE;
 
+export const isEditorStaticClip = (
+  clip: EditorProjectClip,
+): clip is EditorStaticClip => clip.type === EDITOR_STATIC_TYPE;
+
 export const isEditorAudioLikeClip = (
   clip: EditorProjectClip,
 ): clip is EditorSoundClip | EditorAudioClip =>
   isEditorSoundClip(clip) || isEditorAudioClip(clip);
 
+export const isEditorClocklessVisual = (
+  clip: EditorProjectClip,
+): clip is EditorHtmlClip | EditorStaticClip =>
+  isEditorHtmlClip(clip) || isEditorStaticClip(clip);
+
 export const isEditorVisualClip = (
   clip: EditorProjectClip,
-): clip is EditorVideoClip | EditorHtmlClip =>
-  isEditorVideoClip(clip) || isEditorHtmlClip(clip);
+): clip is EditorVideoClip | EditorHtmlClip | EditorStaticClip =>
+  isEditorVideoClip(clip) || isEditorClocklessVisual(clip);
 
 export type EditorClip = EditorProjectClip & {
   startMs: number;
@@ -513,10 +576,7 @@ export const resolveClipResize = ({
   const sourceOffsetMs = Math.max(0, Math.round(clip.sourceOffsetMs ?? 0));
   const endMs = origin + durationMs;
   const minDuration = EDITOR_CUT_MIN_MS;
-  const unbounded = isEditorHtmlClip(clip);
-  const sourceDurationMs = unbounded
-    ? Number.POSITIVE_INFINITY
-    : clipSourceDurationMs(clip);
+  const sourceDurationMs = clipSourceDurationMs(clip);
   const wanted = Math.round(edgeMs);
 
   if (edge === "start") {
@@ -532,13 +592,46 @@ export const resolveClipResize = ({
   }
 
   const minEnd = origin + minDuration;
-  const maxEnd = unbounded
-    ? Number.POSITIVE_INFINITY
-    : origin + Math.max(minDuration, sourceDurationMs - sourceOffsetMs);
+  const maxEnd =
+    origin + Math.max(minDuration, sourceDurationMs - sourceOffsetMs);
   const nextEnd = Math.max(minEnd, Math.min(maxEnd, Math.max(0, wanted)));
   return {
     startMs: origin,
     durationMs: Math.max(minDuration, nextEnd - origin),
+    sourceOffsetMs,
+  };
+};
+
+export const restoreClipEdge = ({
+  clip,
+  startMs,
+  edge,
+}: {
+  clip: EditorProjectClip;
+  startMs: number;
+  edge: EditorClipEdge;
+}): {
+  startMs: number;
+  durationMs: number;
+  sourceOffsetMs: number;
+} => {
+  const origin = Math.max(0, Math.round(startMs));
+  const durationMs = clipDurationMs(clip);
+  const sourceOffsetMs = Math.max(0, Math.round(clip.sourceOffsetMs ?? 0));
+  const sourceDurationMs = clipSourceDurationMs(clip);
+  const minDuration = EDITOR_CUT_MIN_MS;
+
+  if (edge === "start") {
+    return {
+      startMs: Math.max(0, origin - sourceOffsetMs),
+      durationMs: Math.min(sourceDurationMs, durationMs + sourceOffsetMs),
+      sourceOffsetMs: 0,
+    };
+  }
+
+  return {
+    startMs: origin,
+    durationMs: Math.max(minDuration, sourceDurationMs - sourceOffsetMs),
     sourceOffsetMs,
   };
 };
@@ -566,6 +659,42 @@ export const resizeEditorClip = ({
     edge,
     edgeMs,
   });
+  return applyClipResize(frozen, current, next);
+};
+
+export const restoreEditorClipEdge = ({
+  clips,
+  clipId,
+  edge,
+}: {
+  clips: readonly EditorProjectClip[];
+  clipId: string;
+  edge: EditorClipEdge;
+}): EditorProjectClip[] | null => {
+  const frozen = withFrozenStarts(clips);
+  const current = frozen.find((clip) => clip.id === clipId);
+  if (!current) {
+    return null;
+  }
+  const startMs = current.laneStartMs ?? 0;
+  const next = restoreClipEdge({
+    clip: current,
+    startMs,
+    edge,
+  });
+  return applyClipResize(frozen, current, next);
+};
+
+const applyClipResize = (
+  clips: readonly EditorProjectClip[],
+  current: EditorProjectClip,
+  next: {
+    startMs: number;
+    durationMs: number;
+    sourceOffsetMs: number;
+  },
+): EditorProjectClip[] | null => {
+  const startMs = current.laneStartMs ?? 0;
   if (
     next.startMs === startMs &&
     next.durationMs === clipDurationMs(current) &&
@@ -578,13 +707,9 @@ export const resizeEditorClip = ({
     durationMs: next.durationMs,
     sourceOffsetMs: next.sourceOffsetMs,
     laneStartMs: next.startMs,
-    ...(typeof current.sourceDurationMs === "number"
-      ? { sourceDurationMs: current.sourceDurationMs }
-      : isEditorHtmlClip(current)
-      ? {}
-      : { sourceDurationMs: clipSourceDurationMs(current) }),
+    sourceDurationMs: clipSourceDurationMs(current),
   };
-  return frozen.map((clip) => (clip.id === clipId ? updated : clip));
+  return clips.map((clip) => (clip.id === current.id ? updated : clip));
 };
 
 export const moveEditorClip = ({
@@ -1380,6 +1505,13 @@ export const getMergeableClips = (
       isEditorHtmlClip(first) &&
       isEditorHtmlClip(cur) &&
       cur.html !== first.html
+    ) {
+      return null;
+    }
+    if (
+      isEditorStaticClip(first) &&
+      isEditorStaticClip(cur) &&
+      (cur.url !== first.url || cur.mediaKind !== first.mediaKind)
     ) {
       return null;
     }

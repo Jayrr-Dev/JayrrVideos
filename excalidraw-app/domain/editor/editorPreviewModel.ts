@@ -36,6 +36,7 @@ export const isJayrrEditorPreviewElement = (
 
 const videos = new Map<string, HTMLVideoElement>();
 const layerTargets = new Map<string, EditorPreviewLayers>();
+const soundElements = new Map<string, HTMLAudioElement>();
 const videoListeners = new Set<() => void>();
 const audioListeners = new Set<(audio: EditorPreviewAudio) => void>();
 
@@ -54,6 +55,8 @@ export type EditorPreviewLayers = {
   baseAlt?: HTMLVideoElement | null;
   stacks: readonly HTMLVideoElement[];
   composition?: HTMLIFrameElement | null;
+  staticBase?: HTMLImageElement | null;
+  staticStacks?: readonly HTMLImageElement[];
 };
 
 const clampVolume = (value: number) => Math.min(1, Math.max(0, value));
@@ -227,6 +230,20 @@ export const subscribeEditorPreviewVideos = (listener: () => void) => {
 export const getEditorPreviewVideo = (elementId: string) =>
   videos.get(elementId) ?? null;
 
+export const registerEditorPreviewSound = (
+  clipId: string,
+  audio: HTMLAudioElement,
+) => {
+  soundElements.set(clipId, audio);
+  return () => {
+    if (soundElements.get(clipId) === audio) {
+      soundElements.delete(clipId);
+    }
+  };
+};
+
+export const getEditorPreviewSounds = () => [...soundElements.values()];
+
 /** Resolve the video for a linked canvas object (preview widget or recording embed). */
 export const findEditorTargetVideo = (
   elementId: string,
@@ -253,5 +270,5 @@ export const findEditorPreviewLayers = (
   if (!base) {
     return null;
   }
-  return { base, stacks: [] };
+  return { base, stacks: [], staticStacks: [] };
 };

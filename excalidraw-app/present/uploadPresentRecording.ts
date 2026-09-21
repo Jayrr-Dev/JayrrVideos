@@ -7,11 +7,17 @@ import { activeSceneIdAtom } from "../data/jayrrScenes";
 import { capturePresentPoster } from "./capturePresentPoster";
 import { getOpenRecordingFolderId } from "./openRecordingFolder";
 
+import type { Id } from "../../convex/_generated/dataModel";
+
 export const uploadPresentRecording = async (
   file: Blob,
   durationMs: number,
   width: number,
   height: number,
+  opts?: {
+    name?: string;
+    folderId?: Id<"presentRecordingFolders"> | null;
+  },
 ) => {
   if (!convexClient) {
     throw new Error("Convex is not linked");
@@ -48,10 +54,12 @@ export const uploadPresentRecording = async (
     }
   }
   const sceneId = appJotaiStore.get(activeSceneIdAtom);
-  const folderId = getOpenRecordingFolderId();
+  const folderId =
+    opts && "folderId" in opts ? opts.folderId : getOpenRecordingFolderId();
   await convexClient.mutation(api.presentRecordings.save, {
     sceneId: sceneId ?? undefined,
     folderId: folderId ?? undefined,
+    name: opts?.name,
     pathname: blob.pathname,
     url: blob.url,
     downloadUrl: blob.downloadUrl,

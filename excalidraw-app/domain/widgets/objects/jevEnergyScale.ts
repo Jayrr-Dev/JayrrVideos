@@ -201,14 +201,65 @@ export const ENERGY_BANDS: readonly EnergyBand[] = [
 ];
 
 export const ENERGY_QUESTION_ID = "energy";
-const ENERGY_TOP = ENERGY_BANDS.length - 1;
+
+/** Jev score questions allow at most 10 levels; legend chips stay on ENERGY_BANDS. */
+const ENERGY_SCORE_GROUPS: readonly {
+  ids: readonly EnergyId[];
+  what: string;
+}[] = [
+  {
+    ids: ["30", "50"],
+    what: "30 Guilt / 50 Apathy. Self-blame, hiding, or no drive. They punish themselves or give up because nothing can improve.",
+  },
+  {
+    ids: ["80", "100"],
+    what: "80 Grief / 100 Fear. Loss, regret, or threat. They replay what is gone or avoid acting because harm feels likely.",
+  },
+  {
+    ids: ["120", "160"],
+    what: "120 Craving / 160 Anger. Wanting something outside themselves, or forcing the world with blame, pressure, or domination.",
+  },
+  {
+    ids: ["180", "190"],
+    what: "180 Conflict / 190 Pride. Attacking problems more than solving them, or needing to look better than other people.",
+  },
+  {
+    ids: ["200", "275"],
+    what: "200 Contentment / 275 Courage. Ordinary function and routines, or willingness to face uncertainty and try something new.",
+  },
+  {
+    ids: ["320", "400"],
+    what: "320 Willingness / 400 Acceptance. Constructive effort and responsibility, or seeing reality without rushing to reject it.",
+  },
+  {
+    ids: ["450", "475"],
+    what: "450 Intelligence / 475 Joy. Clear thinking as the main tool, or a strong drive to create, explore, and contribute.",
+  },
+  {
+    ids: ["505", "510"],
+    what: "505 Beauty / 510 Power. Seeing possibility in ordinary things, or acting clearly and producing results without forcing others.",
+  },
+  {
+    ids: ["530", "540", "550"],
+    what: "530 Love / 540 Humour / 550 Unconditional. Care and gratitude, warm humour, or valuing people without demanding repayment.",
+  },
+  {
+    ids: ["570", "600", "700", "1000"],
+    what: "570 Ecstasy to 1000 Infinity. Intense wonder, inner peace, oneness, or total unity. Do not pick this unless the line actually shows that state.",
+  },
+];
+
+const ENERGY_SCORE_TOP = ENERGY_SCORE_GROUPS.length - 1;
+const ENERGY_BAND_BY_ID = new Map(
+  ENERGY_BANDS.map((band) => [band.id, band] as const),
+);
 
 export const ENERGY_QUESTION = {
   id: ENERGY_QUESTION_ID,
   type: "score" as const,
   instructions: `What Dodson energy level does \`utterance\` express? Score this line’s emotional energy, not the speaker’s whole life. Lower levels are self-rejection, helplessness, fear, craving, conflict, and pride. Mid levels are function, courage, responsibility, and understanding. Higher levels are creativity, love, peace, and unity. Do not skip to a high level unless the line actually shows that state. ${UTTERANCE_SCOPE}`,
-  levels: ENERGY_BANDS.map((band) => ({
-    what: `${band.level}. ${band.name}. ${band.what}`,
+  levels: ENERGY_SCORE_GROUPS.map((group) => ({
+    what: group.what,
     examples: [] as string[],
   })),
 };
@@ -229,8 +280,8 @@ type ScoreAnswer = {
   confidence?: number;
 };
 
-const clampIndex = (value: number) =>
-  Math.min(ENERGY_TOP, Math.max(0, Math.round(value)));
+const clampScoreIndex = (value: number) =>
+  Math.min(ENERGY_SCORE_TOP, Math.max(0, Math.round(value)));
 
 const resultFromBand = (
   band: EnergyBand,
@@ -244,11 +295,13 @@ const resultFromBand = (
   confidence,
 });
 
-const resultFromIndex = (
+const resultFromScoreIndex = (
   index: number,
   confidence: number,
 ): EnergyResult | null => {
-  const band = ENERGY_BANDS[clampIndex(index)];
+  const group = ENERGY_SCORE_GROUPS[clampScoreIndex(index)];
+  const id = group?.ids[0];
+  const band = id ? ENERGY_BAND_BY_ID.get(id) : undefined;
   if (!band) {
     return null;
   }
@@ -278,7 +331,7 @@ export const energyFromAnswers = (
   if (!answer) {
     throw new Error("Jev omitted the energy score.");
   }
-  return resultFromIndex(
+  return resultFromScoreIndex(
     answer.score,
     typeof answer.confidence === "number" ? answer.confidence : 0,
   );

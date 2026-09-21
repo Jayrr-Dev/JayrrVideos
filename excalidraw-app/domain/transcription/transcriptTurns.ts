@@ -8,6 +8,7 @@ export type TranscriptTurn = {
 type WordStamp = {
   word?: unknown;
   speaker?: unknown;
+  speaker_id?: unknown;
   startMs?: unknown;
   startTime?: unknown;
   startOffset?: unknown;
@@ -53,10 +54,16 @@ const joinToken = (left: string, right: string) => {
 };
 
 const readSpeaker = (value: unknown) => {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    return null;
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.trunc(value);
   }
-  return Math.trunc(value);
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return Math.trunc(parsed);
+    }
+  }
+  return null;
 };
 
 const readTimeMs = (value: unknown): number | null => {
@@ -121,7 +128,7 @@ export const turnsFromWords = (words: WordStamp[]): TranscriptTurn[] => {
     if (!token) {
       continue;
     }
-    const speaker = readSpeaker(stamp.speaker);
+    const speaker = readSpeaker(stamp.speaker) ?? readSpeaker(stamp.speaker_id);
     const startMs = stampTime(stamp, START_TIME_KEYS);
     const endMs = stampTime(stamp, END_TIME_KEYS) ?? startMs;
     const last = turns[turns.length - 1];

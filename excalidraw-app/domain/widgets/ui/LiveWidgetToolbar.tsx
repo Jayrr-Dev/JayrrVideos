@@ -1,3 +1,9 @@
+import {
+  playerPlayIcon,
+  settingsIcon,
+  TextIcon,
+  TrashIcon,
+} from "@excalidraw/excalidraw/components/icons";
 import type { PointerEvent, ReactNode } from "react";
 
 import type { AudioSourceOption } from "../objects/listAudioSources";
@@ -5,6 +11,20 @@ import type { AudioSourceOption } from "../objects/listAudioSources";
 const stopCanvasPointer = (event: PointerEvent<HTMLElement>) => {
   event.stopPropagation();
 };
+
+const PauseGlyph = (
+  <svg
+    aria-hidden="true"
+    focusable="false"
+    viewBox="0 0 24 24"
+    fill="currentColor"
+  >
+    <rect x="5" y="4" width="5" height="16" rx="1.2" />
+    <rect x="14" y="4" width="5" height="16" rx="1.2" />
+  </svg>
+);
+
+const ICON_ACTION = "jayrr-called-hyperlink__action jayrr-called-hyperlink__action--icon";
 
 type LiveStatus = {
   listening: boolean;
@@ -65,31 +85,37 @@ export const LiveWidgetToolbar = ({
     <LiveStatusDot listening={listening} paused={paused} />
     <button
       type="button"
-      className="jayrr-called-hyperlink__action"
+      className={ICON_ACTION}
+      aria-label="Clear"
+      title="Clear"
       onClick={(event) => {
         event.stopPropagation();
         onClear();
       }}
       disabled={clearDisabled}
     >
-      Clear
+      {TrashIcon}
     </button>
     {onSelectText ? (
       <button
         type="button"
-        className="jayrr-called-hyperlink__action"
+        className={ICON_ACTION}
+        aria-label="Text"
+        title="Text"
         onClick={(event) => {
           event.stopPropagation();
           onSelectText();
         }}
       >
-        Text
+        {TextIcon}
       </button>
     ) : null}
     {onToggleConfig ? (
       <button
         type="button"
-        className="jayrr-called-hyperlink__action"
+        className={ICON_ACTION}
+        aria-label="Config"
+        title="Config"
         aria-pressed={!!configOpen}
         onPointerDown={stopCanvasPointer}
         onPointerUp={stopCanvasPointer}
@@ -98,19 +124,21 @@ export const LiveWidgetToolbar = ({
           onToggleConfig();
         }}
       >
-        Config
+        {settingsIcon}
       </button>
     ) : null}
     <button
       type="button"
-      className="jayrr-called-hyperlink__action"
+      className={ICON_ACTION}
+      aria-label={startLabel}
+      title={startLabel}
       onClick={(event) => {
         event.stopPropagation();
         onStart();
       }}
       disabled={busy}
     >
-      {startLabel}
+      {startLabel === "Pause" ? PauseGlyph : playerPlayIcon}
     </button>
     <select
       className="jayrr-called-hyperlink__select"

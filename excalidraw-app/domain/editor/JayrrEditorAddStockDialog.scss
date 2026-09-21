@@ -39,6 +39,45 @@
     min-height: 0;
   }
 
+  .jayrr-editor-add-stock__sources {
+    display: inline-flex;
+    gap: 0.25rem;
+    flex-shrink: 0;
+  }
+
+  .jayrr-editor-add-stock__source {
+    border: 1px solid var(--default-border-color);
+    background: var(--color-surface-low);
+    color: var(--text-primary-color);
+    border-radius: var(--border-radius-md);
+    font-size: 0.7rem;
+    padding: 0.2rem 0.5rem;
+    cursor: pointer;
+  }
+
+  .jayrr-editor-add-stock__source.is-active {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+    background: var(--color-surface-mid);
+  }
+
+  .jayrr-editor-add-stock__folder-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    min-width: 0;
+  }
+
+  .jayrr-editor-add-stock__folder-name {
+    min-width: 0;
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--color-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .jayrr-editor-add-stock__body {
     display: flex;
     flex-direction: column;

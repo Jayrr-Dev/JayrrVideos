@@ -70,6 +70,23 @@
     cursor: default;
   }
 
+  .jayrr-called-hyperlink__action--icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.5rem;
+    padding: 0;
+  }
+
+  .jayrr-called-hyperlink__action--icon svg {
+    width: 1.05rem;
+    height: 1.05rem;
+  }
+
+  .jayrr-called-hyperlink__action--icon[aria-pressed="true"] {
+    background: var(--button-hover-bg);
+  }
+
   .jayrr-called-hyperlink__select {
     flex: 0 1 9rem;
     min-width: 5rem;

@@ -8,11 +8,14 @@ import {
   EDITOR_PX_PER_SECOND,
   EDITOR_PX_PER_SECOND_OPTIONS,
   EDITOR_SOUND_TYPE,
+  EDITOR_STATIC_TYPE,
   isEditorAudioType,
   isEditorBlendMode,
   isEditorHtmlType,
   isEditorItemType,
   isEditorSoundType,
+  isEditorStaticMediaKind,
+  isEditorStaticType,
   isEditorTransitionKind,
   MAX_STACK_LANES,
   SEQUENCE_LANE_ID,
@@ -24,6 +27,14 @@ import type { Id } from "../../../convex/_generated/dataModel";
 export const EDITOR_CLIPS_STORAGE_KEY = "jayrr-editor-recording-clips-v1";
 export const EDITOR_STACK_LANES_KEY = "jayrr-editor-stack-lanes-v1";
 export const EDITOR_VIEW_STORAGE_KEY = "jayrr-editor-view-v1";
+export const EDITOR_PROJECT_META_KEY = "jayrr-editor-project-meta-v1";
+export const DEFAULT_EDITOR_PROJECT_NAME = "Untitled project";
+export const EDITOR_PROJECT_NAME_MAX = 80;
+
+export type StoredEditorProjectMeta = {
+  name: string;
+  projectId: Id<"editorProjects"> | null;
+};
 
 export type EditorZoomMode = "fit" | "fixed";
 
@@ -55,6 +66,7 @@ export type StoredEditorClip = {
   path?: string;
   url?: string;
   html?: string;
+  mediaKind?: string;
   label?: string;
   durationMs?: number;
   sourceOffsetMs?: number;
@@ -176,6 +188,29 @@ export const parseStoredEditorClips = (parsed: unknown): StoredEditorClip[] => {
       });
       continue;
     }
+    if (isEditorStaticType(typeRaw)) {
+      const url = Reflect.get(item, "url");
+      if (typeof url !== "string" || !url.trim()) {
+        continue;
+      }
+      const mediaRaw = Reflect.get(item, "mediaKind");
+      const widthRaw = Reflect.get(item, "width");
+      const heightRaw = Reflect.get(item, "height");
+      out.push({
+        ...placement,
+        type: EDITOR_STATIC_TYPE,
+        url,
+        ...(isEditorStaticMediaKind(mediaRaw) ? { mediaKind: mediaRaw } : {}),
+        ...(storedLabel ? { label: storedLabel } : {}),
+        ...(typeof widthRaw === "number" && Number.isFinite(widthRaw)
+          ? { width: Math.round(widthRaw) }
+          : {}),
+        ...(typeof heightRaw === "number" && Number.isFinite(heightRaw)
+          ? { height: Math.round(heightRaw) }
+          : {}),
+      });
+      continue;
+    }
     const recordingId = Reflect.get(item, "recordingId");
     if (typeof recordingId !== "string") {
       continue;
@@ -210,6 +245,9 @@ export const clipsToStoredEditor = (
       ...(clip.transitionKind ? { transitionKind: clip.transitionKind } : {}),
       ...(clip.blendMode ? { blendMode: clip.blendMode } : {}),
       ...(clip.type === EDITOR_CLIP_TYPE && clip.muted ? { muted: true } : {}),
+      ...(clip.type === EDITOR_CLIP_TYPE && clip.removeBg
+        ? { removeBg: true }
+        : {}),
       ...(clip.type === EDITOR_AUDIO_TYPE && clip.sourceClipId
         ? { sourceClipId: clip.sourceClipId }
         : {}),
@@ -227,6 +265,16 @@ export const clipsToStoredEditor = (
       return {
         ...shared,
         html: clip.html,
+        label: clip.label,
+        ...(typeof clip.width === "number" ? { width: clip.width } : {}),
+        ...(typeof clip.height === "number" ? { height: clip.height } : {}),
+      };
+    }
+    if (clip.type === EDITOR_STATIC_TYPE) {
+      return {
+        ...shared,
+        url: clip.url,
+        mediaKind: clip.mediaKind,
         label: clip.label,
         ...(typeof clip.width === "number" ? { width: clip.width } : {}),
         ...(typeof clip.height === "number" ? { height: clip.height } : {}),
@@ -352,6 +400,42 @@ export const writeStoredEditorView = (view: StoredEditorView) => {
   localStorage.setItem(EDITOR_VIEW_STORAGE_KEY, JSON.stringify(view));
 };
 
+export const normalizeEditorProjectName = (name: string) => {
+  const trimmed = name.trim().slice(0, EDITOR_PROJECT_NAME_MAX);
+  return trimmed || DEFAULT_EDITOR_PROJECT_NAME;
+};
+
+export const readStoredEditorProjectMeta = (): StoredEditorProjectMeta => {
+  try {
+    const raw = localStorage.getItem(EDITOR_PROJECT_META_KEY);
+    if (!raw) {
+      return { name: DEFAULT_EDITOR_PROJECT_NAME, projectId: null };
+    }
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object") {
+      return { name: DEFAULT_EDITOR_PROJECT_NAME, projectId: null };
+    }
+    const nameRaw = Reflect.get(parsed, "name");
+    const idRaw = Reflect.get(parsed, "projectId");
+    return {
+      name:
+        typeof nameRaw === "string"
+          ? normalizeEditorProjectName(nameRaw)
+          : DEFAULT_EDITOR_PROJECT_NAME,
+      projectId:
+        typeof idRaw === "string" && idRaw
+          ? (idRaw as Id<"editorProjects">)
+          : null,
+    };
+  } catch {
+    return { name: DEFAULT_EDITOR_PROJECT_NAME, projectId: null };
+  }
+};
+
+export const writeStoredEditorProjectMeta = (meta: StoredEditorProjectMeta) => {
+  localStorage.setItem(EDITOR_PROJECT_META_KEY, JSON.stringify(meta));
+};
+
 export const serializeEditorView = (view: StoredEditorView) =>
   JSON.stringify(view);
 
@@ -406,6 +490,36 @@ export const restoreProjectClips = (
         label: item.label?.trim() || "AI clip",
         durationMs: Math.max(1, item.durationMs ?? 1000),
         sourceOffsetMs: item.sourceOffsetMs ?? 0,
+        ...(typeof item.sourceDurationMs === "number" &&
+        item.sourceDurationMs > 0
+          ? { sourceDurationMs: Math.max(1, item.sourceDurationMs) }
+          : {}),
+        ...(item.laneId ? { laneId: item.laneId } : {}),
+        ...(typeof item.laneStartMs === "number"
+          ? { laneStartMs: item.laneStartMs }
+          : {}),
+        ...(item.transitionKind ? { transitionKind: item.transitionKind } : {}),
+        ...(item.blendMode ? { blendMode: item.blendMode } : {}),
+        ...(typeof item.width === "number" ? { width: item.width } : {}),
+        ...(typeof item.height === "number" ? { height: item.height } : {}),
+      });
+      continue;
+    }
+    if (item.type === EDITOR_STATIC_TYPE && item.url) {
+      restored.push({
+        id: item.id,
+        type: EDITOR_STATIC_TYPE,
+        url: item.url,
+        mediaKind: isEditorStaticMediaKind(item.mediaKind)
+          ? item.mediaKind
+          : "image",
+        label: item.label?.trim() || "Image",
+        durationMs: Math.max(1, item.durationMs ?? 1000),
+        sourceOffsetMs: item.sourceOffsetMs ?? 0,
+        ...(typeof item.sourceDurationMs === "number" &&
+        item.sourceDurationMs > 0
+          ? { sourceDurationMs: Math.max(1, item.sourceDurationMs) }
+          : {}),
         ...(item.laneId ? { laneId: item.laneId } : {}),
         ...(typeof item.laneStartMs === "number"
           ? { laneStartMs: item.laneStartMs }
@@ -460,6 +574,7 @@ export const restoreProjectClips = (
       ...recordingClip,
       type: EDITOR_CLIP_TYPE,
       ...(item.muted ? { muted: true } : {}),
+      ...(item.removeBg ? { removeBg: true } : {}),
     });
   }
   return restored;

@@ -26,8 +26,11 @@ import {
   EDITOR_HTML_TYPE,
   EDITOR_PX_PER_SECOND_OPTIONS,
   EDITOR_SOUND_TYPE,
+  EDITOR_STATIC_DURATION_MS,
+  EDITOR_STATIC_TYPE,
+  editorStaticMediaKind,
   removeStackLane as foldStackLane,
-  isEditorHtmlClip,
+  isEditorClocklessVisual,
   isEditorVideoClip,
   MAX_STACK_LANES,
   moveClipsByLayer,
@@ -40,6 +43,7 @@ import {
   withFrozenStarts,
   type EditorLayerDirection,
   type EditorProjectClip,
+  type EditorStaticMediaKind,
 } from "./buildEditorTimeline";
 import { publishEditorPlayback } from "./editorPlaybackBridge";
 import {
@@ -48,16 +52,19 @@ import {
   setEditorPreviewAudio,
 } from "./editorPreviewModel";
 import {
+  normalizeEditorProjectName,
   parseStoredEditorClips,
   parseStoredEditorView,
   parseStoredStackLanes,
   readStoredClips,
+  readStoredEditorProjectMeta,
   readStoredEditorView,
   readStoredStackLanes,
   recordingIdsFromStored,
   restoreProjectClips,
   stackLanesForClips,
   writeStoredClips,
+  writeStoredEditorProjectMeta,
   writeStoredEditorView,
   writeStoredStackLanes,
   type EditorZoomMode,
@@ -150,7 +157,7 @@ type EditorSessionValue = {
   togglePlay: () => void;
   previewElementId: string | null;
   selectedLinkable: NonDeletedExcalidrawElement | null;
-  placePreview: () => void;
+  placePreview: () => string | null;
   linkSelected: () => void;
   clearPreviewLink: () => void;
   focusPreview: () => void;
@@ -163,9 +170,21 @@ type EditorSessionValue = {
     width?: number;
     height?: number;
   }) => string;
+  addStaticClip: (row: {
+    label: string;
+    url: string;
+    durationMs?: number;
+    mediaKind?: EditorStaticMediaKind;
+    width?: number;
+    height?: number;
+  }) => string;
   separateAudio: (clipIds: readonly string[]) => string[];
   returnAudio: (clipIds: readonly string[]) => string[];
   loadProject: (projectId: Id<"editorProjects">) => Promise<void>;
+  projectName: string;
+  loadedProjectId: Id<"editorProjects"> | null;
+  setProjectName: (name: string) => void;
+  markProjectSaved: (projectId: Id<"editorProjects">, name: string) => void;
   undo: () => boolean;
   redo: () => boolean;
   disabled: boolean;
@@ -207,6 +226,13 @@ export const JayrrEditorSession = ({ children }: { children: ReactNode }) => {
   const [previewElementId, setPreviewElementId] = useState<string | null>(
     () => readStoredEditorView().previewElementId || readStoredPreviewId(),
   );
+  const [projectName, setProjectNameState] = useState(
+    () => readStoredEditorProjectMeta().name,
+  );
+  const [loadedProjectId, setLoadedProjectId] =
+    useState<Id<"editorProjects"> | null>(
+      () => readStoredEditorProjectMeta().projectId,
+    );
   const [selectedElementIds, setSelectedElementIds] = useState<
     Record<string, boolean>
   >({});
@@ -319,6 +345,29 @@ export const JayrrEditorSession = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     return () => publishEditorPlayback(null);
   }, []);
+
+  const persistProjectMeta = useCallback(
+    (name: string, projectId: Id<"editorProjects"> | null) => {
+      setProjectNameState(name);
+      setLoadedProjectId(projectId);
+      writeStoredEditorProjectMeta({ name, projectId });
+    },
+    [],
+  );
+
+  const setProjectName = useCallback(
+    (name: string) => {
+      persistProjectMeta(normalizeEditorProjectName(name), loadedProjectId);
+    },
+    [loadedProjectId, persistProjectMeta],
+  );
+
+  const markProjectSaved = useCallback(
+    (projectId: Id<"editorProjects">, name: string) => {
+      persistProjectMeta(normalizeEditorProjectName(name), projectId);
+    },
+    [persistProjectMeta],
+  );
 
   const persist = useCallback((next: EditorProjectClip[]) => {
     const frozen = withFrozenStarts(next);
@@ -500,10 +549,11 @@ export const JayrrEditorSession = ({ children }: { children: ReactNode }) => {
 
   const placePreview = useCallback(() => {
     if (!apiExcal) {
-      return;
+      return null;
     }
     const id = insertEditorPreview(apiExcal);
     linkPreview(id);
+    return id;
   }, [apiExcal, linkPreview]);
 
   const linkSelected = useCallback(() => {
@@ -610,6 +660,40 @@ export const JayrrEditorSession = ({ children }: { children: ReactNode }) => {
         html: row.html,
         label: row.label.trim() || "AI clip",
         durationMs: Math.max(1, Math.round(row.durationMs)),
+        sourceDurationMs: Math.max(1, Math.round(row.durationMs)),
+        laneId: SEQUENCE_LANE_ID,
+        laneStartMs: sequenceEndMs(frozen),
+        ...(typeof row.width === "number" ? { width: row.width } : {}),
+        ...(typeof row.height === "number" ? { height: row.height } : {}),
+      };
+      persist([...frozen, next]);
+      return next.id;
+    },
+    [clips, persist],
+  );
+
+  const addStaticClip = useCallback(
+    (row: {
+      label: string;
+      url: string;
+      durationMs?: number;
+      mediaKind?: EditorStaticMediaKind;
+      width?: number;
+      height?: number;
+    }) => {
+      const frozen = withFrozenStarts(clips);
+      const durationMs = Math.max(
+        1,
+        Math.round(row.durationMs ?? EDITOR_STATIC_DURATION_MS),
+      );
+      const next: EditorProjectClip = {
+        id: newEditorClipId(),
+        type: EDITOR_STATIC_TYPE,
+        url: row.url,
+        mediaKind: row.mediaKind ?? editorStaticMediaKind(row.url),
+        label: row.label.trim() || "Image",
+        durationMs,
+        sourceDurationMs: durationMs,
         laneId: SEQUENCE_LANE_ID,
         laneStartMs: sequenceEndMs(frozen),
         ...(typeof row.width === "number" ? { width: row.width } : {}),
@@ -699,6 +783,7 @@ export const JayrrEditorSession = ({ children }: { children: ReactNode }) => {
         throw new Error("Could not restore clips from this project.");
       }
       applyRestored(restored, parseStoredStackLanes(lanesParsed));
+      persistProjectMeta(project.name, project._id);
       if (project.stateJson) {
         try {
           const view = parseStoredEditorView(JSON.parse(project.stateJson));
@@ -723,11 +808,11 @@ export const JayrrEditorSession = ({ children }: { children: ReactNode }) => {
         closable: true,
       });
     },
-    [apiExcal, applyRestored, linkPreview, seek],
+    [apiExcal, applyRestored, linkPreview, persistProjectMeta, seek],
   );
 
   const hasVisual =
-    clips.some(isEditorVideoClip) || clips.some(isEditorHtmlClip);
+    clips.some(isEditorVideoClip) || clips.some(isEditorClocklessVisual);
   const disabled =
     (timeline.sequence.length === 0 && timeline.overlays.length === 0) ||
     (hasVisual && !previewElementId);
@@ -766,9 +851,14 @@ export const JayrrEditorSession = ({ children }: { children: ReactNode }) => {
       addRecording,
       addSound,
       addHtmlClip,
+      addStaticClip,
       separateAudio,
       returnAudio,
       loadProject,
+      projectName,
+      loadedProjectId,
+      setProjectName,
+      markProjectSaved,
       undo,
       redo,
       disabled,
@@ -777,6 +867,7 @@ export const JayrrEditorSession = ({ children }: { children: ReactNode }) => {
       addRecording,
       addSound,
       addHtmlClip,
+      addStaticClip,
       separateAudio,
       returnAudio,
       addStackLane,
@@ -791,18 +882,22 @@ export const JayrrEditorSession = ({ children }: { children: ReactNode }) => {
       disabled,
       focusPreview,
       linkSelected,
+      loadedProjectId,
       loadProject,
+      markProjectSaved,
       pause,
       persist,
       placePreview,
       play,
       playing,
       previewElementId,
+      projectName,
       pxPerSecond,
       removeStackLane,
       seek,
       selectedClipIds,
       selectedLinkable,
+      setProjectName,
       setPxPerSecond,
       setSelectedClipIds,
       setZoomMode,

@@ -40,6 +40,7 @@ import type * as scenes from "../scenes.js";
 import type * as soundFolders from "../soundFolders.js";
 import type * as soundSeed from "../soundSeed.js";
 import type * as sounds from "../sounds.js";
+import type * as stockImages from "../stockImages.js";
 import type * as stockVideos from "../stockVideos.js";
 import type * as transcription from "../transcription.js";
 import type * as users from "../users.js";
@@ -83,6 +84,7 @@ declare const fullApi: ApiFromModules<{
   soundFolders: typeof soundFolders;
   soundSeed: typeof soundSeed;
   sounds: typeof sounds;
+  stockImages: typeof stockImages;
   stockVideos: typeof stockVideos;
   transcription: typeof transcription;
   users: typeof users;

@@ -346,7 +346,10 @@ const mergeChatTurns = (turns: ChatTurn[]) => {
 // First-seen order, not speaker id: nearby ids used to land on similar hues.
 const SPEAKER_HUES = [205, 12, 145, 292, 42, 330, 175, 85, 250, 22];
 
-const hueForSpeaker = (speaker: number | null, order: readonly number[]) => {
+const hueForSpeaker = (
+  speaker: number | null,
+  order: readonly (number | null)[],
+) => {
   if (speaker === null) {
     return 220;
   }
@@ -357,20 +360,21 @@ const hueForSpeaker = (speaker: number | null, order: readonly number[]) => {
 
 const speakerHueStyle = (
   speaker: number | null,
-  order: readonly number[],
+  order: readonly (number | null)[],
 ): CSSProperties =>
   ({
     "--jayrr-speaker-h": String(hueForSpeaker(speaker, order)),
   } as CSSProperties);
 
 const uniqueSpeakers = (turns: ChatTurn[]) => {
-  const seen = new Set<number>();
-  const list: number[] = [];
+  const seen = new Set<string>();
+  const list: Array<number | null> = [];
   for (const turn of turns) {
-    if (turn.speaker === null || seen.has(turn.speaker)) {
+    const key = turn.speaker === null ? "null" : String(turn.speaker);
+    if (seen.has(key)) {
       continue;
     }
-    seen.add(turn.speaker);
+    seen.add(key);
     list.push(turn.speaker);
   }
   return list;
@@ -618,6 +622,81 @@ const BigFiveBadge = ({ bigFive }: { bigFive: BigFiveResult }) => (
     {bigFive.label}
   </span>
 );
+
+const TurnBadges = ({
+  config,
+  emotions,
+  iqScore,
+  smart,
+  hype,
+  energy,
+  online,
+  socion,
+  bigFive,
+  mbti,
+  advance,
+  ennea,
+}: {
+  config: TranscribeConfig;
+  emotions: EmotionPick[];
+  iqScore?: number;
+  smart?: SmartResult;
+  hype?: HypeResult;
+  energy?: EnergyResult;
+  online?: OnlineResult;
+  socion?: SocionResult;
+  bigFive?: BigFiveResult;
+  mbti?: MbtiResult;
+  advance?: MbtiAdvanceResult;
+  ennea?: EnneaResult;
+}) => {
+  if (!jevScoringOn(config)) {
+    return null;
+  }
+  return (
+    <div className="jayrr-called-embed__who-badges">
+      {config.jevEmotion
+        ? emotions.map((emotion) => (
+            <EmotionBadge key={emotion.id} emotion={emotion} />
+          ))
+        : null}
+      {config.jevIq ? (
+        iqScore === undefined ? null : (
+          <IqBadge composite={iqScore} />
+        )
+      ) : null}
+      {config.jevSmart ? smart ? <SmartBadge smart={smart} /> : null : null}
+      {config.jevHype ? hype ? <HypeBadge hype={hype} /> : null : null}
+      {config.jevEnergy ? (
+        energy ? (
+          <EnergyBadge energy={energy} />
+        ) : null
+      ) : null}
+      {config.jevOnline ? (
+        online ? (
+          <OnlineBadge online={online} />
+        ) : null
+      ) : null}
+      {config.jevSocion ? (
+        socion ? (
+          <SocionBadge socion={socion} />
+        ) : null
+      ) : null}
+      {config.jevBigFive ? (
+        bigFive ? (
+          <BigFiveBadge bigFive={bigFive} />
+        ) : null
+      ) : null}
+      {config.jevMbti ? mbti ? <MbtiBadge mbti={mbti} /> : null : null}
+      {config.jevMbtiAdvance ? (
+        advance ? (
+          <AdvanceBadge advance={advance} />
+        ) : null
+      ) : null}
+      {config.jevEnneagram ? ennea ? <EnneaBadge ennea={ennea} /> : null : null}
+    </div>
+  );
+};
 
 export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
   const editor = useExcalidrawAPI();
@@ -2074,70 +2153,22 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
                             >
                               {speakerLabel(turn.speaker, names)}
                             </button>
-                            {jevScoringOn(config) ? (
-                              <div className="jayrr-called-embed__who-badges">
-                                {config.jevEmotion
-                                  ? emotions.map((emotion) => (
-                                      <EmotionBadge
-                                        key={emotion.id}
-                                        emotion={emotion}
-                                      />
-                                    ))
-                                  : null}
-                                {config.jevIq ? (
-                                  iqScore === undefined ? null : (
-                                    <IqBadge composite={iqScore} />
-                                  )
-                                ) : null}
-                                {config.jevSmart ? (
-                                  smart ? (
-                                    <SmartBadge smart={smart} />
-                                  ) : null
-                                ) : null}
-                                {config.jevHype ? (
-                                  hype ? (
-                                    <HypeBadge hype={hype} />
-                                  ) : null
-                                ) : null}
-                                {config.jevEnergy ? (
-                                  energy ? (
-                                    <EnergyBadge energy={energy} />
-                                  ) : null
-                                ) : null}
-                                {config.jevOnline ? (
-                                  online ? (
-                                    <OnlineBadge online={online} />
-                                  ) : null
-                                ) : null}
-                                {config.jevSocion ? (
-                                  socion ? (
-                                    <SocionBadge socion={socion} />
-                                  ) : null
-                                ) : null}
-                                {config.jevBigFive ? (
-                                  bigFive ? (
-                                    <BigFiveBadge bigFive={bigFive} />
-                                  ) : null
-                                ) : null}
-                                {config.jevMbti ? (
-                                  mbti ? (
-                                    <MbtiBadge mbti={mbti} />
-                                  ) : null
-                                ) : null}
-                                {config.jevMbtiAdvance ? (
-                                  advance ? (
-                                    <AdvanceBadge advance={advance} />
-                                  ) : null
-                                ) : null}
-                                {config.jevEnneagram ? (
-                                  ennea ? (
-                                    <EnneaBadge ennea={ennea} />
-                                  ) : null
-                                ) : null}
-                              </div>
-                            ) : null}
                           </div>
                         )}
+                        <TurnBadges
+                          config={config}
+                          emotions={emotions}
+                          iqScore={iqScore}
+                          smart={smart}
+                          hype={hype}
+                          energy={energy}
+                          online={online}
+                          socion={socion}
+                          bigFive={bigFive}
+                          mbti={mbti}
+                          advance={advance}
+                          ennea={ennea}
+                        />
                         <div className="jayrr-called-embed__bubble">
                           {turn.text}
                         </div>
@@ -2165,6 +2196,8 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
               <div className="jayrr-called-embed__now-label">Speaker</div>
               <div className="jayrr-called-embed__now-list">
                 {speakers.map((speaker) => {
+                  const speakerKey =
+                    speaker === null ? "unknown" : String(speaker);
                   const liveNow = liveSpeaker === speaker;
                   const speakerMbti = config.jevMbti
                     ? mbtiBySpeaker.get(speaker)
@@ -2194,7 +2227,18 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
                     ? smartBySpeaker.get(speaker)
                     : undefined;
                   const nameControl =
-                    editingSpeaker === speaker ? (
+                    speaker === null ? (
+                      <span
+                        className={
+                          liveNow
+                            ? "jayrr-called-embed__now-name is-live"
+                            : "jayrr-called-embed__now-name"
+                        }
+                        style={speakerHueStyle(speaker, speakers)}
+                      >
+                        {speakerLabel(speaker, names)}
+                      </span>
+                    ) : editingSpeaker === speaker ? (
                       <input
                         className="jayrr-called-embed__who-input"
                         style={speakerHueStyle(speaker, speakers)}
@@ -2225,7 +2269,10 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
                       </button>
                     );
                   return (
-                    <div key={speaker} className="jayrr-called-embed__now-row">
+                    <div
+                      key={speakerKey}
+                      className="jayrr-called-embed__now-row"
+                    >
                       {nameControl}
                       {speakerSmart ? (
                         <SmartBadge smart={speakerSmart} />

@@ -35,6 +35,7 @@ import { JayrrSoundLibraryDialog } from "../../components/ui/JayrrSoundLibraryDi
 import { api } from "../../convexClient";
 import { docsViewAtom, persistDocsView } from "../../present/docsView";
 import { JAYRR_RECORDINGS_TAB } from "../../present/JayrrPresentRecordingsPanel";
+import { uploadPresentRecording } from "../../present/uploadPresentRecording";
 
 import "../../components/ui/JayrrLibraryMenu.scss";
 
@@ -57,8 +58,10 @@ import {
   newEditorClipId,
   overlapParticipantIds,
   resizeEditorClip,
+  restoreEditorClipEdge,
   SEQUENCE_LANE_ID,
   setClipsBlendMode,
+  setClipsRemoveBg,
   setClipsTransition,
   type EditorBlendMode,
   type EditorClip,
@@ -66,14 +69,23 @@ import {
   type EditorLayerDirection,
   type EditorProjectClip,
   type EditorTransitionKind,
+  type EditorVideoClip,
   type OverlapBand,
 } from "./buildEditorTimeline";
 import { findEditorTargetVideo } from "./editorPreviewModel";
-import { clipsToStoredEditor, serializeEditorView } from "./editorProjectStore";
+import {
+  clipsToStoredEditor,
+  DEFAULT_EDITOR_PROJECT_NAME,
+  EDITOR_PROJECT_NAME_MAX,
+  serializeEditorView,
+} from "./editorProjectStore";
+import { exportEditorTimeline } from "./exportEditorTimeline";
+import { JayrrEditorAddImageDialog } from "./JayrrEditorAddImageDialog";
 import { JayrrEditorAddRecordingDialog } from "./JayrrEditorAddRecordingDialog";
 import { JayrrEditorAddStockDialog } from "./JayrrEditorAddStockDialog";
 import { JayrrEditorAiDialog } from "./JayrrEditorAiDialog";
 import { JayrrEditorBlendModeDialog } from "./JayrrEditorBlendModeDialog";
+import { JayrrEditorExportDialog } from "./JayrrEditorExportDialog";
 import { JayrrEditorSaveProjectDialog } from "./JayrrEditorSaveProjectDialog";
 import { useJayrrEditorSession } from "./JayrrEditorSession";
 import { JayrrEditorTimeline } from "./JayrrEditorTimeline";
@@ -145,6 +157,23 @@ const PauseGlyph = (
   </svg>
 );
 
+const ExportGlyph = (
+  <svg
+    aria-hidden="true"
+    focusable="false"
+    viewBox="0 0 20 20"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.7"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="M4.2 13.2v2.4a1 1 0 0 0 1 1h9.6a1 1 0 0 0 1-1v-2.4" />
+    <path d="M10 3.6v8.2" />
+    <path d="M6.6 7.2 10 3.6l3.4 3.6" />
+  </svg>
+);
+
 const SaveGlyph = (
   <svg
     aria-hidden="true"
@@ -194,8 +223,9 @@ export const JayrrEditorPanel = () => {
     currentTimeMs,
     playing,
     stop,
-    togglePlay,
+    play,
     seek,
+    togglePlay,
     previewElementId,
     selectedLinkable,
     placePreview,
@@ -204,21 +234,35 @@ export const JayrrEditorPanel = () => {
     focusPreview,
     addRecording,
     addSound,
+    addStaticClip,
     separateAudio,
     returnAudio,
     undo,
     redo,
     disabled,
+    projectName,
+    loadedProjectId,
+    setProjectName,
+    markProjectSaved,
   } = useJayrrEditorSession();
   const excalidrawAPI = useExcalidrawAPI();
   const saveProject = useMutation(api.editorProjects.save);
+  const renameSavedProject = useMutation(api.editorProjects.rename);
 
   const [addRecordingOpen, setAddRecordingOpen] = useState(false);
   const [addSoundOpen, setAddSoundOpen] = useState(false);
   const [addStockOpen, setAddStockOpen] = useState(false);
+  const [addImageOpen, setAddImageOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [saveOpen, setSaveOpen] = useState(false);
   const [saveBusy, setSaveBusy] = useState(false);
+  const [renamingProject, setRenamingProject] = useState(false);
+  const [draftProjectName, setDraftProjectName] = useState("");
+  const projectNameInputRef = useRef<HTMLInputElement>(null);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportBusy, setExportBusy] = useState(false);
+  const currentTimeMsRef = useRef(currentTimeMs);
+  currentTimeMsRef.current = currentTimeMs;
   const [blendPicker, setBlendPicker] = useState<{
     clipIds: readonly string[];
     blendMode: EditorBlendMode;
@@ -229,6 +273,47 @@ export const JayrrEditorPanel = () => {
     () => new Set(selectedClipIds),
     [selectedClipIds],
   );
+
+  useEffect(() => {
+    if (!renamingProject) {
+      return;
+    }
+    projectNameInputRef.current?.focus();
+    projectNameInputRef.current?.select();
+  }, [renamingProject]);
+
+  const startRenameProject = () => {
+    setDraftProjectName(
+      projectName === DEFAULT_EDITOR_PROJECT_NAME ? "" : projectName,
+    );
+    setRenamingProject(true);
+  };
+
+  const commitProjectName = async () => {
+    setRenamingProject(false);
+    const next = draftProjectName.trim();
+    if (!next || next === projectName) {
+      return;
+    }
+    setProjectName(next);
+    if (!loadedProjectId || !canQuery) {
+      return;
+    }
+    try {
+      await renameSavedProject({ projectId: loadedProjectId, name: next });
+    } catch (error) {
+      excalidrawAPI?.setToast({
+        message:
+          error instanceof Error ? error.message : "Could not rename project.",
+        closable: true,
+      });
+    }
+  };
+
+  const saveDefaultName =
+    projectName.trim() && projectName !== DEFAULT_EDITOR_PROJECT_NAME
+      ? projectName
+      : defaultProjectName();
 
   const layerMoves = useMemo(
     () =>
@@ -373,6 +458,28 @@ export const JayrrEditorPanel = () => {
   const canSeparateAudio = Boolean(
     menuClip && isEditorVideoClip(menuClip) && !menuClip.muted,
   );
+  const removeBgTargets = useMemo(() => {
+    const selected = clips.filter(
+      (clip): clip is EditorVideoClip =>
+        selectedIdSet.has(clip.id) && isEditorVideoClip(clip),
+    );
+    if (selected.length > 0) {
+      return selected;
+    }
+    if (menuClip && isEditorVideoClip(menuClip)) {
+      return [menuClip];
+    }
+    if (playheadClip && isEditorVideoClip(playheadClip)) {
+      return [playheadClip];
+    }
+    return [];
+  }, [clips, menuClip, playheadClip, selectedIdSet]);
+  const canRemoveBg = Boolean(
+    menuClip && isEditorVideoClip(menuClip) && removeBgTargets.length > 0,
+  );
+  const removeBgOn =
+    removeBgTargets.length > 0 &&
+    removeBgTargets.every((clip) => clip.removeBg === true);
   const returnTargets = useMemo(() => {
     const selected = clips.filter(
       (clip) =>
@@ -480,6 +587,21 @@ export const JayrrEditorPanel = () => {
     setSelectedClipIds(videoIds.length > 0 ? videoIds : []);
   }, [returnAudio, returnTargets, setSelectedClipIds]);
 
+  const toggleSelectedRemoveBg = useCallback(() => {
+    if (removeBgTargets.length === 0) {
+      return;
+    }
+    const next = setClipsRemoveBg(
+      clips,
+      removeBgTargets.map((clip) => clip.id),
+      !removeBgOn,
+    );
+    if (!next) {
+      return;
+    }
+    persist(next);
+  }, [clips, persist, removeBgOn, removeBgTargets]);
+
   const selectClip = useCallback(
     (clip: EditorClip, opts?: { toggle?: boolean }) => {
       if (opts?.toggle) {
@@ -510,6 +632,17 @@ export const JayrrEditorPanel = () => {
   const resizeClip = useCallback(
     (args: { clipId: string; edge: EditorClipEdge; edgeMs: number }) => {
       const next = resizeEditorClip({ clips, ...args });
+      if (!next) {
+        return;
+      }
+      persist(next);
+    },
+    [clips, persist],
+  );
+
+  const restoreClipEdge = useCallback(
+    (args: { clipId: string; edge: EditorClipEdge }) => {
+      const next = restoreEditorClipEdge({ clips, ...args });
       if (!next) {
         return;
       }
@@ -677,12 +810,54 @@ export const JayrrEditorPanel = () => {
       onKeyDown={onKeyDown}
     >
       <div className="jayrr-library__header">
-        <div className="jayrr-library__title">Video editor</div>
+        {renamingProject ? (
+          <input
+            ref={projectNameInputRef}
+            className="jayrr-library__rename-input"
+            value={draftProjectName}
+            maxLength={EDITOR_PROJECT_NAME_MAX}
+            aria-label="Project name"
+            placeholder={DEFAULT_EDITOR_PROJECT_NAME}
+            onChange={(event) => setDraftProjectName(event.target.value)}
+            onBlur={() => {
+              void commitProjectName();
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                event.currentTarget.blur();
+              }
+              if (event.key === "Escape") {
+                event.preventDefault();
+                setRenamingProject(false);
+              }
+            }}
+          />
+        ) : (
+          <button
+            type="button"
+            className="jayrr-library__title"
+            title="Rename project"
+            onClick={startRenameProject}
+          >
+            {projectName}
+          </button>
+        )}
         <div className="jayrr-editor-panel__header-actions">
           <button
             type="button"
+            className="jayrr-editor-panel__export"
+            disabled={!canQuery || clips.length === 0 || saveBusy || exportBusy}
+            aria-label="Export video"
+            title="Export video"
+            onClick={() => setExportOpen(true)}
+          >
+            {ExportGlyph}
+          </button>
+          <button
+            type="button"
             className="jayrr-editor-panel__save"
-            disabled={!canQuery || clips.length === 0 || saveBusy}
+            disabled={!canQuery || clips.length === 0 || saveBusy || exportBusy}
             aria-label="Save project"
             title="Save project"
             onClick={() => setSaveOpen(true)}
@@ -824,6 +999,7 @@ export const JayrrEditorPanel = () => {
                 onSelectClip={selectClip}
                 onMoveClip={moveClip}
                 onResizeClip={resizeClip}
+                onRestoreClipEdge={restoreClipEdge}
                 onSetTransition={setTransition}
                 onOpenBlend={(args) => {
                   window.setTimeout(() => setBlendPicker(args), 0);
@@ -913,6 +1089,12 @@ export const JayrrEditorPanel = () => {
               </ContextMenu.Item>
               <ContextMenu.Item
                 className="jayrr-editor-menu__item"
+                onSelect={() => setAddImageOpen(true)}
+              >
+                Add image
+              </ContextMenu.Item>
+              <ContextMenu.Item
+                className="jayrr-editor-menu__item"
                 onSelect={() => setAiOpen(true)}
               >
                 Add AI Clip
@@ -933,6 +1115,14 @@ export const JayrrEditorPanel = () => {
                   Return Audio
                 </ContextMenu.Item>
               ) : null}
+              {canRemoveBg ? (
+                <ContextMenu.Item
+                  className="jayrr-editor-menu__item"
+                  onSelect={toggleSelectedRemoveBg}
+                >
+                  {removeBgOn ? "Keep BG" : "Remove BG"}
+                </ContextMenu.Item>
+              ) : null}
               {canMerge ? (
                 <ContextMenu.Item
                   className="jayrr-editor-menu__item"
@@ -945,10 +1135,75 @@ export const JayrrEditorPanel = () => {
           </ContextMenu.Portal>
         </ContextMenu.Root>
       </div>
+      {exportOpen ? (
+        <JayrrEditorExportDialog
+          canQuery={canQuery}
+          exporting={exportBusy}
+          onClose={() => {
+            if (!exportBusy) {
+              setExportOpen(false);
+            }
+          }}
+          onExport={async ({ name, folderId }) => {
+            setExportBusy(true);
+            try {
+              let previewId = previewElementId;
+              if (!previewId) {
+                previewId = placePreview();
+              }
+              if (!previewId) {
+                throw new Error("Place an editor preview on the canvas first.");
+              }
+              const ownerDocument = container?.ownerDocument ?? document;
+              const exported = await exportEditorTimeline({
+                previewElementId: previewId,
+                ownerDocument,
+                durationMs: timeline.totalMs,
+                getTimeMs: () => currentTimeMsRef.current,
+                play,
+                stop,
+                seek,
+              });
+              await uploadPresentRecording(
+                exported.blob,
+                exported.durationMs,
+                exported.width,
+                exported.height,
+                { name, folderId },
+              );
+              persistDocsView("record");
+              appJotaiStore.set(docsViewAtom, "record");
+              setExportOpen(false);
+              excalidrawAPI?.setToast({
+                message: "Video exported.",
+                closable: true,
+              });
+              excalidrawAPI?.updateScene({
+                appState: {
+                  openSidebar: {
+                    name: DEFAULT_SIDEBAR.name,
+                    tab: JAYRR_RECORDINGS_TAB,
+                  },
+                },
+              });
+            } catch (error) {
+              excalidrawAPI?.setToast({
+                message:
+                  error instanceof Error
+                    ? error.message
+                    : "Could not export video.",
+                closable: true,
+              });
+            } finally {
+              setExportBusy(false);
+            }
+          }}
+        />
+      ) : null}
       {saveOpen ? (
         <JayrrEditorSaveProjectDialog
           canQuery={canQuery}
-          defaultName={defaultProjectName()}
+          defaultName={saveDefaultName}
           saving={saveBusy}
           onClose={() => {
             if (!saveBusy) {
@@ -958,7 +1213,7 @@ export const JayrrEditorPanel = () => {
           onSave={async ({ name, folderId }) => {
             setSaveBusy(true);
             try {
-              await saveProject({
+              const projectId = await saveProject({
                 name,
                 folderId: folderId ?? undefined,
                 clipsJson: JSON.stringify(clipsToStoredEditor(clips)),
@@ -967,6 +1222,7 @@ export const JayrrEditorPanel = () => {
                 durationMs: timeline.totalMs,
                 clipCount: clips.length,
               });
+              markProjectSaved(projectId, name);
               persistDocsView("project");
               appJotaiStore.set(docsViewAtom, "project");
               setSaveOpen(false);
@@ -1018,6 +1274,17 @@ export const JayrrEditorPanel = () => {
           }}
         />
       ) : null}
+      {addImageOpen ? (
+        <JayrrEditorAddImageDialog
+          canQuery={canQuery}
+          onClose={() => setAddImageOpen(false)}
+          onPick={(row) => {
+            const clipId = addStaticClip(row);
+            setSelectedClipIds([clipId]);
+            setAddImageOpen(false);
+          }}
+        />
+      ) : null}
       {aiOpen ? <JayrrEditorAiDialog onClose={() => setAiOpen(false)} /> : null}
       {addSoundOpen ? (
         <JayrrSoundLibraryDialog
@@ -1060,7 +1327,7 @@ const EditorSettingsPopover = ({
   canLinkSelected: boolean;
   hasPreview: boolean;
   previewElementId: string | null;
-  onPlace: () => void;
+  onPlace: () => void | string | null;
   onLinkSelected: () => void;
   onClear: () => void;
   onFocus: () => void;

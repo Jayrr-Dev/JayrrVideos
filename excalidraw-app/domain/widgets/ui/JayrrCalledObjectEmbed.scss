@@ -312,6 +312,18 @@
     flex: 1 1 auto;
   }
 
+  .jayrr-called-embed__msg .jayrr-called-embed__who-badges {
+    width: 100%;
+  }
+
+  .jayrr-called-embed__who-badges:empty {
+    display: none;
+  }
+
+  .jayrr-called-embed__msg--right .jayrr-called-embed__who-badges {
+    justify-content: flex-end;
+  }
+
   .jayrr-called-embed__emo {
     display: inline-block;
     min-width: 0;

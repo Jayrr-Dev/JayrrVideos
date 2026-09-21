@@ -45,9 +45,11 @@ import {
   EDITOR_AUDIO_TYPE,
   EDITOR_HTML_TYPE,
   EDITOR_SOUND_TYPE,
+  EDITOR_STATIC_TYPE,
   EDITOR_TRANSITION_OPTIONS,
   formatEditorClock,
   isEditorHtmlClip,
+  isEditorStaticClip,
   MAX_STACK_LANES,
   resolveClipResize,
   SEQUENCE_LANE_ID,
@@ -113,6 +115,7 @@ type JayrrEditorTimelineProps = {
     edge: EditorClipEdge;
     edgeMs: number;
   }) => void;
+  onRestoreClipEdge: (args: { clipId: string; edge: EditorClipEdge }) => void;
   onSetTransition: (
     clipIds: readonly string[],
     kind: EditorTransitionKind,
@@ -177,6 +180,7 @@ export const JayrrEditorTimeline = ({
   onSelectClip,
   onMoveClip,
   onResizeClip,
+  onRestoreClipEdge,
   onSetTransition,
   onOpenBlend,
   overlapLayerMoves,
@@ -664,13 +668,23 @@ export const JayrrEditorTimeline = ({
       event.preventDefault();
       event.stopPropagation();
       skipClickRef.current = true;
+      if (event.detail >= 2) {
+        trimSessionRef.current = null;
+        updateTrimDraft(null);
+        onRestoreClipEdge({ clipId: clip.id, edge });
+        return;
+      }
       trimSessionRef.current = { clip, edge };
       const draft = draftFromPointer(clip, edge, event.clientY, event.altKey);
       updateTrimDraft(draft);
       onSeek(draft.edgeMs);
       const doc = event.currentTarget.ownerDocument;
       const pointerId = event.pointerId;
-      event.currentTarget.setPointerCapture(pointerId);
+      try {
+        event.currentTarget.setPointerCapture(pointerId);
+      } catch {
+        // Synthetic or already-released pointers can reject capture.
+      }
 
       const onMove = (moveEvent: globalThis.PointerEvent) => {
         if (moveEvent.pointerId !== pointerId) {
@@ -713,7 +727,14 @@ export const JayrrEditorTimeline = ({
       doc.addEventListener("pointerup", onUp);
       doc.addEventListener("pointercancel", onUp);
     },
-    [disabled, draftFromPointer, onResizeClip, onSeek, updateTrimDraft],
+    [
+      disabled,
+      draftFromPointer,
+      onResizeClip,
+      onRestoreClipEdge,
+      onSeek,
+      updateTrimDraft,
+    ],
   );
 
   const canAddStackLane = stackLaneIds.length < MAX_STACK_LANES;
@@ -1167,6 +1188,7 @@ const useClipFilmstripFrames = (
     setFrames(null);
     if (
       isEditorHtmlClip(clip) ||
+      isEditorStaticClip(clip) ||
       !clip.url ||
       !ownerDocument ||
       sliceCount < 1
@@ -1257,14 +1279,20 @@ const ClipFace = ({
   }, []);
   const isSound =
     clip.type === EDITOR_SOUND_TYPE || clip.type === EDITOR_AUDIO_TYPE;
-  const skipFilmstrip = isSound || clip.type === EDITOR_HTML_TYPE;
+  const skipFilmstrip =
+    isSound ||
+    clip.type === EDITOR_HTML_TYPE ||
+    clip.type === EDITOR_HTML_TYPE ||
+    clip.type === EDITOR_STATIC_TYPE;
   const frames = useClipFilmstripFrames(
     clip,
     skipFilmstrip ? 0 : sliceCount,
     skipFilmstrip ? null : ownerDocument,
   );
   const slices = skipFilmstrip
-    ? []
+    ? clip.type === EDITOR_STATIC_TYPE
+      ? filmstripSources(sliceCount, null, clip.url)
+      : []
     : filmstripSources(
         sliceCount,
         frames,
@@ -1388,13 +1416,17 @@ const TimelineClip = ({
             type="button"
             className="jayrr-editor-clip__edge jayrr-editor-clip__edge--start"
             aria-label="Trim start"
+            title="Drag to trim. Double-click to restore the original start."
             onPointerDown={(event) => onResizePointerDown("start", event)}
+            onDoubleClick={(event) => event.stopPropagation()}
           />
           <button
             type="button"
             className="jayrr-editor-clip__edge jayrr-editor-clip__edge--end"
             aria-label="Trim end"
+            title="Drag to trim. Double-click to restore the original end."
             onPointerDown={(event) => onResizePointerDown("end", event)}
+            onDoubleClick={(event) => event.stopPropagation()}
           />
         </>
       ) : null}
