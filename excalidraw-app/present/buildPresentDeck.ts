@@ -674,9 +674,11 @@ const writePresentBag = (
     next.hide === undefined
   ) {
     delete customData[JAYRR_PRESENT_KEY];
+    // newElementWith skips `undefined`, so clearing the last present field
+    // must still pass an object or the old bag (including sound) stays.
     return Object.keys(customData).length
       ? (customData as ExcalidrawElement["customData"])
-      : undefined;
+      : {};
   }
   customData[JAYRR_PRESENT_KEY] = next;
   return customData as ExcalidrawElement["customData"];

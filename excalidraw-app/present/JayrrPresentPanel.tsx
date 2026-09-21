@@ -1784,7 +1784,7 @@ export const JayrrPresentPanel = ({
           return element;
         }
         return newElementWith(element, {
-          customData: writePresentSound(element, sound),
+          customData: writePresentSound(element, sound) ?? {},
         });
       });
       api.updateScene({
