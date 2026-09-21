@@ -1,9 +1,20 @@
-import { DEFAULT_SIDEBAR, KEYS, matchKey } from "@excalidraw/common";
+import {
+  CODES,
+  DEFAULT_SIDEBAR,
+  isDarwin,
+  KEYS,
+  matchKey,
+} from "@excalidraw/common";
 import { useExcalidrawAPI } from "@excalidraw/excalidraw";
 import {
+  BringForwardIcon,
+  BringToFrontIcon,
   checkIcon,
   helpIcon,
+  SendBackwardIcon,
+  SendToBackIcon,
   settingsIcon,
+  aiIcon,
 } from "@excalidraw/excalidraw/components/icons";
 import { useMutation } from "convex/react";
 import { ContextMenu, Popover } from "radix-ui";
@@ -15,6 +26,7 @@ import {
   useState,
   type KeyboardEvent,
   type MouseEvent,
+  type ReactElement,
 } from "react";
 
 import { appJotaiStore } from "../../app-jotai";
@@ -30,8 +42,8 @@ import {
   canCutAtTime,
   clipAtTimeAcrossLanes,
   clipHasReturnableAudio,
+  clipLayerMoveAvailability,
   EDITOR_CUT_MIN_MS,
-  EDITOR_PX_PER_SECOND,
   EDITOR_PX_PER_SECOND_OPTIONS,
   editorLanes,
   formatEditorClock,
@@ -44,12 +56,15 @@ import {
   setClipsTransition,
   type EditorBlendMode,
   type EditorClip,
+  type EditorLayerDirection,
   type EditorProjectClip,
   type EditorTransitionKind,
 } from "./buildEditorTimeline";
 import { findEditorTargetVideo } from "./editorPreviewModel";
-import { clipsToStoredEditor } from "./editorProjectStore";
+import { clipsToStoredEditor, serializeEditorView } from "./editorProjectStore";
 import { JayrrEditorAddRecordingDialog } from "./JayrrEditorAddRecordingDialog";
+import { JayrrEditorAddStockDialog } from "./JayrrEditorAddStockDialog";
+import { JayrrEditorAiDialog } from "./JayrrEditorAiDialog";
 import { JayrrEditorBlendModeDialog } from "./JayrrEditorBlendModeDialog";
 import { JayrrEditorSaveProjectDialog } from "./JayrrEditorSaveProjectDialog";
 import { useJayrrEditorSession } from "./JayrrEditorSession";
@@ -122,6 +137,34 @@ const PauseGlyph = (
   </svg>
 );
 
+const SaveGlyph = (
+  <svg
+    aria-hidden="true"
+    focusable="false"
+    viewBox="0 0 20 20"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.7"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="M4.2 3.4h8.2L16 6.8v9.8a1 1 0 0 1-1 1H4.2a1 1 0 0 1-1-1V4.4a1 1 0 0 1 1-1z" />
+    <path d="M6.4 3.4v4.2h6.2" />
+    <path d="M6.6 17.6v-5h6.8v5" />
+  </svg>
+);
+
+const LAYER_MOVE_ACTIONS: readonly {
+  direction: EditorLayerDirection;
+  label: string;
+  icon: ReactElement;
+}[] = [
+  { direction: "back", label: "Send to back", icon: SendToBackIcon },
+  { direction: "backward", label: "Send backward", icon: SendBackwardIcon },
+  { direction: "forward", label: "Bring forward", icon: BringForwardIcon },
+  { direction: "front", label: "Bring to front", icon: BringToFrontIcon },
+];
+
 export const JayrrEditorPanel = () => {
   const {
     container,
@@ -131,6 +174,14 @@ export const JayrrEditorPanel = () => {
     stackLaneIds,
     addStackLane,
     removeStackLane,
+    moveSelectedByLayer,
+    zoomMode,
+    setZoomMode,
+    pxPerSecond,
+    setPxPerSecond,
+    selectedClipIds,
+    setSelectedClipIds,
+    snapshotView,
     timeline,
     currentTimeMs,
     playing,
@@ -154,30 +205,32 @@ export const JayrrEditorPanel = () => {
   const excalidrawAPI = useExcalidrawAPI();
   const saveProject = useMutation(api.editorProjects.save);
 
-  const [zoomMode, setZoomMode] = useState<"fit" | "fixed">("fit");
-  const [pxPerSecond, setPxPerSecond] = useState(EDITOR_PX_PER_SECOND);
-  const [selectedClipIds, setSelectedClipIds] = useState<string[]>([]);
   const [addRecordingOpen, setAddRecordingOpen] = useState(false);
   const [addSoundOpen, setAddSoundOpen] = useState(false);
+  const [addStockOpen, setAddStockOpen] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
   const [saveOpen, setSaveOpen] = useState(false);
   const [saveBusy, setSaveBusy] = useState(false);
   const [blendPicker, setBlendPicker] = useState<{
     clipIds: readonly string[];
     blendMode: EditorBlendMode;
   } | null>(null);
+  const [menuClipId, setMenuClipId] = useState<string | null>(null);
 
   const selectedIdSet = useMemo(
     () => new Set(selectedClipIds),
     [selectedClipIds],
   );
 
-  useEffect(() => {
-    const alive = new Set(clips.map((clip) => clip.id));
-    setSelectedClipIds((current) => {
-      const next = current.filter((id) => alive.has(id));
-      return next.length === current.length ? current : next;
-    });
-  }, [clips]);
+  const layerMoves = useMemo(
+    () =>
+      clipLayerMoveAvailability({
+        clips,
+        clipIds: selectedClipIds,
+        stackLaneIds,
+      }),
+    [clips, selectedClipIds, stackLaneIds],
+  );
 
   const lanes = useMemo(
     () => editorLanes(timeline, stackLaneIds),
@@ -199,11 +252,17 @@ export const JayrrEditorPanel = () => {
     persist(next);
     setSelectedClipIds([]);
     stop();
-  }, [clips, persist, selectedClipIds, stop]);
+  }, [clips, persist, selectedClipIds, setSelectedClipIds, stop]);
 
-  const canCut = playheadClip
-    ? canCutAtTime([playheadClip], currentTimeMs)
-    : false;
+  const menuOnClip = menuClipId !== null;
+  const menuClip = useMemo(
+    () => clips.find((clip) => clip.id === menuClipId) ?? null,
+    [clips, menuClipId],
+  );
+  const canCut =
+    menuOnClip && playheadClip
+      ? canCutAtTime([playheadClip], currentTimeMs)
+      : false;
   const mergeable = useMemo(
     () => getMergeableClips(clips, selectedIdSet),
     [clips, selectedIdSet],
@@ -228,7 +287,9 @@ export const JayrrEditorPanel = () => {
     }
     return [];
   }, [clips, playheadClip, selectedIdSet]);
-  const canSeparateAudio = separateTargets.length > 0;
+  const canSeparateAudio = Boolean(
+    menuClip && isEditorVideoClip(menuClip) && !menuClip.muted,
+  );
   const returnTargets = useMemo(() => {
     const selected = clips.filter(
       (clip) =>
@@ -268,7 +329,7 @@ export const JayrrEditorPanel = () => {
     ];
     persist(next);
     setSelectedClipIds([merged.id]);
-  }, [clips, persist, selectedIdSet]);
+  }, [clips, persist, selectedIdSet, setSelectedClipIds]);
 
   const cutAtPlayhead = useCallback(() => {
     const clip = clipAtTimeAcrossLanes(lanes, currentTimeMs, selectedIdSet);
@@ -315,7 +376,7 @@ export const JayrrEditorPanel = () => {
     ];
     persist(next);
     setSelectedClipIds([left.id, right.id]);
-  }, [clips, currentTimeMs, lanes, persist, selectedIdSet]);
+  }, [clips, currentTimeMs, lanes, persist, selectedIdSet, setSelectedClipIds]);
 
   const separateSelectedAudio = useCallback(() => {
     if (separateTargets.length === 0) {
@@ -326,7 +387,7 @@ export const JayrrEditorPanel = () => {
       return;
     }
     setSelectedClipIds(audioIds);
-  }, [separateAudio, separateTargets]);
+  }, [separateAudio, separateTargets, setSelectedClipIds]);
 
   const returnSelectedAudio = useCallback(() => {
     if (returnTargets.length === 0) {
@@ -334,7 +395,7 @@ export const JayrrEditorPanel = () => {
     }
     const videoIds = returnAudio(returnTargets.map((clip) => clip.id));
     setSelectedClipIds(videoIds.length > 0 ? videoIds : []);
-  }, [returnAudio, returnTargets]);
+  }, [returnAudio, returnTargets, setSelectedClipIds]);
 
   const selectClip = useCallback(
     (clip: EditorClip, opts?: { toggle?: boolean }) => {
@@ -349,7 +410,7 @@ export const JayrrEditorPanel = () => {
       }
       setSelectedClipIds([clip.id]);
     },
-    [],
+    [setSelectedClipIds],
   );
 
   const moveClip = useCallback(
@@ -433,13 +494,52 @@ export const JayrrEditorPanel = () => {
         }
         event.preventDefault();
         event.stopImmediatePropagation();
+        return;
       }
+      if (selectedClipIds.length === 0) {
+        return;
+      }
+      const bracketLeft = event.code === CODES.BRACKET_LEFT;
+      const bracketRight = event.code === CODES.BRACKET_RIGHT;
+      if (!bracketLeft && !bracketRight) {
+        return;
+      }
+      const toEdge = isDarwin ? event.altKey : event.shiftKey;
+      if (isDarwin && event.shiftKey) {
+        return;
+      }
+      if (!isDarwin && event.altKey) {
+        return;
+      }
+      let direction: EditorLayerDirection | null = null;
+      if (bracketLeft && toEdge) {
+        direction = "back";
+      } else if (bracketRight && toEdge) {
+        direction = "front";
+      } else if (bracketLeft) {
+        direction = "backward";
+      } else if (bracketRight) {
+        direction = "forward";
+      }
+      if (!direction) {
+        return;
+      }
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      moveSelectedByLayer(direction);
     };
     doc.defaultView?.addEventListener("keydown", onEditorHistoryKey, true);
     return () => {
       doc.defaultView?.removeEventListener("keydown", onEditorHistoryKey, true);
     };
-  }, [container, excalidrawAPI, redo, undo]);
+  }, [
+    container,
+    excalidrawAPI,
+    moveSelectedByLayer,
+    redo,
+    selectedClipIds.length,
+    undo,
+  ]);
 
   const onTransportClick = useCallback(
     (event: MouseEvent) => {
@@ -485,11 +585,22 @@ export const JayrrEditorPanel = () => {
         <div className="jayrr-editor-panel__header-actions">
           <button
             type="button"
+            className="jayrr-editor-panel__ai"
+            aria-label="Editor AI"
+            title="Editor AI"
+            onClick={() => setAiOpen(true)}
+          >
+            {aiIcon}
+          </button>
+          <button
+            type="button"
             className="jayrr-editor-panel__save"
             disabled={!canQuery || clips.length === 0 || saveBusy}
+            aria-label="Save project"
+            title="Save project"
             onClick={() => setSaveOpen(true)}
           >
-            Save
+            {SaveGlyph}
           </button>
           <EditorSettingsPopover
             container={container}
@@ -522,6 +633,27 @@ export const JayrrEditorPanel = () => {
             {formatEditorClock(currentTimeMs)} /{" "}
             {formatEditorClock(timeline.totalMs)}
           </span>
+          {selectedClipIds.length > 0 ? (
+            <div
+              className="jayrr-editor-panel__layers"
+              role="group"
+              aria-label="Layers"
+            >
+              {LAYER_MOVE_ACTIONS.map((action) => (
+                <button
+                  key={action.direction}
+                  type="button"
+                  className="jayrr-editor-panel__layer-btn"
+                  aria-label={action.label}
+                  title={action.label}
+                  disabled={!layerMoves[action.direction]}
+                  onClick={() => moveSelectedByLayer(action.direction)}
+                >
+                  {action.icon}
+                </button>
+              ))}
+            </div>
+          ) : null}
           <div
             className="jayrr-editor-panel__zoom"
             role="group"
@@ -582,9 +714,38 @@ export const JayrrEditorPanel = () => {
           </div>
         </div>
 
-        <ContextMenu.Root modal={false}>
+        <ContextMenu.Root
+          modal={false}
+          onOpenChange={(open) => {
+            if (!open) {
+              setMenuClipId(null);
+            }
+          }}
+        >
           <ContextMenu.Trigger asChild>
-            <div className="jayrr-editor-panel__timeline-wrap">
+            <div
+              className="jayrr-editor-panel__timeline-wrap"
+              onContextMenu={(event) => {
+                const target = event.target;
+                if (!(target instanceof Element)) {
+                  setMenuClipId(null);
+                  return;
+                }
+                const clipNode = target.closest(".jayrr-editor-clip");
+                const clipId = clipNode?.getAttribute("data-clip-id");
+                if (!clipId) {
+                  setMenuClipId(null);
+                  return;
+                }
+                setMenuClipId(clipId);
+                setSelectedClipIds((current) => {
+                  if (current.includes(clipId)) {
+                    return current;
+                  }
+                  return [clipId];
+                });
+              }}
+            >
               <JayrrEditorTimeline
                 timeline={timeline}
                 currentTimeMs={currentTimeMs}
@@ -642,6 +803,12 @@ export const JayrrEditorPanel = () => {
               >
                 Add sound
               </ContextMenu.Item>
+              <ContextMenu.Item
+                className="jayrr-editor-menu__item"
+                onSelect={() => setAddStockOpen(true)}
+              >
+                Add stock
+              </ContextMenu.Item>
               {canSeparateAudio ? (
                 <ContextMenu.Item
                   className="jayrr-editor-menu__item"
@@ -657,6 +824,21 @@ export const JayrrEditorPanel = () => {
                 >
                   Return Audio
                 </ContextMenu.Item>
+              ) : null}
+              {menuOnClip ? (
+                <>
+                  <ContextMenu.Separator className="jayrr-editor-menu__separator" />
+                  {LAYER_MOVE_ACTIONS.map((action) => (
+                    <ContextMenu.Item
+                      key={action.direction}
+                      className="jayrr-editor-menu__item"
+                      disabled={!layerMoves[action.direction]}
+                      onSelect={() => moveSelectedByLayer(action.direction)}
+                    >
+                      {action.label}
+                    </ContextMenu.Item>
+                  ))}
+                </>
               ) : null}
               {canMerge ? (
                 <ContextMenu.Item
@@ -696,6 +878,7 @@ export const JayrrEditorPanel = () => {
                 folderId: folderId ?? undefined,
                 clipsJson: JSON.stringify(clipsToStoredEditor(clips)),
                 stackLanesJson: JSON.stringify(stackLaneIds),
+                stateJson: serializeEditorView(snapshotView()),
                 durationMs: timeline.totalMs,
                 clipCount: clips.length,
               });
@@ -739,6 +922,13 @@ export const JayrrEditorPanel = () => {
           }}
         />
       ) : null}
+      {addStockOpen ? (
+        <JayrrEditorAddStockDialog
+          canQuery={canQuery}
+          onClose={() => setAddStockOpen(false)}
+        />
+      ) : null}
+      {aiOpen ? <JayrrEditorAiDialog onClose={() => setAiOpen(false)} /> : null}
       {addSoundOpen ? (
         <JayrrSoundLibraryDialog
           onClose={() => setAddSoundOpen(false)}

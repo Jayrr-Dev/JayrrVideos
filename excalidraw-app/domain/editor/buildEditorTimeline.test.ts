@@ -8,6 +8,7 @@ import {
   collectOverlapBands,
   collectSnapPointsMs,
   editorLanes,
+  moveClipsByLayer,
   moveEditorClip,
   removeStackLane,
   returnClipsAudio,
@@ -152,6 +153,98 @@ describe("moveEditorClip", () => {
         laneStartMs: 400,
       }),
     ]);
+  });
+});
+
+describe("moveClipsByLayer", () => {
+  it("steps one column and keeps the start time", () => {
+    const clips = [
+      clip("a", 1000, { laneStartMs: 200 }),
+      clip("b", 400, { laneId: "stack-1", laneStartMs: 500 }),
+    ];
+    const forward = moveClipsByLayer({
+      clips,
+      clipIds: ["a"],
+      stackLaneIds: ["stack-1"],
+      direction: "forward",
+    });
+    expect(forward?.stackLaneIds).toEqual(["stack-1"]);
+    expect(forward?.clips.find((item) => item.id === "a")).toEqual(
+      expect.objectContaining({ laneId: "stack-1", laneStartMs: 200 }),
+    );
+    const backward = moveClipsByLayer({
+      clips,
+      clipIds: ["b"],
+      stackLaneIds: ["stack-1"],
+      direction: "backward",
+    });
+    expect(backward?.clips.find((item) => item.id === "b")).toEqual(
+      expect.objectContaining({
+        laneId: SEQUENCE_LANE_ID,
+        laneStartMs: 500,
+      }),
+    );
+  });
+
+  it("sends to the back and front columns", () => {
+    const clips = [
+      clip("a", 800, { laneId: "stack-2", laneStartMs: 100 }),
+      clip("b", 800, { laneStartMs: 0 }),
+    ];
+    const lanes = ["stack-1", "stack-2"];
+    const back = moveClipsByLayer({
+      clips,
+      clipIds: ["a"],
+      stackLaneIds: lanes,
+      direction: "back",
+    });
+    expect(back?.clips.find((item) => item.id === "a")?.laneId).toBe(
+      SEQUENCE_LANE_ID,
+    );
+    const front = moveClipsByLayer({
+      clips,
+      clipIds: ["b"],
+      stackLaneIds: lanes,
+      direction: "front",
+    });
+    expect(front?.clips.find((item) => item.id === "b")?.laneId).toBe(
+      "stack-2",
+    );
+    expect(front?.stackLaneIds).toEqual(lanes);
+  });
+
+  it("adds a column when bringing the front clip forward", () => {
+    const clips = [clip("a", 800, { laneId: "stack-1", laneStartMs: 40 })];
+    const next = moveClipsByLayer({
+      clips,
+      clipIds: ["a"],
+      stackLaneIds: ["stack-1"],
+      direction: "forward",
+    });
+    expect(next?.stackLaneIds).toHaveLength(2);
+    expect(next?.stackLaneIds[0]).toBe("stack-1");
+    expect(next?.clips[0]?.laneId).toBe(next?.stackLaneIds[1]);
+    expect(next?.clips[0]?.laneStartMs).toBe(40);
+  });
+
+  it("does nothing when the clip is already on that edge", () => {
+    const clips = [clip("a", 800, { laneStartMs: 0 })];
+    expect(
+      moveClipsByLayer({
+        clips,
+        clipIds: ["a"],
+        stackLaneIds: ["stack-1"],
+        direction: "back",
+      }),
+    ).toBeNull();
+    expect(
+      moveClipsByLayer({
+        clips,
+        clipIds: ["a"],
+        stackLaneIds: ["stack-1"],
+        direction: "front",
+      })?.clips[0]?.laneId,
+    ).toBe("stack-1");
   });
 });
 

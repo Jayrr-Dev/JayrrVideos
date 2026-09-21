@@ -9,6 +9,7 @@ import {
   collectLaneOverlaps,
   editorHasClips,
   isEditorAudioLikeClip,
+  isEditorHtmlClip,
   isEditorSoundClip,
   isEditorVideoClip,
   isSameLaneOverlap,
@@ -18,6 +19,7 @@ import {
   SEQUENCE_LANE_ID,
   stackBlendAtTime,
   videoClipAtTime,
+  visualClipAtTime,
   type EditorClip,
   type EditorTimeline,
   type LaneOverlap,
@@ -29,6 +31,7 @@ import {
   subscribeEditorPreviewVideos,
   type EditorPreviewLayers,
 } from "./editorPreviewModel";
+import { seekHyperframeFrame } from "./hyperframesClip";
 
 type UseEditorPlaybackOpts = {
   timeline: EditorTimeline;
@@ -125,6 +128,13 @@ const projectMsFromVideo = (video: HTMLVideoElement, clip: EditorClip) => {
   return Math.min(clip.startMs + clip.durationMs, clip.startMs + withinMs);
 };
 
+const compositionTimeMs = (clip: EditorClip, timeMs: number) =>
+  Math.max(0, (clip.sourceOffsetMs ?? 0) + (timeMs - clip.startMs));
+
+const setCompositionOn = (frame: HTMLIFrameElement | null, on: boolean) => {
+  frame?.classList.toggle("is-on", on);
+};
+
 const videoHasUrl = (video: HTMLVideoElement, url: string) =>
   video.getAttribute("src") === url || video.currentSrc === url;
 
@@ -197,6 +207,7 @@ export const useEditorPlayback = ({
   const baseClipIdRef = useRef<string | null>(null);
   const baseActiveIsAltRef = useRef(false);
   const stackClipIdsRef = useRef<(string | null)[]>([]);
+  const htmlClipIdRef = useRef<string | null>(null);
   const lastTickRef = useRef(0);
   const rafRef = useRef(0);
   const prefetchUrlRef = useRef<string | null>(null);
@@ -335,6 +346,12 @@ export const useEditorPlayback = ({
         setLayerVisible(video, false);
         return null;
       }
+      if (isEditorHtmlClip(clip)) {
+        applyVideoMix(video, false);
+        video.pause();
+        setLayerVisible(video, false);
+        return clip.id;
+      }
       await prepareSrc(video, clip.url, clipIsMuted(clip));
       applyVideoMix(video, clipIsMuted(clip));
       await seekVideo(video, sourceOffsetSec(clip, timeMs));
@@ -377,6 +394,18 @@ export const useEditorPlayback = ({
           setLayerVisible(idle, false);
         }
         return null;
+      }
+
+      if (isEditorHtmlClip(clip)) {
+        applyVideoMix(active, false);
+        active.pause();
+        setLayerVisible(active, false);
+        if (idle) {
+          applyVideoMix(idle, false);
+          idle.pause();
+          setLayerVisible(idle, false);
+        }
+        return clip.id;
       }
 
       // Same file (including cut siblings): keep the visible frame, just seek.
@@ -493,7 +522,10 @@ export const useEditorPlayback = ({
         return;
       }
       const next = nextSequenceClip(timelineRef.current.sequence, current);
-      if (!next || next.url === current.url) {
+      if (!next || isEditorHtmlClip(next) || isEditorHtmlClip(current)) {
+        return;
+      }
+      if (next.url === current.url) {
         return;
       }
       if (prefetchUrlRef.current === next.url && videoHasUrl(idle, next.url)) {
@@ -532,14 +564,14 @@ export const useEditorPlayback = ({
         return;
       }
       const { sequence, overlays } = timelineRef.current;
-      const sequenceClip = videoClipAtTime(sequence, timeMs);
+      const sequenceClip = visualClipAtTime(sequence, timeMs);
       const laneClips = stackLaneIdsRef.current.map((laneId) =>
         overlayVideoOnLaneAtTime(overlays, laneId, timeMs),
       );
       const firstOverlay = laneClips.find((clip) => clip) ?? null;
       const orphanOverlay =
         !sequenceClip && !firstOverlay && layers.stacks.length === 0
-          ? videoClipAtTime(overlays, timeMs)
+          ? visualClipAtTime(overlays, timeMs)
           : null;
       const baseClip = sequenceClip ?? orphanOverlay;
       const overlaps = timelineOverlaps(timelineRef.current);
@@ -570,9 +602,29 @@ export const useEditorPlayback = ({
         for (const stack of layers.stacks) {
           setLayerVisible(stack, false);
         }
+        setCompositionOn(layers.composition ?? null, false);
+        htmlClipIdRef.current = null;
         baseClipIdRef.current = null;
         stackClipIdsRef.current = layers.stacks.map(() => null);
         return;
+      }
+
+      const htmlBase = baseClip && isEditorHtmlClip(baseClip) ? baseClip : null;
+      const frame = layers.composition ?? null;
+      if (htmlBase && frame) {
+        if (htmlClipIdRef.current !== htmlBase.id) {
+          htmlClipIdRef.current = htmlBase.id;
+          frame.onload = () => {
+            seekHyperframeFrame(frame, compositionTimeMs(htmlBase, timeMs));
+          };
+          frame.srcdoc = htmlBase.html;
+        } else {
+          seekHyperframeFrame(frame, compositionTimeMs(htmlBase, timeMs));
+        }
+        setCompositionOn(frame, true);
+      } else {
+        htmlClipIdRef.current = null;
+        setCompositionOn(frame, false);
       }
 
       const outgoing = sameLaneSequence
@@ -587,7 +639,9 @@ export const useEditorPlayback = ({
         outgoing &&
         incoming &&
         !isEditorAudioLikeClip(outgoing) &&
-        !isEditorAudioLikeClip(incoming)
+        !isEditorAudioLikeClip(incoming) &&
+        !isEditorHtmlClip(outgoing) &&
+        !isEditorHtmlClip(incoming)
       ) {
         nextBaseId = await applySameLaneSequence(
           layers,
@@ -743,6 +797,13 @@ export const useEditorPlayback = ({
     ) {
       void applyProgram(nextMs, true);
     } else if (layers) {
+      const htmlClip = visualClipAtTime(timelineNow.sequence, nextMs);
+      if (htmlClip && isEditorHtmlClip(htmlClip) && layers.composition) {
+        seekHyperframeFrame(
+          layers.composition,
+          compositionTimeMs(htmlClip, nextMs),
+        );
+      }
       const sequenceClip = videoClipAtTime(timelineNow.sequence, nextMs);
       const overlaps = overlapsNow;
       const sameLaneSequence =

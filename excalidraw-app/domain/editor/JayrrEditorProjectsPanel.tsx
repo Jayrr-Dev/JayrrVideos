@@ -154,7 +154,21 @@ const ProjectCard = ({
         type="button"
         className="jayrr-present__recording-thumb"
         aria-label={`Open ${row.name}`}
-        onClick={onOpen}
+        title="Double-click to open"
+        onMouseDown={(event) => {
+          if (event.detail > 1) {
+            event.preventDefault();
+          }
+        }}
+        onClick={(event) => {
+          if (event.detail === 0) {
+            onOpen();
+          }
+        }}
+        onDoubleClick={(event) => {
+          event.preventDefault();
+          onOpen();
+        }}
       >
         <span className="jayrr-scene-card__empty">{clipsLabel}</span>
         <span className="jayrr-present__recording-clock">{clock}</span>
@@ -354,8 +368,8 @@ const ProjectsShell = ({
         )}
         {toolbar}
         <span className="jayrr-present__sr">
-          Saved editor projects in folders. Open a card to load it into the
-          video editor.
+          Saved editor projects in folders. Double-click a project card to load
+          it into the video editor.
         </span>
       </div>
       <div className="jayrr-present__recordings-body">{children}</div>

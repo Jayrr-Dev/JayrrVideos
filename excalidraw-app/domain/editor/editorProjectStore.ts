@@ -4,11 +4,13 @@ import {
   clipLaneId,
   EDITOR_AUDIO_TYPE,
   EDITOR_CLIP_TYPE,
+  EDITOR_HTML_TYPE,
   EDITOR_PX_PER_SECOND,
   EDITOR_PX_PER_SECOND_OPTIONS,
   EDITOR_SOUND_TYPE,
   isEditorAudioType,
   isEditorBlendMode,
+  isEditorHtmlType,
   isEditorItemType,
   isEditorSoundType,
   isEditorTransitionKind,
@@ -52,6 +54,7 @@ export type StoredEditorClip = {
   soundId?: string;
   path?: string;
   url?: string;
+  html?: string;
   label?: string;
   durationMs?: number;
   sourceOffsetMs?: number;
@@ -61,6 +64,8 @@ export type StoredEditorClip = {
   blendMode?: EditorProjectClip["blendMode"];
   muted?: boolean;
   sourceClipId?: string;
+  width?: number;
+  height?: number;
 };
 
 export type EditorRecordingLookup = {
@@ -140,6 +145,27 @@ export const parseStoredEditorClips = (parsed: unknown): StoredEditorClip[] => {
       });
       continue;
     }
+    if (isEditorHtmlType(typeRaw)) {
+      const html = Reflect.get(item, "html");
+      if (typeof html !== "string" || !html.trim()) {
+        continue;
+      }
+      const widthRaw = Reflect.get(item, "width");
+      const heightRaw = Reflect.get(item, "height");
+      out.push({
+        ...placement,
+        type: EDITOR_HTML_TYPE,
+        html,
+        ...(storedLabel ? { label: storedLabel } : {}),
+        ...(typeof widthRaw === "number" && Number.isFinite(widthRaw)
+          ? { width: Math.round(widthRaw) }
+          : {}),
+        ...(typeof heightRaw === "number" && Number.isFinite(heightRaw)
+          ? { height: Math.round(heightRaw) }
+          : {}),
+      });
+      continue;
+    }
     const recordingId = Reflect.get(item, "recordingId");
     if (typeof recordingId !== "string") {
       continue;
@@ -182,6 +208,15 @@ export const clipsToStoredEditor = (
         path: clip.path,
         url: clip.url,
         label: clip.label,
+      };
+    }
+    if (clip.type === EDITOR_HTML_TYPE) {
+      return {
+        ...shared,
+        html: clip.html,
+        label: clip.label,
+        ...(typeof clip.width === "number" ? { width: clip.width } : {}),
+        ...(typeof clip.height === "number" ? { height: clip.height } : {}),
       };
     }
     return {
@@ -266,12 +301,16 @@ export const parseStoredEditorView = (parsed: unknown): StoredEditorView => {
       }
     }
   }
-  const pxAllowed = (EDITOR_PX_PER_SECOND_OPTIONS as readonly number[]).includes(
-    typeof pxRaw === "number" ? pxRaw : NaN,
-  );
+  const pxAllowed = (
+    EDITOR_PX_PER_SECOND_OPTIONS as readonly number[]
+  ).includes(typeof pxRaw === "number" ? pxRaw : NaN);
   return {
-    zoomMode: isEditorZoomMode(zoomRaw) ? zoomRaw : DEFAULT_EDITOR_VIEW.zoomMode,
-    pxPerSecond: pxAllowed ? (pxRaw as number) : DEFAULT_EDITOR_VIEW.pxPerSecond,
+    zoomMode: isEditorZoomMode(zoomRaw)
+      ? zoomRaw
+      : DEFAULT_EDITOR_VIEW.zoomMode,
+    pxPerSecond: pxAllowed
+      ? (pxRaw as number)
+      : DEFAULT_EDITOR_VIEW.pxPerSecond,
     currentTimeMs: timeRaw ?? 0,
     selectedClipIds,
     previewElementId:
@@ -339,6 +378,25 @@ export const restoreProjectClips = (
           : {}),
         ...(item.transitionKind ? { transitionKind: item.transitionKind } : {}),
         ...(item.blendMode ? { blendMode: item.blendMode } : {}),
+      });
+      continue;
+    }
+    if (item.type === EDITOR_HTML_TYPE && item.html) {
+      restored.push({
+        id: item.id,
+        type: EDITOR_HTML_TYPE,
+        html: item.html,
+        label: item.label?.trim() || "AI clip",
+        durationMs: Math.max(1, item.durationMs ?? 1000),
+        sourceOffsetMs: item.sourceOffsetMs ?? 0,
+        ...(item.laneId ? { laneId: item.laneId } : {}),
+        ...(typeof item.laneStartMs === "number"
+          ? { laneStartMs: item.laneStartMs }
+          : {}),
+        ...(item.transitionKind ? { transitionKind: item.transitionKind } : {}),
+        ...(item.blendMode ? { blendMode: item.blendMode } : {}),
+        ...(typeof item.width === "number" ? { width: item.width } : {}),
+        ...(typeof item.height === "number" ? { height: item.height } : {}),
       });
       continue;
     }

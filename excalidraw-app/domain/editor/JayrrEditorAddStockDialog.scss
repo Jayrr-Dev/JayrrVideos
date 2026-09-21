@@ -1,0 +1,69 @@
+.excalidraw {
+  .jayrr-editor-add-stock .Dialog__content {
+    max-height: min(36rem, 78vh);
+  }
+
+  .jayrr-editor-add-stock .Dialog__chrome {
+    margin-bottom: 0.75rem;
+    padding-bottom: 0;
+    border-bottom: none;
+  }
+
+  .jayrr-editor-add-stock .Dialog__title {
+    margin-bottom: 0;
+  }
+
+  .jayrr-editor-add-stock__title-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    min-width: 0;
+  }
+
+  .jayrr-editor-add-stock__info {
+    display: inline-flex;
+    flex: 0 0 auto;
+    color: var(--icon-fill-color);
+    cursor: help;
+  }
+
+  .jayrr-editor-add-stock__info svg {
+    width: 1rem;
+    height: 1rem;
+  }
+
+  .jayrr-editor-add-stock__form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    min-height: 0;
+  }
+
+  .jayrr-editor-add-stock__body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    min-height: 12rem;
+    max-height: min(26rem, 52vh);
+    overflow: auto;
+  }
+
+  .jayrr-editor-add-stock .jayrr-present__recording-thumb {
+    cursor: default;
+  }
+
+  .jayrr-editor-add-stock__empty {
+    margin: 0;
+    padding: 1.25rem 0.25rem;
+    font-size: 0.85rem;
+    color: var(--color-gray-60);
+    text-align: center;
+  }
+
+  .jayrr-editor-add-stock__buttons {
+    display: flex;
+    column-gap: 0.5rem;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+}

@@ -28,15 +28,40 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    width: 1.75rem;
     height: 1.75rem;
-    padding: 0 0.55rem;
+    padding: 0;
     border: none;
     background: none;
     color: var(--icon-fill-color);
     cursor: pointer;
     border-radius: var(--border-radius-md);
-    font-size: 0.8rem;
-    font-weight: 600;
+    flex-shrink: 0;
+  }
+
+  .jayrr-editor-panel__ai {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--icon-fill-color);
+    cursor: pointer;
+    border-radius: var(--border-radius-md);
+    flex-shrink: 0;
+  }
+
+  .jayrr-editor-panel__ai:hover {
+    color: var(--color-primary);
+    background: var(--color-surface-mid);
+  }
+
+  .jayrr-editor-panel__ai svg {
+    width: 1.125rem;
+    height: 1.125rem;
   }
 
   .jayrr-editor-panel__save:hover:not(:disabled) {
@@ -47,6 +72,11 @@
   .jayrr-editor-panel__save:disabled {
     opacity: 0.45;
     cursor: default;
+  }
+
+  .jayrr-editor-panel__save svg {
+    width: 1.125rem;
+    height: 1.125rem;
   }
 
   .jayrr-editor-panel__settings {
@@ -228,6 +258,38 @@
     font-variant-numeric: tabular-nums;
     color: var(--text-primary-color);
     margin-left: 0.15rem;
+  }
+
+  .jayrr-editor-panel__layers {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.15rem;
+    margin-left: 0.2rem;
+  }
+
+  .jayrr-editor-panel__layer-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.7rem;
+    height: 1.7rem;
+    padding: 0.15rem;
+    border: 1px solid var(--default-border-color);
+    background: var(--color-surface-low);
+    color: var(--text-primary-color);
+    border-radius: var(--border-radius-md);
+    cursor: pointer;
+
+    svg {
+      width: 1.15rem;
+      height: 1.15rem;
+      display: block;
+    }
+
+    &:disabled {
+      opacity: 0.35;
+      cursor: default;
+    }
   }
 
   .jayrr-editor-panel__zoom {
@@ -799,7 +861,8 @@
   }
 
   .jayrr-editor-clip--clip,
-  .jayrr-editor-clip--recording {
+  .jayrr-editor-clip--recording,
+  .jayrr-editor-clip--html {
     background: var(--jayrr-clip-fill);
     color: #e2e8f0;
   }

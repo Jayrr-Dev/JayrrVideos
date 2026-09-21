@@ -19,6 +19,10 @@ import type * as canvasAi_prompt from "../canvasAi/prompt.js";
 import type * as canvasAi_schemas from "../canvasAi/schemas.js";
 import type * as canvasAi_skeletons from "../canvasAi/skeletons.js";
 import type * as canvasAi_topicSummary from "../canvasAi/topicSummary.js";
+import type * as editorAi_chatHttp from "../editorAi/chatHttp.js";
+import type * as editorAi_chatNode from "../editorAi/chatNode.js";
+import type * as editorAi_createTools from "../editorAi/createTools.js";
+import type * as editorAi_prompt from "../editorAi/prompt.js";
 import type * as editorProjectFolders from "../editorProjectFolders.js";
 import type * as editorProjects from "../editorProjects.js";
 import type * as embedProxy from "../embedProxy.js";
@@ -36,6 +40,7 @@ import type * as scenes from "../scenes.js";
 import type * as soundFolders from "../soundFolders.js";
 import type * as soundSeed from "../soundSeed.js";
 import type * as sounds from "../sounds.js";
+import type * as stockVideos from "../stockVideos.js";
 import type * as transcription from "../transcription.js";
 import type * as users from "../users.js";
 
@@ -57,6 +62,10 @@ declare const fullApi: ApiFromModules<{
   "canvasAi/schemas": typeof canvasAi_schemas;
   "canvasAi/skeletons": typeof canvasAi_skeletons;
   "canvasAi/topicSummary": typeof canvasAi_topicSummary;
+  "editorAi/chatHttp": typeof editorAi_chatHttp;
+  "editorAi/chatNode": typeof editorAi_chatNode;
+  "editorAi/createTools": typeof editorAi_createTools;
+  "editorAi/prompt": typeof editorAi_prompt;
   editorProjectFolders: typeof editorProjectFolders;
   editorProjects: typeof editorProjects;
   embedProxy: typeof embedProxy;
@@ -74,6 +83,7 @@ declare const fullApi: ApiFromModules<{
   soundFolders: typeof soundFolders;
   soundSeed: typeof soundSeed;
   sounds: typeof sounds;
+  stockVideos: typeof stockVideos;
   transcription: typeof transcription;
   users: typeof users;
 }>;

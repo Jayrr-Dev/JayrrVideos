@@ -17,6 +17,7 @@ export const JayrrEditorPreviewEmbed = ({
 }) => {
   const baseRef = useRef<HTMLVideoElement | null>(null);
   const baseAltRef = useRef<HTMLVideoElement | null>(null);
+  const compositionRef = useRef<HTMLIFrameElement | null>(null);
   const stackRefs = useRef<(HTMLVideoElement | null)[]>(
     Array.from({ length: MAX_STACK_LANES }, () => null),
   );
@@ -34,6 +35,7 @@ export const JayrrEditorPreviewEmbed = ({
       base,
       baseAlt,
       stacks,
+      composition: compositionRef.current,
     });
   }, [elementId]);
 
@@ -70,6 +72,13 @@ export const JayrrEditorPreviewEmbed = ({
           preload="metadata"
         />
       ))}
+      <iframe
+        ref={compositionRef}
+        className="jayrr-editor-preview-embed__html"
+        title="HTML clip"
+        sandbox="allow-scripts"
+        tabIndex={-1}
+      />
       <div className="jayrr-editor-preview-embed__label" aria-hidden>
         Editor preview
       </div>

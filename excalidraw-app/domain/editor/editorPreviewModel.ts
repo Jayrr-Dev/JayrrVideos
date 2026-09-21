@@ -53,6 +53,7 @@ export type EditorPreviewLayers = {
   /** Second base used to cross-cut without clearing the visible frame. */
   baseAlt?: HTMLVideoElement | null;
   stacks: readonly HTMLVideoElement[];
+  composition?: HTMLIFrameElement | null;
 };
 
 const clampVolume = (value: number) => Math.min(1, Math.max(0, value));

@@ -3,6 +3,7 @@ import { httpRouter } from "convex/server";
 import { auth } from "./auth";
 import { httpAction } from "./_generated/server";
 import { canvasAiChat, canvasAiChatOptions } from "./canvasAi/chatHttp";
+import { editorAiChat, editorAiChatOptions } from "./editorAi/chatHttp";
 import {
   MAX_HTML_BYTES,
   embedProxyErrorPage,
@@ -93,6 +94,18 @@ http.route({
   path: "/ai/chat",
   method: "POST",
   handler: canvasAiChat,
+});
+
+http.route({
+  path: "/ai/editor-chat",
+  method: "OPTIONS",
+  handler: editorAiChatOptions,
+});
+
+http.route({
+  path: "/ai/editor-chat",
+  method: "POST",
+  handler: editorAiChat,
 });
 
 export default http;

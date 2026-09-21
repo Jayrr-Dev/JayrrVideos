@@ -39,9 +39,11 @@ import {
   collectOverlapBands,
   collectSnapPointsMs,
   EDITOR_AUDIO_TYPE,
+  EDITOR_HTML_TYPE,
   EDITOR_SOUND_TYPE,
   EDITOR_TRANSITION_OPTIONS,
   formatEditorClock,
+  isEditorHtmlClip,
   MAX_STACK_LANES,
   SEQUENCE_LANE_ID,
   snapClipStart,
@@ -972,7 +974,7 @@ const useClipFilmstripFrames = (
   useEffect(() => {
     let cancelled = false;
     setFrames(null);
-    if (!clip.url || !ownerDocument || sliceCount < 1) {
+    if (isEditorHtmlClip(clip) || !clip.url || !ownerDocument || sliceCount < 1) {
       return;
     }
     void getClipFilmstrip({
@@ -990,9 +992,7 @@ const useClipFilmstripFrames = (
       cancelled = true;
     };
   }, [
-    clip.url,
-    clip.durationMs,
-    clip.sourceOffsetMs,
+    clip,
     ownerDocument,
     sliceCount,
   ]);
@@ -1065,12 +1065,13 @@ const ClipFace = ({
   }, []);
   const isSound =
     clip.type === EDITOR_SOUND_TYPE || clip.type === EDITOR_AUDIO_TYPE;
+  const skipFilmstrip = isSound || clip.type === EDITOR_HTML_TYPE;
   const frames = useClipFilmstripFrames(
     clip,
-    isSound ? 0 : sliceCount,
-    isSound ? null : ownerDocument,
+    skipFilmstrip ? 0 : sliceCount,
+    skipFilmstrip ? null : ownerDocument,
   );
-  const slices = isSound
+  const slices = skipFilmstrip
     ? []
     : filmstripSources(
         sliceCount,
@@ -1094,6 +1095,7 @@ const ClipFace = ({
       }${selected ? " is-selected" : ""}${playhead ? " is-playhead" : ""}${
         dragging ? " is-dragging" : ""
       }${hidden ? " is-hidden" : ""}`}
+      data-clip-id={clip.id}
       data-shade={clipShadeIndex(clip.id)}
       style={mergedStyle}
       title={clip.label}

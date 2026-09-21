@@ -9,7 +9,9 @@ import {
   useMemo,
   useRef,
   useState,
+  type Dispatch,
   type ReactNode,
+  type SetStateAction,
 } from "react";
 
 import type { NonDeletedExcalidrawElement } from "@excalidraw/element/types";
@@ -21,10 +23,14 @@ import { jayrrLocalSoundUrl } from "../../sounds/jayrrSoundPlayback";
 import {
   buildEditorTimeline,
   EDITOR_CLIP_TYPE,
+  EDITOR_HTML_TYPE,
+  EDITOR_PX_PER_SECOND_OPTIONS,
   EDITOR_SOUND_TYPE,
   removeStackLane as foldStackLane,
+  isEditorHtmlClip,
   isEditorVideoClip,
   MAX_STACK_LANES,
+  moveClipsByLayer,
   newEditorClipId,
   newEditorLaneId,
   returnClipsAudio,
@@ -32,20 +38,30 @@ import {
   SEQUENCE_LANE_ID,
   sequenceEndMs,
   withFrozenStarts,
+  type EditorLayerDirection,
   type EditorProjectClip,
 } from "./buildEditorTimeline";
 import { publishEditorPlayback } from "./editorPlaybackBridge";
-import { isJayrrEditorPreviewElement } from "./editorPreviewModel";
+import {
+  getEditorPreviewAudio,
+  isJayrrEditorPreviewElement,
+  setEditorPreviewAudio,
+} from "./editorPreviewModel";
 import {
   parseStoredEditorClips,
+  parseStoredEditorView,
   parseStoredStackLanes,
   readStoredClips,
+  readStoredEditorView,
   readStoredStackLanes,
   recordingIdsFromStored,
   restoreProjectClips,
   stackLanesForClips,
   writeStoredClips,
+  writeStoredEditorView,
   writeStoredStackLanes,
+  type EditorZoomMode,
+  type StoredEditorView,
 } from "./editorProjectStore";
 import { insertEditorPreview } from "./insertEditorPreview";
 import { type EditorRecordingPick } from "./JayrrEditorAddRecordingDialog";
@@ -116,6 +132,14 @@ type EditorSessionValue = {
   stackLaneIds: readonly string[];
   addStackLane: () => void;
   removeStackLane: (laneId: string) => void;
+  moveSelectedByLayer: (direction: EditorLayerDirection) => void;
+  zoomMode: EditorZoomMode;
+  setZoomMode: (mode: EditorZoomMode) => void;
+  pxPerSecond: number;
+  setPxPerSecond: (px: number) => void;
+  selectedClipIds: string[];
+  setSelectedClipIds: Dispatch<SetStateAction<string[]>>;
+  snapshotView: () => StoredEditorView;
   timeline: ReturnType<typeof buildEditorTimeline>;
   currentTimeMs: number;
   playing: boolean;
@@ -132,6 +156,13 @@ type EditorSessionValue = {
   focusPreview: () => void;
   addRecording: (row: EditorRecordingPick) => string;
   addSound: (row: JayrrSoundPick) => string;
+  addHtmlClip: (row: {
+    label: string;
+    html: string;
+    durationMs: number;
+    width?: number;
+    height?: number;
+  }) => string;
   separateAudio: (clipIds: readonly string[]) => string[];
   returnAudio: (clipIds: readonly string[]) => string[];
   loadProject: (projectId: Id<"editorProjects">) => Promise<void>;
@@ -164,8 +195,17 @@ export const JayrrEditorSession = ({ children }: { children: ReactNode }) => {
   const [clips, setClips] = useState<EditorProjectClip[]>([]);
   const [stackLaneIds, setStackLaneIds] =
     useState<readonly string[]>(readStoredStackLanes);
+  const [zoomMode, setZoomModeState] = useState<EditorZoomMode>(
+    () => readStoredEditorView().zoomMode,
+  );
+  const [pxPerSecond, setPxPerSecondState] = useState(
+    () => readStoredEditorView().pxPerSecond,
+  );
+  const [selectedClipIds, setSelectedClipIdsState] = useState<string[]>(
+    () => readStoredEditorView().selectedClipIds,
+  );
   const [previewElementId, setPreviewElementId] = useState<string | null>(
-    readStoredPreviewId,
+    () => readStoredEditorView().previewElementId || readStoredPreviewId(),
   );
   const [selectedElementIds, setSelectedElementIds] = useState<
     Record<string, boolean>
@@ -178,6 +218,14 @@ export const JayrrEditorSession = ({ children }: { children: ReactNode }) => {
   const redoStackRef = useRef<EditorHistorySnapshot[]>([]);
   clipsRef.current = clips;
   stackLaneIdsRef.current = stackLaneIds;
+
+  useEffect(() => {
+    const alive = new Set(clips.map((clip) => clip.id));
+    setSelectedClipIdsState((current) => {
+      const next = current.filter((id) => alive.has(id));
+      return next.length === current.length ? current : next;
+    });
+  }, [clips]);
 
   useEffect(() => {
     if (!apiExcal) {
@@ -292,6 +340,57 @@ export const JayrrEditorSession = ({ children }: { children: ReactNode }) => {
     writeStoredClips(frozen);
   }, []);
 
+  const snapshotView = useCallback((): StoredEditorView => {
+    const audio = getEditorPreviewAudio();
+    return {
+      zoomMode,
+      pxPerSecond,
+      currentTimeMs,
+      selectedClipIds,
+      previewElementId,
+      volume: audio.volume,
+      muted: audio.muted,
+    };
+  }, [currentTimeMs, previewElementId, pxPerSecond, selectedClipIds, zoomMode]);
+
+  const setZoomMode = useCallback((mode: EditorZoomMode) => {
+    setZoomModeState(mode);
+  }, []);
+
+  const setPxPerSecond = useCallback((px: number) => {
+    if (!(EDITOR_PX_PER_SECOND_OPTIONS as readonly number[]).includes(px)) {
+      return;
+    }
+    setPxPerSecondState(px);
+    setZoomModeState("fixed");
+  }, []);
+
+  const setSelectedClipIds = useCallback<Dispatch<SetStateAction<string[]>>>(
+    (ids) => {
+      setSelectedClipIdsState(ids);
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (playing) {
+      return;
+    }
+    writeStoredEditorView(snapshotView());
+  }, [playing, snapshotView]);
+
+  const pendingSeekRef = useRef<number | null>(
+    readStoredEditorView().currentTimeMs || null,
+  );
+  useEffect(() => {
+    const pending = pendingSeekRef.current;
+    if (pending == null || pending <= 0 || timeline.totalMs <= 0) {
+      return;
+    }
+    pendingSeekRef.current = null;
+    seek(pending);
+  }, [seek, timeline.totalMs]);
+
   const applyHistorySnapshot = useCallback(
     (snapshot: EditorHistorySnapshot) => {
       skipHistoryRef.current = true;
@@ -362,6 +461,25 @@ export const JayrrEditorSession = ({ children }: { children: ReactNode }) => {
       writeStoredStackLanes(next.stackLaneIds);
     },
     [clips, persist, stackLaneIds],
+  );
+
+  const moveSelectedByLayer = useCallback(
+    (direction: EditorLayerDirection) => {
+      const next = moveClipsByLayer({
+        clips: clipsRef.current,
+        clipIds: selectedClipIds,
+        stackLaneIds: stackLaneIdsRef.current,
+        direction,
+      });
+      if (!next) {
+        return;
+      }
+      persist(next.clips);
+      stackLaneIdsRef.current = next.stackLaneIds;
+      setStackLaneIds(next.stackLaneIds);
+      writeStoredStackLanes(next.stackLaneIds);
+    },
+    [persist, selectedClipIds],
   );
 
   const selectedLinkable = useMemo(() => {
@@ -477,6 +595,32 @@ export const JayrrEditorSession = ({ children }: { children: ReactNode }) => {
     [clips, persist],
   );
 
+  const addHtmlClip = useCallback(
+    (row: {
+      label: string;
+      html: string;
+      durationMs: number;
+      width?: number;
+      height?: number;
+    }) => {
+      const frozen = withFrozenStarts(clips);
+      const next: EditorProjectClip = {
+        id: newEditorClipId(),
+        type: EDITOR_HTML_TYPE,
+        html: row.html,
+        label: row.label.trim() || "AI clip",
+        durationMs: Math.max(1, Math.round(row.durationMs)),
+        laneId: SEQUENCE_LANE_ID,
+        laneStartMs: sequenceEndMs(frozen),
+        ...(typeof row.width === "number" ? { width: row.width } : {}),
+        ...(typeof row.height === "number" ? { height: row.height } : {}),
+      };
+      persist([...frozen, next]);
+      return next.id;
+    },
+    [clips, persist],
+  );
+
   const separateAudio = useCallback(
     (clipIds: readonly string[]) => {
       const result = separateClipsAudio(clips, clipIds, stackLaneIds);
@@ -555,18 +699,38 @@ export const JayrrEditorSession = ({ children }: { children: ReactNode }) => {
         throw new Error("Could not restore clips from this project.");
       }
       applyRestored(restored, parseStoredStackLanes(lanesParsed));
+      if (project.stateJson) {
+        try {
+          const view = parseStoredEditorView(JSON.parse(project.stateJson));
+          setZoomModeState(view.zoomMode);
+          setPxPerSecondState(view.pxPerSecond);
+          setSelectedClipIdsState(view.selectedClipIds);
+          if (view.previewElementId) {
+            linkPreview(view.previewElementId);
+          }
+          setEditorPreviewAudio({
+            volume: view.volume,
+            muted: view.muted,
+          });
+          writeStoredEditorView(view);
+          seek(view.currentTimeMs);
+        } catch {
+          // Keep restored clips even if view payload is invalid.
+        }
+      }
       apiExcal?.setToast({
         message: `Loaded "${project.name}".`,
         closable: true,
       });
     },
-    [apiExcal, applyRestored],
+    [apiExcal, applyRestored, linkPreview, seek],
   );
 
-  const hasVideo = clips.some(isEditorVideoClip);
+  const hasVisual =
+    clips.some(isEditorVideoClip) || clips.some(isEditorHtmlClip);
   const disabled =
     (timeline.sequence.length === 0 && timeline.overlays.length === 0) ||
-    (hasVideo && !previewElementId);
+    (hasVisual && !previewElementId);
 
   const value = useMemo(
     (): EditorSessionValue => ({
@@ -577,6 +741,14 @@ export const JayrrEditorSession = ({ children }: { children: ReactNode }) => {
       stackLaneIds,
       addStackLane,
       removeStackLane,
+      moveSelectedByLayer,
+      zoomMode,
+      setZoomMode,
+      pxPerSecond,
+      setPxPerSecond,
+      selectedClipIds,
+      setSelectedClipIds,
+      snapshotView,
       timeline,
       currentTimeMs,
       playing,
@@ -593,6 +765,7 @@ export const JayrrEditorSession = ({ children }: { children: ReactNode }) => {
       focusPreview,
       addRecording,
       addSound,
+      addHtmlClip,
       separateAudio,
       returnAudio,
       loadProject,
@@ -603,9 +776,11 @@ export const JayrrEditorSession = ({ children }: { children: ReactNode }) => {
     [
       addRecording,
       addSound,
+      addHtmlClip,
       separateAudio,
       returnAudio,
       addStackLane,
+      moveSelectedByLayer,
       redo,
       undo,
       canQuery,
@@ -623,13 +798,20 @@ export const JayrrEditorSession = ({ children }: { children: ReactNode }) => {
       play,
       playing,
       previewElementId,
+      pxPerSecond,
       removeStackLane,
       seek,
+      selectedClipIds,
       selectedLinkable,
+      setPxPerSecond,
+      setSelectedClipIds,
+      setZoomMode,
+      snapshotView,
       stackLaneIds,
       stop,
       timeline,
       togglePlay,
+      zoomMode,
     ],
   );
 

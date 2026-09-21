@@ -127,11 +127,13 @@ export const isEditorBlendMode = (value: unknown): value is EditorBlendMode =>
 export const EDITOR_CLIP_TYPE = "clip" as const;
 export const EDITOR_SOUND_TYPE = "sound" as const;
 export const EDITOR_AUDIO_TYPE = "audio" as const;
+export const EDITOR_HTML_TYPE = "html" as const;
 
 export type EditorTimelineItemType =
   | typeof EDITOR_CLIP_TYPE
   | typeof EDITOR_SOUND_TYPE
-  | typeof EDITOR_AUDIO_TYPE;
+  | typeof EDITOR_AUDIO_TYPE
+  | typeof EDITOR_HTML_TYPE;
 
 export const isEditorClipType = (
   value: unknown,
@@ -145,12 +147,17 @@ export const isEditorAudioType = (
   value: unknown,
 ): value is typeof EDITOR_AUDIO_TYPE => value === EDITOR_AUDIO_TYPE;
 
+export const isEditorHtmlType = (
+  value: unknown,
+): value is typeof EDITOR_HTML_TYPE => value === EDITOR_HTML_TYPE;
+
 export const isEditorItemType = (
   value: unknown,
 ): value is EditorTimelineItemType =>
   isEditorClipType(value) ||
   isEditorSoundType(value) ||
-  isEditorAudioType(value);
+  isEditorAudioType(value) ||
+  isEditorHtmlType(value);
 
 export type EditorSoundSource = {
   soundId: string;
@@ -193,11 +200,22 @@ export type EditorAudioClip = EditorRecordingSource &
     sourceClipId?: string;
   };
 
+export type EditorHtmlClip = EditorItemPlacement & {
+  type: typeof EDITOR_HTML_TYPE;
+  html: string;
+  label: string;
+  durationMs: number;
+  sourceOffsetMs?: number;
+  width?: number;
+  height?: number;
+};
+
 /** User-ordered item on the timeline (before layout). */
 export type EditorProjectClip =
   | EditorVideoClip
   | EditorSoundClip
-  | EditorAudioClip;
+  | EditorAudioClip
+  | EditorHtmlClip;
 
 export const isEditorVideoClip = (
   clip: EditorProjectClip,
@@ -211,10 +229,19 @@ export const isEditorAudioClip = (
   clip: EditorProjectClip,
 ): clip is EditorAudioClip => clip.type === EDITOR_AUDIO_TYPE;
 
+export const isEditorHtmlClip = (
+  clip: EditorProjectClip,
+): clip is EditorHtmlClip => clip.type === EDITOR_HTML_TYPE;
+
 export const isEditorAudioLikeClip = (
   clip: EditorProjectClip,
 ): clip is EditorSoundClip | EditorAudioClip =>
   isEditorSoundClip(clip) || isEditorAudioClip(clip);
+
+export const isEditorVisualClip = (
+  clip: EditorProjectClip,
+): clip is EditorVideoClip | EditorHtmlClip =>
+  isEditorVideoClip(clip) || isEditorHtmlClip(clip);
 
 export type EditorClip = EditorProjectClip & {
   startMs: number;
@@ -439,6 +466,153 @@ export const moveEditorClip = ({
     laneStartMs: nextStart,
   };
   return frozen.map((clip) => (clip.id === clipId ? updated : clip));
+};
+
+export type EditorLayerDirection = "back" | "backward" | "forward" | "front";
+
+const laneOrderFor = (stackLaneIds: readonly string[]) => [
+  SEQUENCE_LANE_ID,
+  ...stackLaneIds,
+];
+
+const laneIndexIn = (laneOrder: readonly string[], laneId: string) => {
+  const index = laneOrder.indexOf(laneId);
+  if (index < 0) {
+    return 0;
+  }
+  return index;
+};
+
+/** Which layer moves can change at least one selected clip. */
+export const clipLayerMoveAvailability = ({
+  clips,
+  clipIds,
+  stackLaneIds,
+}: {
+  clips: readonly { id: string; laneId?: string }[];
+  clipIds: readonly string[];
+  stackLaneIds: readonly string[];
+}): Record<EditorLayerDirection, boolean> => {
+  const none = {
+    back: false,
+    backward: false,
+    forward: false,
+    front: false,
+  };
+  const selected = new Set(clipIds);
+  if (selected.size === 0) {
+    return none;
+  }
+  const laneOrder = laneOrderFor(stackLaneIds);
+  const lastIndex = laneOrder.length - 1;
+  const indexes: number[] = [];
+  for (const clip of clips) {
+    if (!selected.has(clip.id)) {
+      continue;
+    }
+    indexes.push(laneIndexIn(laneOrder, clipLaneId(clip)));
+  }
+  if (indexes.length === 0) {
+    return none;
+  }
+  let aboveBack = false;
+  let belowFront = false;
+  let onFront = false;
+  for (const index of indexes) {
+    if (index > 0) {
+      aboveBack = true;
+    }
+    if (index < lastIndex) {
+      belowFront = true;
+    }
+    if (index === lastIndex) {
+      onFront = true;
+    }
+  }
+  let forward = belowFront;
+  if (!forward && onFront && stackLaneIds.length < MAX_STACK_LANES) {
+    forward = true;
+  }
+  return {
+    back: aboveBack,
+    backward: aboveBack,
+    forward,
+    front: belowFront,
+  };
+};
+
+/**
+ * Move selected clips across columns. Left is back, right is front.
+ * Forward past the last column adds one column when a slot remains.
+ * Start times stay put.
+ */
+export const moveClipsByLayer = ({
+  clips,
+  clipIds,
+  stackLaneIds,
+  direction,
+}: {
+  clips: readonly EditorProjectClip[];
+  clipIds: readonly string[];
+  stackLaneIds: readonly string[];
+  direction: EditorLayerDirection;
+}): { clips: EditorProjectClip[]; stackLaneIds: string[] } | null => {
+  const selected = new Set(clipIds);
+  if (selected.size === 0) {
+    return null;
+  }
+  const frozen = withFrozenStarts(clips);
+  const laneOrder = laneOrderFor(stackLaneIds);
+  const lastIndex = laneOrder.length - 1;
+  let nextStackLaneIds = [...stackLaneIds];
+  let addedLaneId: string | null = null;
+
+  const destinationLane = (laneId: string) => {
+    const index = laneIndexIn(laneOrder, laneId);
+    if (direction === "back") {
+      return SEQUENCE_LANE_ID;
+    }
+    if (direction === "backward") {
+      return laneOrder[Math.max(0, index - 1)] ?? SEQUENCE_LANE_ID;
+    }
+    if (direction === "front") {
+      return laneOrder[lastIndex] ?? SEQUENCE_LANE_ID;
+    }
+    if (index < lastIndex) {
+      return laneOrder[index + 1] ?? laneId;
+    }
+    if (addedLaneId) {
+      return addedLaneId;
+    }
+    if (nextStackLaneIds.length >= MAX_STACK_LANES) {
+      return laneId;
+    }
+    addedLaneId = newEditorLaneId();
+    nextStackLaneIds = [...nextStackLaneIds, addedLaneId];
+    return addedLaneId;
+  };
+
+  let changed = false;
+  const nextClips = frozen.map((clip) => {
+    if (!selected.has(clip.id)) {
+      return clip;
+    }
+    const fromLane = clipLaneId(clip);
+    const toLane = destinationLane(fromLane);
+    if (toLane === fromLane) {
+      return clip;
+    }
+    changed = true;
+    return {
+      ...clip,
+      laneId: toLane,
+      laneStartMs: clip.laneStartMs ?? 0,
+    };
+  });
+  if (!changed) {
+    return null;
+  }
+  return { clips: nextClips, stackLaneIds: nextStackLaneIds };
 };
 
 /** Drop a stack column and fold its clips onto the column to its left. */
@@ -772,6 +946,11 @@ export const videoClipAtTime = (
   timeMs: number,
 ): EditorClip | null => clipAtTime(clips.filter(isEditorVideoClip), timeMs);
 
+export const visualClipAtTime = (
+  clips: readonly EditorClip[],
+  timeMs: number,
+): EditorClip | null => clipAtTime(clips.filter(isEditorVisualClip), timeMs);
+
 export const clipAtTime = (
   clips: readonly EditorClip[],
   timeMs: number,
@@ -917,6 +1096,13 @@ export const getMergeableClips = (
       isEditorAudioClip(first) &&
       isEditorAudioClip(cur) &&
       cur.recordingId !== first.recordingId
+    ) {
+      return null;
+    }
+    if (
+      isEditorHtmlClip(first) &&
+      isEditorHtmlClip(cur) &&
+      cur.html !== first.html
     ) {
       return null;
     }

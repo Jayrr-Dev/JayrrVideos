@@ -1,0 +1,213 @@
+.excalidraw {
+  .jayrr-editor-ai .Dialog__content {
+    max-height: min(40rem, 82vh);
+  }
+
+  .jayrr-editor-ai .Dialog__chrome {
+    margin-bottom: 0.75rem;
+    padding-bottom: 0;
+    border-bottom: none;
+  }
+
+  .jayrr-editor-ai .Dialog__title {
+    margin-bottom: 0;
+  }
+
+  .jayrr-editor-ai__title-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    min-width: 0;
+  }
+
+  .jayrr-editor-ai__info {
+    display: inline-flex;
+    flex: 0 0 auto;
+    color: var(--icon-fill-color);
+    cursor: help;
+  }
+
+  .jayrr-editor-ai__info svg {
+    width: 1rem;
+    height: 1rem;
+  }
+
+  .jayrr-editor-ai__body {
+    display: flex;
+    flex-direction: column;
+    min-height: 18rem;
+    max-height: min(30rem, 58vh);
+  }
+
+  .jayrr-editor-ai__transcript {
+    flex: 1 1 auto;
+    min-height: 12rem;
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+    padding-bottom: 0.5rem;
+  }
+
+  .jayrr-editor-ai__empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.55rem;
+    text-align: center;
+    padding: 1.5rem 0.5rem;
+    color: var(--text-primary-color);
+
+    p {
+      margin: 0;
+      font-weight: 600;
+    }
+  }
+
+  .jayrr-editor-ai__suggestions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.4rem;
+
+    button {
+      border: 1px solid var(--color-primary);
+      border-radius: 999px;
+      background: var(--color-primary-light);
+      color: var(--color-primary);
+      font-size: 0.75rem;
+      padding: 0.25rem 0.65rem;
+      cursor: pointer;
+    }
+  }
+
+  .jayrr-editor-ai-user {
+    align-self: flex-end;
+    max-width: 90%;
+    padding: 0.5rem 0.7rem;
+    border-radius: 0.85rem 0.85rem 0.25rem 0.85rem;
+    background: var(--color-primary);
+    color: var(--color-icon-white);
+    font-size: 0.85rem;
+    white-space: pre-wrap;
+  }
+
+  .jayrr-editor-ai-assistant {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.35rem;
+    max-width: 95%;
+  }
+
+  .jayrr-editor-ai-md {
+    padding: 0.55rem 0.7rem;
+    border-radius: 0.85rem 0.85rem 0.85rem 0.25rem;
+    background: var(--island-bg-color);
+    border: 1px solid var(--sidebar-border-color);
+    font-size: 0.85rem;
+    white-space: pre-wrap;
+  }
+
+  .jayrr-editor-ai-reason {
+    max-width: 100%;
+    max-height: 5rem;
+    overflow: auto;
+    padding: 0.4rem 0.55rem;
+    border-radius: 0.6rem;
+    background: var(--color-primary-light);
+    color: var(--color-primary);
+    font-size: 0.75rem;
+    white-space: pre-wrap;
+  }
+
+  .jayrr-editor-ai-chip {
+    display: inline-flex;
+    width: fit-content;
+    max-width: 100%;
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    border: 1px solid var(--sidebar-border-color);
+  }
+
+  .jayrr-editor-ai-chip--busy {
+    border-color: var(--color-primary);
+    background: var(--color-primary-light);
+    color: var(--color-primary);
+  }
+
+  .jayrr-editor-ai-chip--done {
+    color: var(--color-primary);
+  }
+
+  .jayrr-editor-ai-chip--error {
+    color: var(--color-danger);
+    border-color: var(--color-danger);
+  }
+
+  .jayrr-editor-ai-error {
+    padding: 0.5rem 0.65rem;
+    border-radius: 0.6rem;
+    background: var(--color-danger-background, #fff0f0);
+    color: var(--color-danger);
+    font-size: 0.8rem;
+  }
+
+  .jayrr-editor-ai__composer {
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--sidebar-border-color);
+  }
+
+  .jayrr-editor-ai__composer-box {
+    position: relative;
+    display: flex;
+    align-items: flex-end;
+    border: 1px solid var(--color-primary);
+    border-radius: 0.7rem;
+    background: var(--island-bg-color);
+
+    textarea {
+      flex: 1;
+      min-height: 2.4rem;
+      max-height: 6.5rem;
+      resize: none;
+      border: none;
+      border-radius: 0.7rem;
+      padding: 0.45rem 2.15rem 0.45rem 0.65rem;
+      background: transparent;
+      color: var(--text-primary-color);
+      font: inherit;
+      font-size: 0.85rem;
+      line-height: 1.35;
+
+      &:focus {
+        outline: none;
+      }
+    }
+  }
+
+  .jayrr-editor-ai__send {
+    position: absolute;
+    right: 0.2rem;
+    bottom: 0.15rem;
+    width: 1.85rem;
+    height: 1.85rem;
+    min-height: 0;
+    padding: 0;
+    border: none;
+    background: none;
+    box-shadow: none;
+    color: var(--color-primary);
+
+    svg {
+      width: 1rem;
+      height: 1rem;
+    }
+
+    &:disabled {
+      opacity: 0.35;
+    }
+  }
+}
