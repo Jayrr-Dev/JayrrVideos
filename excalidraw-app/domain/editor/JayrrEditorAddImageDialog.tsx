@@ -612,67 +612,57 @@ export const JayrrEditorAddImageDialog = ({
         ) : null}
         {source === "generate" ? (
           <>
-            <div className="jayrr-editor-add-stock__generate-row">
-              <Field label="Model">
-                <select
-                  className="jayrr-ui-input"
-                  value={modelId}
-                  disabled={busy || models.length === 0}
-                  aria-label="Image model"
-                  onChange={(event) => setModelId(event.currentTarget.value)}
-                >
-                  {models.length === 0 ? (
-                    <option value="">
-                      {error ? "Auto" : "Loading models…"}
+            <div className="jayrr-editor-add-stock__generate-bar">
+              <select
+                className="jayrr-editor-add-stock__opt"
+                value={aspectRatio}
+                disabled={busy}
+                aria-label="Aspect ratio"
+                onChange={(event) => setAspectRatio(event.currentTarget.value)}
+              >
+                {aspectOptions.map((item) => (
+                  <option key={item} value={item}>
+                    {item}
+                  </option>
+                ))}
+              </select>
+              <select
+                className="jayrr-editor-add-stock__model"
+                value={modelId}
+                disabled={busy || models.length === 0}
+                aria-label="Image model"
+                onChange={(event) => setModelId(event.currentTarget.value)}
+              >
+                {models.length === 0 ? (
+                  <option value="">{error ? "Auto" : "Loading…"}</option>
+                ) : (
+                  models.map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.name}
                     </option>
-                  ) : (
-                    models.map((model) => (
-                      <option key={model.id} value={model.id}>
-                        {model.name}
-                      </option>
-                    ))
-                  )}
-                </select>
-              </Field>
-              <Field label="Aspect">
-                <select
-                  className="jayrr-ui-input"
-                  value={aspectRatio}
-                  disabled={busy}
-                  aria-label="Aspect ratio"
-                  onChange={(event) =>
-                    setAspectRatio(event.currentTarget.value)
-                  }
-                >
-                  {aspectOptions.map((item) => (
-                    <option key={item} value={item}>
-                      {item}
-                    </option>
-                  ))}
-                </select>
-              </Field>
+                  ))
+                )}
+              </select>
             </div>
-            <Field label="Prompt">
-              <textarea
-                className="jayrr-ui-input jayrr-editor-add-stock__prompt"
-                value={prompt}
-                rows={3}
-                disabled={!canQuery || busy}
-                placeholder="A red panda astronaut in studio lighting"
-                aria-label="Image prompt"
-                onChange={(event) => setPrompt(event.currentTarget.value)}
-                onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => {
-                  if (
-                    event.key === "Enter" &&
-                    !event.shiftKey &&
-                    !event.nativeEvent.isComposing
-                  ) {
-                    event.preventDefault();
-                    void runGenerate();
-                  }
-                }}
-              />
-            </Field>
+            <textarea
+              className="jayrr-ui-input jayrr-editor-add-stock__prompt"
+              value={prompt}
+              rows={3}
+              disabled={!canQuery || busy}
+              placeholder="Describe the image…"
+              aria-label="Image prompt"
+              onChange={(event) => setPrompt(event.currentTarget.value)}
+              onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => {
+                if (
+                  event.key === "Enter" &&
+                  !event.shiftKey &&
+                  !event.nativeEvent.isComposing
+                ) {
+                  event.preventDefault();
+                  void runGenerate();
+                }
+              }}
+            />
           </>
         ) : null}
         <div className="jayrr-editor-add-stock__body">{listBody}</div>
@@ -693,11 +683,11 @@ export const JayrrEditorAddImageDialog = ({
           {source === "generate" ? (
             <Button
               type="submit"
-              variant="secondary"
+              variant={generated ? "secondary" : "primary"}
               busy={busy}
               disabled={!canGenerate}
             >
-              Generate
+              {busy ? "Generating…" : generated ? "Generate again" : "Generate"}
             </Button>
           ) : null}
           <Button

@@ -554,28 +554,18 @@ export const ClassifierWidget = ({ elementId }: { elementId: string }) => {
 
   const names = useMemo(() => classNames(config), [config]);
   const cards = useMemo(() => {
-    void conversation.version;
-    return buildSpeakerCards(
-      config.contextEnabled
-        ? scores.filter((row) =>
-            conversation.context.turnInTopic(row.turnId, conversation.topicId),
-          )
-        : live
-        ? [...scores, live]
-        : scores,
-      speakerNames,
-      names,
+    const speakerByTurn = new Map(
+      turns.map((turn) => [turn.id, turn.speaker] as const),
     );
-  }, [
-    live,
-    names,
-    scores,
-    speakerNames,
-    config.contextEnabled,
-    conversation.topicId,
-    conversation.context,
-    conversation.version,
-  ]);
+    const rows = (live ? [...scores, live] : scores).map((row) => {
+      const speaker = speakerByTurn.get(row.turnId);
+      if (speaker === undefined || speaker === row.speaker) {
+        return row;
+      }
+      return { ...row, speaker };
+    });
+    return buildSpeakerCards(rows, speakerNames, names);
+  }, [live, names, scores, speakerNames, turns]);
   const preview =
     livePhrase.length > SNIPPET_CHARS
       ? livePhrase.slice(-SNIPPET_CHARS)

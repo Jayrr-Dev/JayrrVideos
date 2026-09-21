@@ -49,8 +49,14 @@ const GENERATE_INFO =
   "Describe a shot. Jayrr generates video with OpenRouter and adds it to the sequence. This uses credits.";
 
 const SUGGESTIONS = [
-  "Add a 4-second title card that says Launch day",
-  "Create a lower-third intro clip",
+  {
+    label: "Title card",
+    prompt: "Add a 4-second title card that says Launch day",
+  },
+  {
+    label: "Lower third",
+    prompt: "Create a lower-third intro clip",
+  },
 ] as const;
 
 const SendPlaneIcon = (
@@ -429,12 +435,13 @@ export const JayrrEditorAiDialog = ({ onClose }: JayrrEditorAiDialogProps) => {
                 <div className="jayrr-editor-ai__suggestions">
                   {SUGGESTIONS.map((suggestion) => (
                     <button
-                      key={suggestion}
+                      key={suggestion.prompt}
                       type="button"
                       disabled={busy}
-                      onClick={() => submit(suggestion)}
+                      title={suggestion.prompt}
+                      onClick={() => setInput(suggestion.prompt)}
                     >
-                      {suggestion}
+                      {suggestion.label}
                     </button>
                   ))}
                 </div>

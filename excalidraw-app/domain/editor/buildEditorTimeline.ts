@@ -1117,9 +1117,7 @@ export const setClipsLabel = (
   }
   const frozen = withFrozenStarts(clips);
   const update = new Set(clipIds);
-  if (
-    !frozen.some((clip) => update.has(clip.id) && clip.label !== nextLabel)
-  ) {
+  if (!frozen.some((clip) => update.has(clip.id) && clip.label !== nextLabel)) {
     return null;
   }
   return frozen.map((clip) =>
@@ -1785,8 +1783,12 @@ export const returnClipsAudio = (
         isEditorAudioClip(other) &&
         audioBelongsToVideo(other, clip),
     );
-    const { muted: _muted, volume: _volume, audioMuted: _audioMuted, ...rest } =
-      clip;
+    const {
+      muted: _muted,
+      volume: _volume,
+      audioMuted: _audioMuted,
+      ...rest
+    } = clip;
     return [
       {
         ...rest,

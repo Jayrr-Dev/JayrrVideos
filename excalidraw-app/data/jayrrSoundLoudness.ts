@@ -1,6 +1,8 @@
 const STORED_BARS = 512;
 const DECODE_LIMIT = 2;
 const SILENCE_DB = -96;
+/** Display floor: 0 dBFS fills the clip, this dB is a flat line. */
+export const WAVEFORM_DB_FLOOR = -48;
 
 export type WaveformAnalysis = {
   peaks: Float32Array;
@@ -56,7 +58,8 @@ const analyzeBuffer = (buffer: AudioBuffer): WaveformAnalysis => {
 
   for (let i = 0; i < STORED_BARS; i += 1) {
     const start = i * bucket;
-    const end = i === STORED_BARS - 1 ? length : Math.min(length, start + bucket);
+    const end =
+      i === STORED_BARS - 1 ? length : Math.min(length, start + bucket);
     let max = 0;
     for (let c = 0; c < channels.length; c += 1) {
       const data = channels[c];
@@ -75,20 +78,6 @@ const analyzeBuffer = (buffer: AudioBuffer): WaveformAnalysis => {
     peaks[i] = max;
   }
 
-  let peak = 0;
-  for (let i = 0; i < peaks.length; i += 1) {
-    const value = peaks[i] ?? 0;
-    if (value > peak) {
-      peak = value;
-    }
-  }
-  if (peak > 0) {
-    const gain = 1 / peak;
-    for (let i = 0; i < peaks.length; i += 1) {
-      peaks[i] *= gain;
-    }
-  }
-
   const rms = Math.sqrt(sumSq / (length * numberOfChannels));
   const loudnessDb = rms <= 1e-10 ? SILENCE_DB : 20 * Math.log10(rms);
   return { peaks, loudnessDb };
@@ -102,6 +91,12 @@ const decode = async (src: string): Promise<WaveformAnalysis | null> => {
   const bytes = await res.arrayBuffer();
   const buffer = await context().decodeAudioData(bytes.slice(0));
   return analyzeBuffer(buffer);
+};
+
+const finishJob = (job: Job) => {
+  active -= 1;
+  inflight.delete(job.src);
+  pump();
 };
 
 const pump = () => {
@@ -120,11 +115,7 @@ const pump = () => {
         job.resolve(analysis);
       })
       .catch(() => job.resolve(null))
-      .finally(() => {
-        active -= 1;
-        inflight.delete(job.src);
-        pump();
-      });
+      .finally(() => finishJob(job));
   }
 };
 
@@ -212,6 +203,18 @@ export const subscribeLoudnessDb = (
   };
 };
 
+/** Linear peak 0–1 → waveform height 0–1 from dBFS vs `WAVEFORM_DB_FLOOR`. */
+export const amplitudeToWaveScale = (amplitude: number) => {
+  if (!Number.isFinite(amplitude) || amplitude <= 0) {
+    return 0;
+  }
+  const db = 20 * Math.log10(Math.min(1, amplitude));
+  if (db <= WAVEFORM_DB_FLOOR) {
+    return 0;
+  }
+  return Math.min(1, (db - WAVEFORM_DB_FLOOR) / -WAVEFORM_DB_FLOOR);
+};
+
 export const resamplePeaks = (peaks: Float32Array, count: number) => {
   if (count <= 0) {
     return new Float32Array(0);
@@ -236,11 +239,7 @@ export const resamplePeaks = (peaks: Float32Array, count: number) => {
   return out;
 };
 
-export const slicePeaks = (
-  peaks: Float32Array,
-  start: number,
-  end: number,
-) => {
+export const slicePeaks = (peaks: Float32Array, start: number, end: number) => {
   if (peaks.length === 0) {
     return peaks;
   }

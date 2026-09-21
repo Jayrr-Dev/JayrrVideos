@@ -417,7 +417,11 @@ export const useEditorPlayback = ({
           soundNodesRef.current.set(clip.id, audio);
           registerEditorPreviewSound(clip.id, audio);
         }
-        applyPreviewMediaMix(audio, clipVolumeValue(clip), clipPlaybackMuted(clip));
+        applyPreviewMediaMix(
+          audio,
+          clipVolumeValue(clip),
+          clipPlaybackMuted(clip),
+        );
         const src = isEditorSoundClip(clip)
           ? jayrrSoundPlayUrls(clip.url || null, clip.path)[0]
           : clip.url;

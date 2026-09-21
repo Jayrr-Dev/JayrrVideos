@@ -297,11 +297,16 @@
     min-width: 16rem;
   }
 
-  .jayrr-editor-menu__header {
+  .jayrr-editor-menu__header,
+  .jayrr-editor-menu__footer {
     display: flex;
     align-items: center;
     gap: 0.08rem;
     width: 100%;
+  }
+
+  .jayrr-editor-menu__footer {
+    margin-top: auto;
   }
 
   .jayrr-editor-menu__icon {
@@ -406,6 +411,84 @@
     margin: 0.28rem 0.35rem;
     background: var(--default-border-color);
     border: 0;
+  }
+
+  .jayrr-editor-menu__volume {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    padding: 0.12rem 0.45rem 0.2rem;
+  }
+
+  .jayrr-editor-menu__volume-control {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
+
+  .jayrr-editor-menu__volume-btn {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    width: 1.7rem;
+    height: 1.7rem;
+    margin: 0;
+    padding: 0;
+    border: none;
+    border-radius: 0.3rem;
+    background: transparent;
+    color: var(--text-primary-color);
+    cursor: pointer;
+  }
+
+  .jayrr-editor-menu__volume-btn:hover {
+    background: var(--button-hover-bg);
+  }
+
+  .jayrr-editor-menu__volume-btn svg {
+    width: 1.05rem;
+    height: 1.05rem;
+  }
+
+  .jayrr-editor-menu__volume-slider {
+    flex: 1 1 auto;
+    min-width: 7.5rem;
+    height: 0.35rem;
+    appearance: none;
+    background: var(--color-gray-20, #e5e7eb);
+    border-radius: 999px;
+    outline: none;
+    cursor: pointer;
+  }
+
+  .jayrr-editor-menu__volume-slider::-webkit-slider-runnable-track {
+    height: 0.35rem;
+    border-radius: 999px;
+  }
+
+  .jayrr-editor-menu__volume-slider::-moz-range-track {
+    height: 0.35rem;
+    border-radius: 999px;
+    background: transparent;
+  }
+
+  .jayrr-editor-menu__volume-slider::-webkit-slider-thumb {
+    appearance: none;
+    width: 0.85rem;
+    height: 0.85rem;
+    margin-top: -0.25rem;
+    border-radius: 50%;
+    background: var(--color-primary);
+    border: none;
+  }
+
+  .jayrr-editor-menu__volume-slider::-moz-range-thumb {
+    width: 0.85rem;
+    height: 0.85rem;
+    border-radius: 50%;
+    background: var(--color-primary);
+    border: none;
   }
 
   .jayrr-editor-menu__item--danger[data-highlighted],

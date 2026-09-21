@@ -8,14 +8,19 @@ import {
 } from "react";
 
 import { Button } from "../../components/ui/Button";
-import { Field } from "../../components/ui/Field";
 import { api } from "../../convexClient";
 
 import { useJayrrEditorSession } from "./JayrrEditorSession";
 
 const GENERATE_SUGGESTIONS = [
-  "A wide shot of waves on a sunny beach",
-  "Close-up of coffee steam over a dark table",
+  {
+    label: "Sunny beach",
+    prompt: "A wide shot of waves on a sunny beach",
+  },
+  {
+    label: "Coffee steam",
+    prompt: "Close-up of coffee steam over a dark table",
+  },
 ] as const;
 
 const ASPECTS = ["16:9", "9:16", "1:1"] as const;
@@ -45,7 +50,7 @@ export const JayrrEditorAiGenerateTab = () => {
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>("16:9");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [status, setStatus] = useState<string | null>(null);
+  const [added, setAdded] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -120,7 +125,7 @@ export const JayrrEditorAiGenerateTab = () => {
     }
     setBusy(true);
     setError(null);
-    setStatus("Generating video… this can take a minute.");
+    setAdded(false);
     try {
       const row = await generate({
         prompt: value,
@@ -130,10 +135,9 @@ export const JayrrEditorAiGenerateTab = () => {
       });
       const clipId = addRecording(row);
       setSelectedClipIds([clipId]);
-      setStatus("Added to the timeline.");
+      setAdded(true);
       setPrompt("");
     } catch (caught) {
-      setStatus(null);
       setError(
         caught instanceof Error ? caught.message : "Video generation failed.",
       );
@@ -160,49 +164,25 @@ export const JayrrEditorAiGenerateTab = () => {
 
   return (
     <form className="jayrr-editor-ai__generate" onSubmit={onSubmit}>
-      <div className="jayrr-editor-ai__empty">
-        <p>Generate a video clip</p>
+      <div className="jayrr-editor-ai__generate-bar">
         <div className="jayrr-editor-ai__suggestions">
           {GENERATE_SUGGESTIONS.map((suggestion) => (
             <button
-              key={suggestion}
+              key={suggestion.prompt}
               type="button"
               disabled={busy}
+              title={suggestion.prompt}
               onClick={() => {
-                setPrompt(suggestion);
-                void submit(suggestion);
+                setPrompt(suggestion.prompt);
               }}
             >
-              {suggestion}
+              {suggestion.label}
             </button>
           ))}
         </div>
-      </div>
-      <div className="jayrr-editor-ai__generate-row">
-        <Field label="Model">
+        <div className="jayrr-editor-ai__generate-opts">
           <select
-            className="jayrr-ui-input"
-            value={modelId}
-            disabled={busy || models.length === 0}
-            aria-label="Video model"
-            onChange={(event) => setModelId(event.currentTarget.value)}
-          >
-            {models.length === 0 ? (
-              <option value="">{error ? "Auto" : "Loading models…"}</option>
-            ) : (
-              models.map((model) => (
-                <option key={model.id} value={model.id}>
-                  {model.name}
-                </option>
-              ))
-            )}
-          </select>
-        </Field>
-      </div>
-      <div className="jayrr-editor-ai__generate-row jayrr-editor-ai__generate-row--split">
-        <Field label="Length">
-          <select
-            className="jayrr-ui-input"
+            className="jayrr-editor-ai__opt"
             value={String(durationSec)}
             disabled={busy}
             aria-label="Clip length"
@@ -216,10 +196,8 @@ export const JayrrEditorAiGenerateTab = () => {
               </option>
             ))}
           </select>
-        </Field>
-        <Field label="Aspect">
           <select
-            className="jayrr-ui-input"
+            className="jayrr-editor-ai__opt"
             value={aspectRatio}
             disabled={busy}
             aria-label="Aspect ratio"
@@ -236,32 +214,48 @@ export const JayrrEditorAiGenerateTab = () => {
               </option>
             ))}
           </select>
-        </Field>
-      </div>
-      {status ? (
-        <div className="jayrr-editor-ai-chip jayrr-editor-ai-chip--busy">
-          {status}
+          <select
+            className="jayrr-editor-ai__model"
+            value={modelId}
+            disabled={busy || models.length === 0}
+            aria-label="Video model"
+            onChange={(event) => setModelId(event.currentTarget.value)}
+          >
+            {models.length === 0 ? (
+              <option value="">{error ? "Auto" : "Loading…"}</option>
+            ) : (
+              models.map((model) => (
+                <option key={model.id} value={model.id}>
+                  {model.name}
+                </option>
+              ))
+            )}
+          </select>
         </div>
-      ) : null}
-      {error ? <div className="jayrr-editor-ai-error">{error}</div> : null}
-      <div className="jayrr-editor-ai__composer-box">
-        <textarea
-          value={prompt}
-          rows={3}
-          disabled={busy}
-          onChange={(event) => setPrompt(event.target.value)}
-          onKeyDown={onKeyDown}
-          placeholder={busy ? "Generating…" : "Describe the clip to generate…"}
-          aria-label="Video prompt"
-        />
       </div>
+      {error ? <div className="jayrr-editor-ai-error">{error}</div> : null}
+      {added ? (
+        <p className="jayrr-editor-ai__generate-status">
+          Added to the timeline.
+        </p>
+      ) : null}
+      <textarea
+        className="jayrr-editor-ai__prompt"
+        value={prompt}
+        rows={3}
+        disabled={busy}
+        onChange={(event) => setPrompt(event.target.value)}
+        onKeyDown={onKeyDown}
+        placeholder={busy ? "Generating…" : "Describe the clip…"}
+        aria-label="Video prompt"
+      />
       <Button
         type="submit"
-        variant="primary"
+        variant={added ? "secondary" : "primary"}
         busy={busy}
         disabled={busy || !prompt.trim()}
       >
-        Generate
+        {busy ? "Generating…" : added ? "Generate again" : "Generate"}
       </Button>
     </form>
   );

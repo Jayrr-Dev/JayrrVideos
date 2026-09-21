@@ -39,9 +39,15 @@ import { DropdownMenu } from "radix-ui";
 
 import { Tooltip } from "../../components/ui/editor";
 
+import { JayrrSoundWaveform } from "../../sounds/JayrrSoundWaveform";
+
+import { jayrrSoundPlayUrls } from "../../sounds/jayrrSoundPlayback";
+
 import {
   clampEditorPxPerSecond,
+  clipAudioIsOff,
   clipLaneId,
+  clipVolumeValue,
   collectLaneOverlaps,
   collectOverlapBands,
   collectSnapPointsMs,
@@ -68,8 +74,6 @@ import {
   type OverlapBand,
 } from "./buildEditorTimeline";
 import { filmstripSliceCount, getClipFilmstrip } from "./captureClipFilmstrip";
-import { JayrrSoundWaveform } from "../../sounds/JayrrSoundWaveform";
-import { jayrrSoundPlayUrls } from "../../sounds/jayrrSoundPlayback";
 
 type ZoomMode = "fit" | "fixed";
 
@@ -1180,11 +1184,7 @@ const LaneHeader = ({
       </Tooltip>
     ) : null}
     {onRemove ? (
-      <Tooltip
-        label="Move clips left and remove column"
-        position="top"
-        asChild
-      >
+      <Tooltip label="Move clips left and remove column" position="top" asChild>
         <button
           type="button"
           className="jayrr-editor-timeline__remove-lane"
@@ -1192,9 +1192,9 @@ const LaneHeader = ({
           onClick={(event) => {
             event.stopPropagation();
             onRemove();
-        }}
-      >
-        {CloseIcon}
+          }}
+        >
+          {CloseIcon}
         </button>
       </Tooltip>
     ) : null}
@@ -1450,6 +1450,7 @@ const ClipFace = ({
   buttonRef,
   draggableProps,
   onSelect,
+  tooltip = true,
 }: {
   clip: EditorClip;
   pxPerMs: number;
@@ -1463,6 +1464,7 @@ const ClipFace = ({
   buttonRef?: (node: HTMLButtonElement | null) => void;
   draggableProps?: Record<string, unknown>;
   onSelect?: (toggle: boolean) => void;
+  tooltip?: boolean;
 }) => {
   const innerRef = useRef<HTMLButtonElement | null>(null);
   const setRefs = useCallback(
@@ -1484,8 +1486,8 @@ const ClipFace = ({
     clip.type === EDITOR_SOUND_TYPE
       ? jayrrSoundPlayUrls(clip.url, clip.path)
       : clip.type === EDITOR_AUDIO_TYPE
-        ? [clip.url]
-        : [];
+      ? [clip.url]
+      : [];
   const sourceDurationMs = Math.max(
     1,
     clip.sourceDurationMs ?? clip.durationMs,
@@ -1495,7 +1497,10 @@ const ClipFace = ({
   const waveEnd = (sourceOffsetMs + clip.durationMs) / sourceDurationMs;
   const waveProgress =
     playhead && clip.durationMs > 0
-      ? Math.min(1, Math.max(0, (currentTimeMs - clip.startMs) / clip.durationMs))
+      ? Math.min(
+          1,
+          Math.max(0, (currentTimeMs - clip.startMs) / clip.durationMs),
+        )
       : 0;
   const skipFilmstrip =
     isSound ||
@@ -1523,27 +1528,26 @@ const ClipFace = ({
     ...style,
   };
 
-  return (
-    <Tooltip label={clip.label} position="top" asChild>
-      <button
-        ref={setRefs}
-        type="button"
-        className={`jayrr-editor-clip jayrr-editor-clip--${clip.type}${
-          packed ? "" : " jayrr-editor-clip--overlay"
-        }${selected ? " is-selected" : ""}${playhead ? " is-playhead" : ""}${
-          dragging ? " is-dragging" : ""
-        }${hidden ? " is-hidden" : ""}`}
-        data-clip-id={clip.id}
-        data-shade={clipShadeIndex(clip.id)}
-        style={mergedStyle}
-        {...draggableProps}
-        aria-pressed={selected}
-        onClick={(event) => {
-          event.stopPropagation();
-          const toggle = event.ctrlKey || event.metaKey;
-          onSelect?.(toggle);
-        }}
-      >
+  const clipButton = (
+    <button
+      ref={setRefs}
+      type="button"
+      className={`jayrr-editor-clip jayrr-editor-clip--${clip.type}${
+        packed ? "" : " jayrr-editor-clip--overlay"
+      }${selected ? " is-selected" : ""}${playhead ? " is-playhead" : ""}${
+        dragging ? " is-dragging" : ""
+      }${hidden ? " is-hidden" : ""}`}
+      data-clip-id={clip.id}
+      data-shade={clipShadeIndex(clip.id)}
+      style={mergedStyle}
+      {...draggableProps}
+      aria-pressed={selected}
+      onClick={(event) => {
+        event.stopPropagation();
+        const toggle = event.ctrlKey || event.metaKey;
+        onSelect?.(toggle);
+      }}
+    >
       <span className="jayrr-editor-clip__filmstrip" aria-hidden>
         {slices.map((src, index) => (
           <span key={`${clip.id}-${index}`} className="jayrr-editor-clip__cell">
@@ -1564,11 +1568,19 @@ const ClipFace = ({
           end={waveEnd}
           progress={waveProgress}
           tone={playhead ? "playing" : "idle"}
+          volume={clipAudioIsOff(clip) ? 0 : clipVolumeValue(clip)}
           className="jayrr-editor-clip__wave"
         />
       ) : null}
       <span className="jayrr-editor-clip__label">{clip.label}</span>
-      </button>
+    </button>
+  );
+  if (!tooltip) {
+    return clipButton;
+  }
+  return (
+    <Tooltip label={clip.label} position="top" asChild>
+      {clipButton}
     </Tooltip>
   );
 };
@@ -1697,6 +1709,7 @@ const TimelineClip = ({
         buttonRef={setNodeRef}
         draggableProps={renaming ? undefined : { ...attributes, ...listeners }}
         onSelect={onSelect}
+        tooltip={!renaming}
         style={{ height: "100%" }}
       />
       {renaming ? (

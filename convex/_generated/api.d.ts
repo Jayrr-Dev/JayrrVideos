@@ -25,6 +25,7 @@ import type * as editorAi_createTools from "../editorAi/createTools.js";
 import type * as editorAi_generateImage from "../editorAi/generateImage.js";
 import type * as editorAi_generateSound from "../editorAi/generateSound.js";
 import type * as editorAi_generateVideo from "../editorAi/generateVideo.js";
+import type * as editorAi_generateVoice from "../editorAi/generateVoice.js";
 import type * as editorAi_prompt from "../editorAi/prompt.js";
 import type * as editorProjectFolders from "../editorProjectFolders.js";
 import type * as editorProjects from "../editorProjects.js";
@@ -72,6 +73,7 @@ declare const fullApi: ApiFromModules<{
   "editorAi/generateImage": typeof editorAi_generateImage;
   "editorAi/generateSound": typeof editorAi_generateSound;
   "editorAi/generateVideo": typeof editorAi_generateVideo;
+  "editorAi/generateVoice": typeof editorAi_generateVoice;
   "editorAi/prompt": typeof editorAi_prompt;
   editorProjectFolders: typeof editorProjectFolders;
   editorProjects: typeof editorProjects;

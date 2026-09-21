@@ -8,9 +8,9 @@ import {
 } from "react";
 
 import { api } from "../../convexClient";
+import { JayrrSoundWaveform } from "../../sounds/JayrrSoundWaveform";
 
 import { Button } from "./Button";
-import { JayrrSoundWaveform } from "../../sounds/JayrrSoundWaveform";
 
 import type { JayrrSoundPick } from "./JayrrSoundLibraryDialog";
 
@@ -71,10 +71,11 @@ export const JayrrSoundLibraryGenerateTab = ({
   }, [isAuthenticated, listModels]);
 
   useEffect(() => {
+    const audio = audioRef.current;
     return () => {
-      audioRef.current?.pause();
+      audio?.pause();
     };
-  }, []);
+  }, [result?.url]);
 
   const submit = async (text: string) => {
     const value = text.trim();

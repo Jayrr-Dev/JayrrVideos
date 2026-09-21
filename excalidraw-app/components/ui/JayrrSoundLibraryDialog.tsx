@@ -20,14 +20,15 @@ import {
   PITCH_FILTERS,
   type MetricFilterOption,
 } from "../../data/jayrrSoundMetrics";
-import { JayrrSoundWaveform } from "../../sounds/JayrrSoundWaveform";
 import {
   assignAndPlayAudio,
   jayrrSoundPlayUrls,
 } from "../../sounds/jayrrSoundPlayback";
+import { JayrrSoundWaveform } from "../../sounds/JayrrSoundWaveform";
 
 import { Dialog, Tooltip } from "./editor";
 import { JayrrSoundLibraryGenerateTab } from "./JayrrSoundLibraryGenerateTab";
+import { JayrrSoundLibraryVoiceTab } from "./JayrrSoundLibraryVoiceTab";
 
 import "./JayrrSoundLibraryDialog.scss";
 
@@ -51,6 +52,7 @@ type JayrrSoundLibraryDialogProps = {
 const TABS = [
   { id: "library", label: "Library" },
   { id: "generate", label: "Generate" },
+  { id: "voice", label: "Voice" },
 ] as const;
 
 type SoundLibraryTab = typeof TABS[number]["id"];
@@ -63,6 +65,9 @@ const INFO_PICK =
 
 const INFO_GENERATE =
   "Describe a music cue. Jayrr generates audio with OpenRouter Lyria. Preview it, then add it. This uses credits.";
+
+const INFO_VOICE =
+  "Type a line to speak. Jayrr generates a voice clip with OpenRouter TTS. Length is estimated from the script. This uses credits.";
 
 const formatClock = (durationSec: number) => {
   const total = Math.max(0, Math.ceil(durationSec));
@@ -361,7 +366,13 @@ export const JayrrSoundLibraryDialog = ({
   const pickMode = Boolean(onSelect);
   const [tab, setTab] = useState<SoundLibraryTab>("library");
   const info =
-    tab === "generate" ? INFO_GENERATE : pickMode ? INFO_PICK : INFO_BROWSE;
+    tab === "voice"
+      ? INFO_VOICE
+      : tab === "generate"
+      ? INFO_GENERATE
+      : pickMode
+      ? INFO_PICK
+      : INFO_BROWSE;
 
   if (!isConvexLinked) {
     return (
@@ -710,7 +721,7 @@ const JayrrSoundLibraryDialogConnected = ({
       <SoundLibraryTabs
         tab={tab}
         onTab={(next) => {
-          if (next === "generate") {
+          if (next === "generate" || next === "voice") {
             audioRef.current?.pause();
             setIsPlaying(false);
           }
@@ -721,6 +732,9 @@ const JayrrSoundLibraryDialogConnected = ({
         <JayrrSoundLibraryGenerateTab
           onUse={pickMode ? pickSound : undefined}
         />
+      ) : null}
+      {tab === "voice" ? (
+        <JayrrSoundLibraryVoiceTab onUse={pickMode ? pickSound : undefined} />
       ) : null}
       {tab === "library" ? (
         <div className="jayrr-sound-library__body">

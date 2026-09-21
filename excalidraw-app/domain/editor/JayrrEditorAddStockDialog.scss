@@ -40,25 +40,33 @@
   }
 
   .jayrr-editor-add-stock__sources {
-    display: inline-flex;
-    gap: 0.25rem;
+    display: flex;
+    gap: 0;
+    width: 100%;
     flex-shrink: 0;
+    padding: 0.18rem;
+    border-radius: 0.5rem;
+    background: var(--color-surface-low, var(--button-hover-bg));
   }
 
   .jayrr-editor-add-stock__source {
-    border: 1px solid var(--default-border-color);
-    background: var(--color-surface-low);
-    color: var(--text-primary-color);
-    border-radius: var(--border-radius-md);
-    font-size: 0.7rem;
-    padding: 0.2rem 0.5rem;
+    flex: 1;
+    min-height: 1.65rem;
+    border: 0;
+    border-radius: 0.38rem;
+    background: transparent;
+    color: var(--color-gray-40, inherit);
+    font: inherit;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0 0.5rem;
     cursor: pointer;
   }
 
   .jayrr-editor-add-stock__source.is-active {
-    border-color: var(--color-primary);
-    color: var(--color-primary);
-    background: var(--color-surface-mid);
+    background: var(--island-bg-color);
+    color: var(--text-primary-color);
+    box-shadow: 0 0 0 1px var(--dialog-border-color);
   }
 
   .jayrr-editor-add-stock__folder-bar {
@@ -119,15 +127,36 @@
     flex-wrap: wrap;
   }
 
-  .jayrr-editor-add-stock__generate-row {
-    display: grid;
-    grid-template-columns: minmax(0, 1.4fr) minmax(0, 0.8fr);
-    gap: 0.55rem;
+  .jayrr-editor-add-stock__generate-bar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.15rem;
+    min-width: 0;
+  }
+
+  .jayrr-editor-add-stock__opt,
+  .jayrr-editor-add-stock__model {
+    box-sizing: border-box;
+    min-width: 0;
+    padding: 0.28rem 0.35rem;
+    border: 0;
+    border-radius: 0.35rem;
+    background: transparent;
+    color: var(--color-gray-40);
+    font: inherit;
+    font-size: 0.72rem;
+    cursor: pointer;
+  }
+
+  .jayrr-editor-add-stock__model {
+    max-width: 12rem;
   }
 
   .jayrr-editor-add-stock__prompt {
-    min-height: 4.5rem;
+    min-height: 5.5rem;
     resize: vertical;
+    border-radius: 0.5rem;
   }
 
   .jayrr-editor-add-stock__preview {

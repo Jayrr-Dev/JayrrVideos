@@ -48,6 +48,20 @@
     min-width: 0;
   }
 
+  .jayrr-sound-library__generate-opts {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 0.15rem;
+    min-width: 0;
+  }
+
+  .jayrr-sound-library__est {
+    margin: 0;
+    color: var(--color-gray-40);
+    font-size: 0.72rem;
+  }
+
   .jayrr-sound-library__suggestions {
     display: flex;
     flex: 1;

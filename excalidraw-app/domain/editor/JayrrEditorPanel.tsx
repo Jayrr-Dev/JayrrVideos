@@ -42,9 +42,9 @@ import "../../components/ui/JayrrLibraryMenu.scss";
 import {
   canCutAtTime,
   clipAtTimeAcrossLanes,
-  clipHasReturnableAudio,
-  clipHasControllableAudio,
   clipAudioIsOff,
+  clipHasControllableAudio,
+  clipHasReturnableAudio,
   clipLaneId,
   clipLayerMoveAvailability,
   clipVolumeValue,
@@ -63,10 +63,10 @@ import {
   resizeEditorClip,
   restoreEditorClipEdge,
   SEQUENCE_LANE_ID,
+  setClipAudioMix,
   setClipsBlendMode,
   setClipsLabel,
   setClipsRemoveBg,
-  setClipAudioMix,
   setClipsTransition,
   type EditorBlendMode,
   type EditorClip,
@@ -1231,6 +1231,29 @@ export const JayrrEditorPanel = () => {
                 >
                   Merge
                 </ContextMenu.Item>
+              ) : null}
+              {canControlAudio && menuClip ? (
+                <>
+                  <ContextMenu.Separator className="jayrr-editor-menu__separator" />
+                  <ContextMenu.Group className="jayrr-editor-menu__footer">
+                    <div
+                      className="jayrr-editor-menu__volume"
+                      onPointerDown={(event) => event.preventDefault()}
+                    >
+                      <JayrrEditorVolumeControl
+                        className="jayrr-editor-menu__volume-control"
+                        buttonClassName="jayrr-editor-menu__volume-btn"
+                        sliderClassName="jayrr-editor-menu__volume-slider"
+                        volume={clipVolumeValue(menuClip)}
+                        muted={clipAudioIsOff(menuClip)}
+                        onChange={setMenuClipAudio}
+                        muteLabel="Mute clip"
+                        unmuteLabel="Unmute clip"
+                        sliderLabel="Clip volume"
+                      />
+                    </div>
+                  </ContextMenu.Group>
+                </>
               ) : null}
             </ContextMenu.Content>
           </ContextMenu.Portal>

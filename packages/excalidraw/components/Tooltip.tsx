@@ -1,11 +1,11 @@
-import React, {
+import {
   cloneElement,
   isValidElement,
   useEffect,
   type CSSProperties,
-  type PointerEvent as ReactPointerEvent,
   type ReactElement,
   type ReactNode,
+  type PointerEvent as ReactPointerEvent,
 } from "react";
 
 import "./Tooltip.scss";
@@ -13,18 +13,16 @@ import "./Tooltip.scss";
 const OPEN_DELAY_MS = 200;
 const WARM_FOR_MS = 300;
 
-type TimerHandle = ReturnType<typeof setTimeout>;
-
 let tooltipOpen = false;
 let tooltipWarm = false;
-let openTimer: TimerHandle | null = null;
-let cooldownTimer: TimerHandle | null = null;
+let openTimer: number | null = null;
+let cooldownTimer: number | null = null;
 let timerView: Window | null = null;
 
 const viewOf = (node: Element): Window =>
   node.ownerDocument.defaultView ?? window;
 
-const clearTimer = (handle: TimerHandle | null) => {
+const clearTimer = (handle: number | null) => {
   if (handle == null) {
     return;
   }
@@ -146,6 +144,9 @@ export const scheduleTooltip = (
   long: boolean,
   position: "bottom" | "top" = "bottom",
 ) => {
+  if (!label) {
+    return;
+  }
   const view = viewOf(item);
   clearOpenTimer();
   if (tooltipWarm) {

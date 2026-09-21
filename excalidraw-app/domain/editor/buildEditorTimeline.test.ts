@@ -16,6 +16,7 @@ import {
   returnClipsAudio,
   separateClipsAudio,
   SEQUENCE_LANE_ID,
+  setClipAudioMix,
   setClipsLabel,
   setClipsRemoveBg,
   snapClipStart,
@@ -781,5 +782,43 @@ describe("setClipsRemoveBg", () => {
     expect(off?.find((item) => item.id === "a")).toEqual(
       expect.not.objectContaining({ removeBg: true }),
     );
+  });
+});
+
+describe("setClipAudioMix", () => {
+  it("sets volume and mute on one clip", () => {
+    const next = setClipAudioMix([clip("a", 1000), clip("b", 800)], "a", {
+      volume: 0.4,
+      audioMuted: true,
+    });
+    expect(next?.find((item) => item.id === "a")).toEqual(
+      expect.objectContaining({ volume: 0.4, audioMuted: true }),
+    );
+    expect(next?.find((item) => item.id === "b")).toEqual(
+      expect.not.objectContaining({ audioMuted: true }),
+    );
+  });
+
+  it("clears default volume and unmute", () => {
+    const muted = setClipAudioMix([clip("a", 1000, { volume: 0.2 })], "a", {
+      volume: 1,
+      audioMuted: false,
+    });
+    expect(muted?.find((item) => item.id === "a")).toEqual(
+      expect.not.objectContaining({ volume: 1, audioMuted: true }),
+    );
+    expect(
+      muted?.find((item) => item.id === "a") &&
+        "volume" in (muted.find((item) => item.id === "a") ?? {}),
+    ).toBe(false);
+  });
+
+  it("does not change picture-only video", () => {
+    expect(
+      setClipAudioMix([clip("a", 1000, { muted: true })], "a", {
+        volume: 0.5,
+        audioMuted: true,
+      }),
+    ).toBeNull();
   });
 });

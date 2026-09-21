@@ -160,6 +160,13 @@ import {
   type AudioSourceOption,
 } from "./listAudioSources";
 import {
+  attributeSpeakerScores,
+  averagesBySpeaker,
+  emptyAverageCache,
+  mapSpeakersByTurn,
+  speakerAssignmentStamp,
+} from "./speakerScoreCache";
+import {
   DEFAULT_JEV_SHOW,
   DEFAULT_TRANSCRIBE,
   JEV_TOP_OPTIONS,
@@ -1167,21 +1174,28 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
   turnsRef.current = turns;
   const namesRef = useRef(names);
   namesRef.current = names;
-  const speakerScores = useMemo(() => {
-    void conversation.version;
-    if (!config.contextEnabled) {
-      return scores;
-    }
-    return scores.filter((row) =>
-      conversation.context.turnInTopic(row.turnId, conversation.topicId),
-    );
-  }, [
-    scores,
-    config.contextEnabled,
-    conversation.context,
-    conversation.topicId,
-    conversation.version,
-  ]);
+  const speakerStamp = speakerAssignmentStamp(turns);
+  const speakerByTurn = useMemo(
+    () => mapSpeakersByTurn(turns),
+    [speakerStamp],
+  );
+  const speakerScores = useMemo(
+    () => attributeSpeakerScores(scores, speakerByTurn, live),
+    [live, scores, speakerByTurn],
+  );
+  const speakerAverageCache = useRef({
+    iq: emptyAverageCache<IqResult, number>(),
+    emotion: emptyAverageCache<EmotionPick[], EmotionPick[]>(),
+    mbti: emptyAverageCache<MbtiResult, MbtiResult>(),
+    advance: emptyAverageCache<MbtiAdvanceResult, MbtiAdvanceResult>(),
+    ennea: emptyAverageCache<EnneaResult, EnneaResult>(),
+    smart: emptyAverageCache<SmartResult, SmartResult>(),
+    hype: emptyAverageCache<HypeResult, HypeResult>(),
+    energy: emptyAverageCache<EnergyResult, EnergyResult>(),
+    online: emptyAverageCache<OnlineResult, OnlineResult>(),
+    socion: emptyAverageCache<SocionResult, SocionResult>(),
+    bigFive: emptyAverageCache<BigFiveResult, BigFiveResult>(),
+  });
 
   const configRef = useRef(config);
   configRef.current = config;
@@ -1809,25 +1823,16 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
     return map;
   }, [scores]);
 
-  const iqBySpeaker = useMemo(() => {
-    const groups = new Map<number, IqResult[]>();
-    for (const row of speakerScores) {
-      if (row.speaker === null || !row.result) {
-        continue;
-      }
-      const list = groups.get(row.speaker) ?? [];
-      list.push(row.result);
-      groups.set(row.speaker, list);
-    }
-    const map = new Map<number, number>();
-    for (const [speaker, rows] of groups) {
-      const average = averageIqComposite(rows);
-      if (average !== null) {
-        map.set(speaker, average);
-      }
-    }
-    return map;
-  }, [speakerScores]);
+  const iqBySpeaker = useMemo(
+    () =>
+      averagesBySpeaker(
+        speakerScores,
+        (row) => row.result,
+        averageIqComposite,
+        speakerAverageCache.current.iq,
+      ),
+    [speakerScores],
+  );
 
   const emotionByTurn = useMemo(() => {
     const map = new Map<string, EmotionPick[]>();
@@ -1839,25 +1844,16 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
     return map;
   }, [scores]);
 
-  const emotionBySpeaker = useMemo(() => {
-    const groups = new Map<number, EmotionPick[][]>();
-    for (const row of speakerScores) {
-      if (row.speaker === null || row.emotion.length === 0) {
-        continue;
-      }
-      const list = groups.get(row.speaker) ?? [];
-      list.push(row.emotion);
-      groups.set(row.speaker, list);
-    }
-    const map = new Map<number, EmotionPick[]>();
-    for (const [speaker, rows] of groups) {
-      const average = averageEmotions(rows);
-      if (average.length > 0) {
-        map.set(speaker, average);
-      }
-    }
-    return map;
-  }, [speakerScores]);
+  const emotionBySpeaker = useMemo(
+    () =>
+      averagesBySpeaker(
+        speakerScores,
+        (row) => (row.emotion.length > 0 ? row.emotion : null),
+        averageEmotions,
+        speakerAverageCache.current.emotion,
+      ),
+    [speakerScores],
+  );
 
   const mbtiByTurn = useMemo(() => {
     const map = new Map<string, MbtiResult>();
@@ -1869,28 +1865,16 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
     return map;
   }, [scores]);
 
-  const mbtiBySpeaker = useMemo(() => {
-    const groups = new Map<number, MbtiResult[]>();
-    const add = (speaker: number | null, mbti: MbtiResult | null) => {
-      if (speaker === null || !mbti) {
-        return;
-      }
-      const list = groups.get(speaker) ?? [];
-      list.push(mbti);
-      groups.set(speaker, list);
-    };
-    for (const row of speakerScores) {
-      add(row.speaker, row.mbti);
-    }
-    const map = new Map<number, MbtiResult>();
-    for (const [speaker, rows] of groups) {
-      const average = averageMbti(rows);
-      if (average) {
-        map.set(speaker, average);
-      }
-    }
-    return map;
-  }, [speakerScores]);
+  const mbtiBySpeaker = useMemo(
+    () =>
+      averagesBySpeaker(
+        speakerScores,
+        (row) => row.mbti,
+        averageMbti,
+        speakerAverageCache.current.mbti,
+      ),
+    [speakerScores],
+  );
 
   const advanceByTurn = useMemo(() => {
     const map = new Map<string, MbtiAdvanceResult>();
@@ -1902,28 +1886,16 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
     return map;
   }, [scores]);
 
-  const advanceBySpeaker = useMemo(() => {
-    const groups = new Map<number, MbtiAdvanceResult[]>();
-    const add = (speaker: number | null, advance: MbtiAdvanceResult | null) => {
-      if (speaker === null || !advance) {
-        return;
-      }
-      const list = groups.get(speaker) ?? [];
-      list.push(advance);
-      groups.set(speaker, list);
-    };
-    for (const row of speakerScores) {
-      add(row.speaker, row.advance);
-    }
-    const map = new Map<number, MbtiAdvanceResult>();
-    for (const [speaker, rows] of groups) {
-      const average = averageAdvance(rows);
-      if (average) {
-        map.set(speaker, average);
-      }
-    }
-    return map;
-  }, [speakerScores]);
+  const advanceBySpeaker = useMemo(
+    () =>
+      averagesBySpeaker(
+        speakerScores,
+        (row) => row.advance,
+        averageAdvance,
+        speakerAverageCache.current.advance,
+      ),
+    [speakerScores],
+  );
 
   const enneaByTurn = useMemo(() => {
     const map = new Map<string, EnneaResult>();
@@ -1935,28 +1907,16 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
     return map;
   }, [scores]);
 
-  const enneaBySpeaker = useMemo(() => {
-    const groups = new Map<number, EnneaResult[]>();
-    const add = (speaker: number | null, ennea: EnneaResult | null) => {
-      if (speaker === null || !ennea) {
-        return;
-      }
-      const list = groups.get(speaker) ?? [];
-      list.push(ennea);
-      groups.set(speaker, list);
-    };
-    for (const row of speakerScores) {
-      add(row.speaker, row.ennea);
-    }
-    const map = new Map<number, EnneaResult>();
-    for (const [speaker, rows] of groups) {
-      const average = averageEnnea(rows);
-      if (average) {
-        map.set(speaker, average);
-      }
-    }
-    return map;
-  }, [speakerScores]);
+  const enneaBySpeaker = useMemo(
+    () =>
+      averagesBySpeaker(
+        speakerScores,
+        (row) => row.ennea,
+        averageEnnea,
+        speakerAverageCache.current.ennea,
+      ),
+    [speakerScores],
+  );
 
   const smartByTurn = useMemo(() => {
     const map = new Map<string, SmartResult>();
@@ -1968,28 +1928,16 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
     return map;
   }, [scores]);
 
-  const smartBySpeaker = useMemo(() => {
-    const groups = new Map<number, SmartResult[]>();
-    const add = (speaker: number | null, smart: SmartResult | null) => {
-      if (speaker === null || !smart) {
-        return;
-      }
-      const list = groups.get(speaker) ?? [];
-      list.push(smart);
-      groups.set(speaker, list);
-    };
-    for (const row of speakerScores) {
-      add(row.speaker, row.smart);
-    }
-    const map = new Map<number, SmartResult>();
-    for (const [speaker, rows] of groups) {
-      const average = averageSmart(rows);
-      if (average) {
-        map.set(speaker, average);
-      }
-    }
-    return map;
-  }, [speakerScores]);
+  const smartBySpeaker = useMemo(
+    () =>
+      averagesBySpeaker(
+        speakerScores,
+        (row) => row.smart,
+        averageSmart,
+        speakerAverageCache.current.smart,
+      ),
+    [speakerScores],
+  );
 
   const hypeByTurn = useMemo(() => {
     const map = new Map<string, HypeResult>();
@@ -2001,28 +1949,16 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
     return map;
   }, [scores]);
 
-  const hypeBySpeaker = useMemo(() => {
-    const groups = new Map<number, HypeResult[]>();
-    const add = (speaker: number | null, hype: HypeResult | null) => {
-      if (speaker === null || !hype) {
-        return;
-      }
-      const list = groups.get(speaker) ?? [];
-      list.push(hype);
-      groups.set(speaker, list);
-    };
-    for (const row of speakerScores) {
-      add(row.speaker, row.hype);
-    }
-    const map = new Map<number, HypeResult>();
-    for (const [speaker, rows] of groups) {
-      const average = averageHype(rows);
-      if (average) {
-        map.set(speaker, average);
-      }
-    }
-    return map;
-  }, [speakerScores]);
+  const hypeBySpeaker = useMemo(
+    () =>
+      averagesBySpeaker(
+        speakerScores,
+        (row) => row.hype,
+        averageHype,
+        speakerAverageCache.current.hype,
+      ),
+    [speakerScores],
+  );
 
   const energyByTurn = useMemo(() => {
     const map = new Map<string, EnergyResult>();
@@ -2034,28 +1970,16 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
     return map;
   }, [scores]);
 
-  const energyBySpeaker = useMemo(() => {
-    const groups = new Map<number, EnergyResult[]>();
-    const add = (speaker: number | null, energy: EnergyResult | null) => {
-      if (speaker === null || !energy) {
-        return;
-      }
-      const list = groups.get(speaker) ?? [];
-      list.push(energy);
-      groups.set(speaker, list);
-    };
-    for (const row of speakerScores) {
-      add(row.speaker, row.energy);
-    }
-    const map = new Map<number, EnergyResult>();
-    for (const [speaker, rows] of groups) {
-      const average = averageEnergy(rows);
-      if (average) {
-        map.set(speaker, average);
-      }
-    }
-    return map;
-  }, [speakerScores]);
+  const energyBySpeaker = useMemo(
+    () =>
+      averagesBySpeaker(
+        speakerScores,
+        (row) => row.energy,
+        averageEnergy,
+        speakerAverageCache.current.energy,
+      ),
+    [speakerScores],
+  );
 
   const onlineByTurn = useMemo(() => {
     const map = new Map<string, OnlineResult>();
@@ -2067,28 +1991,16 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
     return map;
   }, [scores]);
 
-  const onlineBySpeaker = useMemo(() => {
-    const groups = new Map<number, OnlineResult[]>();
-    const add = (speaker: number | null, online: OnlineResult | null) => {
-      if (speaker === null || !online) {
-        return;
-      }
-      const list = groups.get(speaker) ?? [];
-      list.push(online);
-      groups.set(speaker, list);
-    };
-    for (const row of speakerScores) {
-      add(row.speaker, row.online);
-    }
-    const map = new Map<number, OnlineResult>();
-    for (const [speaker, rows] of groups) {
-      const average = averageOnline(rows);
-      if (average) {
-        map.set(speaker, average);
-      }
-    }
-    return map;
-  }, [speakerScores]);
+  const onlineBySpeaker = useMemo(
+    () =>
+      averagesBySpeaker(
+        speakerScores,
+        (row) => row.online,
+        averageOnline,
+        speakerAverageCache.current.online,
+      ),
+    [speakerScores],
+  );
 
   const socionByTurn = useMemo(() => {
     const map = new Map<string, SocionResult>();
@@ -2100,28 +2012,16 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
     return map;
   }, [scores]);
 
-  const socionBySpeaker = useMemo(() => {
-    const groups = new Map<number, SocionResult[]>();
-    const add = (speaker: number | null, socion: SocionResult | null) => {
-      if (speaker === null || !socion) {
-        return;
-      }
-      const list = groups.get(speaker) ?? [];
-      list.push(socion);
-      groups.set(speaker, list);
-    };
-    for (const row of speakerScores) {
-      add(row.speaker, row.socion);
-    }
-    const map = new Map<number, SocionResult>();
-    for (const [speaker, rows] of groups) {
-      const average = averageSocion(rows);
-      if (average) {
-        map.set(speaker, average);
-      }
-    }
-    return map;
-  }, [speakerScores]);
+  const socionBySpeaker = useMemo(
+    () =>
+      averagesBySpeaker(
+        speakerScores,
+        (row) => row.socion,
+        averageSocion,
+        speakerAverageCache.current.socion,
+      ),
+    [speakerScores],
+  );
 
   const bigFiveByTurn = useMemo(() => {
     const map = new Map<string, BigFiveResult>();
@@ -2133,29 +2033,18 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
     return map;
   }, [scores]);
 
-  const bigFiveBySpeaker = useMemo(() => {
-    const groups = new Map<number, BigFiveResult[]>();
-    const add = (speaker: number | null, bigFive: BigFiveResult | null) => {
-      if (speaker === null || !bigFive) {
-        return;
-      }
-      const list = groups.get(speaker) ?? [];
-      list.push(bigFive);
-      groups.set(speaker, list);
-    };
-    for (const row of speakerScores) {
-      add(row.speaker, row.bigFive);
-    }
-    const map = new Map<number, BigFiveResult>();
-    for (const [speaker, rows] of groups) {
-      const average = averageBigFive(rows);
-      if (average) {
-        map.set(speaker, average);
-      }
-    }
-    return map;
-  }, [speakerScores]);
+  const bigFiveBySpeaker = useMemo(
+    () =>
+      averagesBySpeaker(
+        speakerScores,
+        (row) => row.bigFive,
+        averageBigFive,
+        speakerAverageCache.current.bigFive,
+      ),
+    [speakerScores],
+  );
 
+  const start = async () => {
   const start = async () => {
     if (busy) {
       return;
