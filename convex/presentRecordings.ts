@@ -230,6 +230,37 @@ export const save = mutation({
   },
 });
 
+export const saveFromUser = internalMutation({
+  args: {
+    userId: v.id("users"),
+    pathname: v.string(),
+    url: v.string(),
+    downloadUrl: v.string(),
+    mimeType: v.string(),
+    durationMs: v.number(),
+    sizeBytes: v.number(),
+    name: v.optional(v.string()),
+  },
+  returns: v.id("presentRecordings"),
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.userId);
+    if (!user) {
+      throw new Error("User not found");
+    }
+    return await ctx.db.insert("presentRecordings", {
+      userId: args.userId,
+      pathname: args.pathname,
+      url: args.url,
+      downloadUrl: args.downloadUrl,
+      mimeType: args.mimeType,
+      durationMs: args.durationMs,
+      sizeBytes: args.sizeBytes,
+      name: args.name?.trim() || undefined,
+      createdAt: Date.now(),
+    });
+  },
+});
+
 export const getOwned = internalQuery({
   args: {
     recordingId: v.id("presentRecordings"),

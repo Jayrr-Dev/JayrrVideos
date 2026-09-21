@@ -1110,36 +1110,40 @@ export const JayrrEditorPanel = () => {
                   Cut
                 </ContextMenu.Item>
               ) : null}
-              <ContextMenu.Item
-                className="jayrr-editor-menu__item"
-                onSelect={() => setAddRecordingOpen(true)}
-              >
-                Add recording
-              </ContextMenu.Item>
-              <ContextMenu.Item
-                className="jayrr-editor-menu__item"
-                onSelect={() => setAddSoundOpen(true)}
-              >
-                Add sound
-              </ContextMenu.Item>
-              <ContextMenu.Item
-                className="jayrr-editor-menu__item"
-                onSelect={() => setAddStockOpen(true)}
-              >
-                Add stock
-              </ContextMenu.Item>
-              <ContextMenu.Item
-                className="jayrr-editor-menu__item"
-                onSelect={() => setAddImageOpen(true)}
-              >
-                Add image
-              </ContextMenu.Item>
-              <ContextMenu.Item
-                className="jayrr-editor-menu__item"
-                onSelect={() => setAiOpen(true)}
-              >
-                Add AI Clip
-              </ContextMenu.Item>
+              {menuOnClip ? null : (
+                <>
+                  <ContextMenu.Item
+                    className="jayrr-editor-menu__item"
+                    onSelect={() => setAddRecordingOpen(true)}
+                  >
+                    Add recording
+                  </ContextMenu.Item>
+                  <ContextMenu.Item
+                    className="jayrr-editor-menu__item"
+                    onSelect={() => setAddSoundOpen(true)}
+                  >
+                    Add sound
+                  </ContextMenu.Item>
+                  <ContextMenu.Item
+                    className="jayrr-editor-menu__item"
+                    onSelect={() => setAddStockOpen(true)}
+                  >
+                    Add stock
+                  </ContextMenu.Item>
+                  <ContextMenu.Item
+                    className="jayrr-editor-menu__item"
+                    onSelect={() => setAddImageOpen(true)}
+                  >
+                    Add image
+                  </ContextMenu.Item>
+                  <ContextMenu.Item
+                    className="jayrr-editor-menu__item"
+                    onSelect={() => setAiOpen(true)}
+                  >
+                    Add AI Clip
+                  </ContextMenu.Item>
+                </>
+              )}
               {canSeparateAudio ? (
                 <ContextMenu.Item
                   className="jayrr-editor-menu__item"

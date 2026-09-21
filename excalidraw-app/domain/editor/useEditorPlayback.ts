@@ -234,11 +234,16 @@ const videoMatchesClock = (
   video: HTMLVideoElement,
   clip: EditorClip,
   timeMs: number,
-) =>
-  Boolean(clip.url) &&
-  videoHasUrl(video, clip.url) &&
-  video.readyState >= 2 &&
-  Math.abs(video.currentTime - sourceOffsetSec(clip, timeMs)) < SEEK_DRIFT_SEC;
+) => {
+  if (isEditorHtmlClip(clip)) {
+    return false;
+  }
+  return (
+    videoHasUrl(video, clip.url) &&
+    video.readyState >= 2 &&
+    Math.abs(video.currentTime - sourceOffsetSec(clip, timeMs)) < SEEK_DRIFT_SEC
+  );
+};
 
 type ApplyProgramMode = "all" | "stacks";
 

@@ -6,10 +6,7 @@ export const EDITOR_PX_PER_SECOND_MIN = 6;
 export const EDITOR_PX_PER_SECOND_MAX = 320;
 
 export const clampEditorPxPerSecond = (px: number) =>
-  Math.min(
-    EDITOR_PX_PER_SECOND_MAX,
-    Math.max(EDITOR_PX_PER_SECOND_MIN, px),
-  );
+  Math.min(EDITOR_PX_PER_SECOND_MAX, Math.max(EDITOR_PX_PER_SECOND_MIN, px));
 
 export type EditorRecordingSource = {
   recordingId: Id<"presentRecordings">;

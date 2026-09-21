@@ -6,11 +6,11 @@ export const jayrrSoundPlayUrls = (
   path: string,
 ): string[] => {
   const urls: string[] = [];
-  if (convexUrl) {
-    urls.push(convexUrl);
-  }
   if (path) {
     urls.push(jayrrLocalSoundUrl(path));
+  }
+  if (convexUrl) {
+    urls.push(convexUrl);
   }
   return urls;
 };

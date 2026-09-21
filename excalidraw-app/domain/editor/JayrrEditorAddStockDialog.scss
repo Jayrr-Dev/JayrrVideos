@@ -118,4 +118,28 @@
     justify-content: flex-end;
     flex-wrap: wrap;
   }
+
+  .jayrr-editor-add-stock__generate-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 0.8fr);
+    gap: 0.55rem;
+  }
+
+  .jayrr-editor-add-stock__prompt {
+    min-height: 4.5rem;
+    resize: vertical;
+  }
+
+  .jayrr-editor-add-stock__preview {
+    display: flex;
+    justify-content: center;
+    padding: 0.25rem 0;
+  }
+
+  .jayrr-editor-add-stock__preview img {
+    max-width: 100%;
+    max-height: min(18rem, 42vh);
+    border-radius: var(--border-radius-md);
+    object-fit: contain;
+  }
 }

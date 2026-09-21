@@ -20,12 +20,14 @@ import {
   PITCH_FILTERS,
   type MetricFilterOption,
 } from "../../data/jayrrSoundMetrics";
+import { JayrrSoundWaveform } from "../../sounds/JayrrSoundWaveform";
 import {
   assignAndPlayAudio,
   jayrrSoundPlayUrls,
 } from "../../sounds/jayrrSoundPlayback";
 
 import { Dialog, Tooltip } from "./editor";
+import { JayrrSoundLibraryGenerateTab } from "./JayrrSoundLibraryGenerateTab";
 
 import "./JayrrSoundLibraryDialog.scss";
 
@@ -46,11 +48,21 @@ type JayrrSoundLibraryDialogProps = {
   onSelect?: (sound: JayrrSoundPick | null) => void;
 };
 
+const TABS = [
+  { id: "library", label: "Library" },
+  { id: "generate", label: "Generate" },
+] as const;
+
+type SoundLibraryTab = typeof TABS[number]["id"];
+
 const INFO_BROWSE =
   "Browse Flatten sounds stored in Convex. Pitch is spectral centroid in Hz. Loudness is RMS dB from the catalog, or a decode of the preview.";
 
 const INFO_PICK =
   "Pick a sound for this present cue. Preview with play, then click a row. Pitch is spectral centroid. Loudness is RMS dB.";
+
+const INFO_GENERATE =
+  "Describe a music cue. Jayrr generates audio with OpenRouter Lyria. Preview it, then add it. This uses credits.";
 
 const formatClock = (durationSec: number) => {
   const total = Math.max(0, Math.ceil(durationSec));
@@ -124,6 +136,28 @@ const LoudnessMark = ({
     >
       {formatLoudnessDb(db)}
     </span>
+  );
+};
+
+const SoundWave = ({
+  path,
+  url,
+  playing,
+  progress,
+}: {
+  path: string;
+  url: string | null;
+  playing: boolean;
+  progress: number;
+}) => {
+  const sources = useMemo(() => jayrrSoundPlayUrls(url, path), [path, url]);
+  return (
+    <JayrrSoundWaveform
+      sources={sources}
+      tone={playing ? "playing" : "idle"}
+      progress={playing ? progress : 0}
+      className="jayrr-sound-library__wave"
+    />
   );
 };
 
@@ -325,7 +359,9 @@ export const JayrrSoundLibraryDialog = ({
   const [playError, setPlayError] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const pickMode = Boolean(onSelect);
-  const info = pickMode ? INFO_PICK : INFO_BROWSE;
+  const [tab, setTab] = useState<SoundLibraryTab>("library");
+  const info =
+    tab === "generate" ? INFO_GENERATE : pickMode ? INFO_PICK : INFO_BROWSE;
 
   if (!isConvexLinked) {
     return (
@@ -348,6 +384,7 @@ export const JayrrSoundLibraryDialog = ({
         }
       >
         <p className="visually-hidden">{info}</p>
+        <SoundLibraryTabs tab={tab} onTab={setTab} />
         <p className="jayrr-sound-library__empty">
           Add VITE_CONVEX_URL, then restart the app.
         </p>
@@ -375,9 +412,44 @@ export const JayrrSoundLibraryDialog = ({
       setPlayingPath={setPlayingPath}
       setProgress={setProgress}
       setSearch={setSearch}
+      tab={tab}
+      onTab={setTab}
     />
   );
 };
+
+const SoundLibraryTabs = ({
+  tab,
+  onTab,
+}: {
+  tab: SoundLibraryTab;
+  onTab: (tab: SoundLibraryTab) => void;
+}) => (
+  <div
+    className="jayrr-sound-library__tabs"
+    role="tablist"
+    aria-label="Sound source"
+  >
+    {TABS.map((item) => (
+      <button
+        key={item.id}
+        type="button"
+        role="tab"
+        aria-selected={tab === item.id}
+        className={
+          tab === item.id
+            ? "jayrr-sound-library__tab is-on"
+            : "jayrr-sound-library__tab"
+        }
+        onClick={() => {
+          onTab(item.id);
+        }}
+      >
+        {item.label}
+      </button>
+    ))}
+  </div>
+);
 
 const JayrrSoundLibraryDialogConnected = ({
   audioRef,
@@ -398,6 +470,8 @@ const JayrrSoundLibraryDialogConnected = ({
   setPlayingPath,
   setProgress,
   setSearch,
+  tab,
+  onTab,
 }: {
   audioRef: MutableRefObject<HTMLAudioElement | null>;
   folder: string;
@@ -417,6 +491,8 @@ const JayrrSoundLibraryDialogConnected = ({
   setPlayingPath: (path: string | null) => void;
   setProgress: (progress: number) => void;
   setSearch: (search: string) => void;
+  tab: SoundLibraryTab;
+  onTab: (tab: SoundLibraryTab) => void;
 }) => {
   const folders = useQuery(api.soundFolders.tree, {});
   const sounds = usePaginatedQuery(
@@ -631,274 +707,306 @@ const JayrrSoundLibraryDialogConnected = ({
       }
     >
       <p className="visually-hidden">{info}</p>
-      <div className="jayrr-sound-library__body">
-        <div className="jayrr-sound-library__col jayrr-sound-library__col--folders">
-          <nav aria-label="Folder" className="jayrr-sound-library__crumbs">
-            <button
-              className="jayrr-sound-library__crumb"
-              onClick={() => {
-                setFolder("");
-              }}
-              type="button"
-            >
-              Library
-            </button>
-            {crumbs.map((name, index) => {
-              const path = crumbs.slice(0, index + 1).join("/");
-              return (
-                <span key={path} className="jayrr-sound-library__crumb-wrap">
-                  <span aria-hidden="true">/</span>
-                  <button
-                    className="jayrr-sound-library__crumb"
-                    onClick={() => {
-                      setFolder(path);
-                    }}
-                    type="button"
-                  >
-                    {name}
-                  </button>
-                </span>
-              );
-            })}
-          </nav>
-          {children.length > 0 ? (
-            <ul className="jayrr-sound-library__folders">
-              {children.map((row) => (
-                <li key={row.path}>
-                  <button
-                    onClick={() => {
-                      setFolder(row.path);
-                    }}
-                    type="button"
-                  >
-                    <span>{row.name}</span>
-                    <span>{row.count}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-        </div>
-        <div className="jayrr-sound-library__col jayrr-sound-library__col--sounds">
-          <div className="jayrr-sound-library__toolbar">
-            <div className="jayrr-sound-library__toolbar-row">
-              <input
-                aria-label="Search sounds"
-                className="jayrr-sound-library__search"
-                onChange={(event) => {
-                  setSearch(event.target.value);
+      <SoundLibraryTabs
+        tab={tab}
+        onTab={(next) => {
+          if (next === "generate") {
+            audioRef.current?.pause();
+            setIsPlaying(false);
+          }
+          onTab(next);
+        }}
+      />
+      {tab === "generate" ? (
+        <JayrrSoundLibraryGenerateTab
+          onUse={pickMode ? pickSound : undefined}
+        />
+      ) : null}
+      {tab === "library" ? (
+        <div className="jayrr-sound-library__body">
+          <div className="jayrr-sound-library__col jayrr-sound-library__col--folders">
+            <nav aria-label="Folder" className="jayrr-sound-library__crumbs">
+              <button
+                className="jayrr-sound-library__crumb"
+                onClick={() => {
+                  setFolder("");
                 }}
-                placeholder="Search sounds"
-                type="search"
-                value={search}
-              />
-              <div className="jayrr-sound-library__filters">
-                <MetricFilter
-                  unit="Hz"
-                  label="Filter by pitch"
-                  value={pitchFilter}
-                  options={PITCH_FILTERS}
-                  onChange={setPitchFilter}
-                />
-                <MetricFilter
-                  unit="dB"
-                  label="Filter by loudness"
-                  value={dbFilter}
-                  options={DECIBEL_FILTERS}
-                  onChange={setDbFilter}
-                />
-              </div>
-            </div>
-            {playError ? (
-              <p className="jayrr-sound-library__error">{playError}</p>
+                type="button"
+              >
+                Library
+              </button>
+              {crumbs.map((name, index) => {
+                const path = crumbs.slice(0, index + 1).join("/");
+                return (
+                  <span key={path} className="jayrr-sound-library__crumb-wrap">
+                    <span aria-hidden="true">/</span>
+                    <button
+                      className="jayrr-sound-library__crumb"
+                      onClick={() => {
+                        setFolder(path);
+                      }}
+                      type="button"
+                    >
+                      {name}
+                    </button>
+                  </span>
+                );
+              })}
+            </nav>
+            {children.length > 0 ? (
+              <ul className="jayrr-sound-library__folders">
+                {children.map((row) => (
+                  <li key={row.path}>
+                    <button
+                      onClick={() => {
+                        setFolder(row.path);
+                      }}
+                      type="button"
+                    >
+                      <span>{row.name}</span>
+                      <span>{row.count}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
             ) : null}
           </div>
-          <div className="jayrr-sound-library__cols" role="row">
-            <span
-              className="jayrr-sound-library__cols-play"
-              aria-hidden="true"
-            />
-            <SortCol
-              column="name"
-              label="Name"
-              sortKey={sortKey}
-              sortDir={sortDir}
-              onSort={toggleSort}
-              className="jayrr-sound-library__sort--name"
-            />
-            <span className="jayrr-sound-library__stats">
+          <div className="jayrr-sound-library__col jayrr-sound-library__col--sounds">
+            <div className="jayrr-sound-library__toolbar">
+              <div className="jayrr-sound-library__toolbar-row">
+                <input
+                  aria-label="Search sounds"
+                  className="jayrr-sound-library__search"
+                  onChange={(event) => {
+                    setSearch(event.target.value);
+                  }}
+                  placeholder="Search sounds"
+                  type="search"
+                  value={search}
+                />
+                <div className="jayrr-sound-library__filters">
+                  <MetricFilter
+                    unit="Hz"
+                    label="Filter by pitch"
+                    value={pitchFilter}
+                    options={PITCH_FILTERS}
+                    onChange={setPitchFilter}
+                  />
+                  <MetricFilter
+                    unit="dB"
+                    label="Filter by loudness"
+                    value={dbFilter}
+                    options={DECIBEL_FILTERS}
+                    onChange={setDbFilter}
+                  />
+                </div>
+              </div>
+              {playError ? (
+                <p className="jayrr-sound-library__error">{playError}</p>
+              ) : null}
+            </div>
+            <div className="jayrr-sound-library__cols" role="row">
+              <span
+                className="jayrr-sound-library__cols-play"
+                aria-hidden="true"
+              />
               <SortCol
-                column="hz"
-                label="Hz"
+                column="name"
+                label="Name"
                 sortKey={sortKey}
                 sortDir={sortDir}
                 onSort={toggleSort}
-                className="jayrr-sound-library__metric--hz"
+                className="jayrr-sound-library__sort--name"
               />
-              <SortCol
-                column="db"
-                label="dB"
-                sortKey={sortKey}
-                sortDir={sortDir}
-                onSort={toggleSort}
-                className="jayrr-sound-library__metric--db"
-              />
-              <SortCol
-                column="time"
-                label="Time"
-                sortKey={sortKey}
-                sortDir={sortDir}
-                onSort={toggleSort}
-                className="jayrr-sound-library__clock"
-              />
-            </span>
-          </div>
-          <ul className="jayrr-sound-library__sounds">
-            {visibleSounds.map((row) => {
-              const active = playingPath === row.path;
-              const playing = active && isPlaying;
-              const selected = selectedId === row._id;
-              const remain = active
-                ? Math.max(0, row.durationSec * (1 - progress))
-                : row.durationSec;
-              const rowClass = [
-                "jayrr-sound-library__row",
-                playing ? "is-playing" : "",
-                selected ? "is-selected" : "",
-              ]
-                .filter(Boolean)
-                .join(" ");
+              <span className="jayrr-sound-library__wave-col" aria-hidden>
+                Wave
+              </span>
+              <span className="jayrr-sound-library__stats">
+                <SortCol
+                  column="hz"
+                  label="Hz"
+                  sortKey={sortKey}
+                  sortDir={sortDir}
+                  onSort={toggleSort}
+                  className="jayrr-sound-library__metric--hz"
+                />
+                <SortCol
+                  column="db"
+                  label="dB"
+                  sortKey={sortKey}
+                  sortDir={sortDir}
+                  onSort={toggleSort}
+                  className="jayrr-sound-library__metric--db"
+                />
+                <SortCol
+                  column="time"
+                  label="Time"
+                  sortKey={sortKey}
+                  sortDir={sortDir}
+                  onSort={toggleSort}
+                  className="jayrr-sound-library__clock"
+                />
+              </span>
+            </div>
+            <ul className="jayrr-sound-library__sounds">
+              {visibleSounds.map((row) => {
+                const active = playingPath === row.path;
+                const playing = active && isPlaying;
+                const selected = selectedId === row._id;
+                const remain = active
+                  ? Math.max(0, row.durationSec * (1 - progress))
+                  : row.durationSec;
+                const rowClass = [
+                  "jayrr-sound-library__row",
+                  playing ? "is-playing" : "",
+                  selected ? "is-selected" : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ");
 
-              if (pickMode) {
+                if (pickMode) {
+                  return (
+                    <li key={row._id}>
+                      <div className={rowClass}>
+                        <button
+                          type="button"
+                          className="jayrr-sound-library__play-hit"
+                          aria-label={
+                            playing ? `Pause ${row.name}` : `Play ${row.name}`
+                          }
+                          onClick={() => {
+                            void playSound(row.url, row.path, row._id);
+                          }}
+                        >
+                          <PlayMark
+                            playing={playing}
+                            progress={active ? progress : 0}
+                          />
+                        </button>
+                        <button
+                          type="button"
+                          className="jayrr-sound-library__pick"
+                          aria-label={`Use ${row.name}`}
+                          onClick={() => {
+                            pickSound({
+                              id: row._id,
+                              name: row.name,
+                              path: row.path,
+                              durationSec: row.durationSec,
+                              url: row.url,
+                            });
+                          }}
+                        >
+                          <span className="jayrr-sound-library__meta">
+                            <span className="jayrr-sound-library__name">
+                              {row.name}
+                            </span>
+                            <span className="jayrr-sound-library__path">
+                              {row.folderPath}
+                            </span>
+                          </span>
+                          <SoundWave
+                            path={row.path}
+                            url={row.url}
+                            playing={playing}
+                            progress={active ? progress : 0}
+                          />
+                          <SoundStats
+                            clock={formatClock(remain)}
+                            centroidHz={row.centroidHz}
+                            loudnessDb={row.loudnessDb}
+                            path={row.path}
+                            url={row.url}
+                          />
+                        </button>
+                      </div>
+                    </li>
+                  );
+                }
+
                 return (
                   <li key={row._id}>
-                    <div className={rowClass}>
-                      <button
-                        type="button"
-                        className="jayrr-sound-library__play-hit"
-                        aria-label={
-                          playing ? `Pause ${row.name}` : `Play ${row.name}`
-                        }
-                        onClick={() => {
-                          void playSound(row.url, row.path, row._id);
-                        }}
-                      >
-                        <PlayMark
-                          playing={playing}
-                          progress={active ? progress : 0}
-                        />
-                      </button>
-                      <button
-                        type="button"
-                        className="jayrr-sound-library__pick"
-                        aria-label={`Use ${row.name}`}
-                        onClick={() => {
-                          pickSound({
-                            id: row._id,
-                            name: row.name,
-                            path: row.path,
-                            durationSec: row.durationSec,
-                            url: row.url,
-                          });
-                        }}
-                      >
-                        <span className="jayrr-sound-library__meta">
-                          <span className="jayrr-sound-library__name">
-                            {row.name}
-                          </span>
-                          <span className="jayrr-sound-library__path">
-                            {row.folderPath}
-                          </span>
+                    <button
+                      className={rowClass}
+                      onClick={() => {
+                        void playSound(row.url, row.path, row._id);
+                      }}
+                      type="button"
+                      aria-label={
+                        playing ? `Pause ${row.name}` : `Play ${row.name}`
+                      }
+                    >
+                      <PlayMark
+                        playing={playing}
+                        progress={active ? progress : 0}
+                      />
+                      <span className="jayrr-sound-library__meta">
+                        <span className="jayrr-sound-library__name">
+                          {row.name}
                         </span>
-                        <SoundStats
-                          clock={formatClock(remain)}
-                          centroidHz={row.centroidHz}
-                          loudnessDb={row.loudnessDb}
-                          path={row.path}
-                          url={row.url}
-                        />
-                      </button>
-                    </div>
+                        <span className="jayrr-sound-library__path">
+                          {row.folderPath}
+                        </span>
+                      </span>
+                      <SoundWave
+                        path={row.path}
+                        url={row.url}
+                        playing={playing}
+                        progress={active ? progress : 0}
+                      />
+                      <SoundStats
+                        clock={formatClock(remain)}
+                        centroidHz={row.centroidHz}
+                        loudnessDb={row.loudnessDb}
+                        path={row.path}
+                        url={row.url}
+                      />
+                    </button>
                   </li>
                 );
-              }
-
-              return (
-                <li key={row._id}>
-                  <button
-                    className={rowClass}
-                    onClick={() => {
-                      void playSound(row.url, row.path, row._id);
-                    }}
-                    type="button"
-                    aria-label={
-                      playing ? `Pause ${row.name}` : `Play ${row.name}`
-                    }
-                  >
-                    <PlayMark
-                      playing={playing}
-                      progress={active ? progress : 0}
-                    />
-                    <span className="jayrr-sound-library__meta">
-                      <span className="jayrr-sound-library__name">
-                        {row.name}
-                      </span>
-                      <span className="jayrr-sound-library__path">
-                        {row.folderPath}
-                      </span>
-                    </span>
-                    <SoundStats
-                      clock={formatClock(remain)}
-                      centroidHz={row.centroidHz}
-                      loudnessDb={row.loudnessDb}
-                      path={row.path}
-                      url={row.url}
-                    />
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-          {sounds.status === "CanLoadMore" ? (
-            <button
-              className="jayrr-sound-library__more"
-              onClick={() => {
-                sounds.loadMore(40);
-              }}
-              type="button"
-            >
-              Load more
-            </button>
-          ) : null}
-          {sounds.status === "LoadingFirstPage" ? (
-            <p className="jayrr-sound-library__empty">Loading sounds…</p>
-          ) : null}
-          {sounds.status === "Exhausted" && sounds.results.length === 0 ? (
-            <p className="jayrr-sound-library__empty">
-              No sounds yet. Run yarn seed:sounds after Convex is linked.
-            </p>
-          ) : null}
-          {sounds.status !== "LoadingFirstPage" &&
-          sounds.results.length > 0 &&
-          visibleSounds.length === 0 ? (
-            <p className="jayrr-sound-library__empty">
-              No sounds match these Hz or dB filters.
-            </p>
-          ) : null}
-          {pickMode && selectedId ? (
-            <button
-              className="jayrr-sound-library__clear"
-              onClick={() => {
-                onSelect?.(null);
-                closeDialog();
-              }}
-              type="button"
-            >
-              Clear sound
-            </button>
-          ) : null}
+              })}
+            </ul>
+            {sounds.status === "CanLoadMore" ? (
+              <button
+                className="jayrr-sound-library__more"
+                onClick={() => {
+                  sounds.loadMore(40);
+                }}
+                type="button"
+              >
+                Load more
+              </button>
+            ) : null}
+            {sounds.status === "LoadingFirstPage" ? (
+              <p className="jayrr-sound-library__empty">Loading sounds…</p>
+            ) : null}
+            {sounds.status === "Exhausted" && sounds.results.length === 0 ? (
+              <p className="jayrr-sound-library__empty">
+                No sounds yet. Run yarn seed:sounds after Convex is linked.
+              </p>
+            ) : null}
+            {sounds.status !== "LoadingFirstPage" &&
+            sounds.results.length > 0 &&
+            visibleSounds.length === 0 ? (
+              <p className="jayrr-sound-library__empty">
+                No sounds match these Hz or dB filters.
+              </p>
+            ) : null}
+            {pickMode && selectedId ? (
+              <button
+                className="jayrr-sound-library__clear"
+                onClick={() => {
+                  onSelect?.(null);
+                  closeDialog();
+                }}
+                type="button"
+              >
+                Clear sound
+              </button>
+            ) : null}
+          </div>
         </div>
-      </div>
+      ) : null}
     </Dialog>
   );
 };

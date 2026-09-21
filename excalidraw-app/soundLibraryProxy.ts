@@ -1,7 +1,4 @@
-import { spawn } from "node:child_process";
-import { createHash } from "node:crypto";
-import { createReadStream, existsSync, mkdirSync, statSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { createReadStream, existsSync, statSync } from "node:fs";
 import { extname, join, resolve, sep } from "node:path";
 
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -11,12 +8,6 @@ const LIBRARY_CANDIDATES = [
   process.env.SOUND_LIBRARY_ROOT,
   "C:\\Users\\Main\\OneDrive\\Sound Library\\Flatten",
   "C:\\Users\\Main\\Documents\\Sound Library\\Flatten",
-].filter((value): value is string => Boolean(value));
-
-const FFMPEG_CANDIDATES = [
-  process.env.FFMPEG,
-  "C:\\Users\\Main\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-8.1.2-full_build\\bin\\ffmpeg.exe",
-  "ffmpeg",
 ].filter((value): value is string => Boolean(value));
 
 const TYPES: Record<string, string> = {
@@ -31,14 +22,9 @@ const TYPES: Record<string, string> = {
   ".webm": "audio/webm",
 };
 
-const TAG_RE =
-  / \[(\d{1,3}),(\d{2}),(\d{2})\] \[(\d+)Hz\] \[sc(\d+)Hz\](?: \[(-?\d+)dB\])?/;
-
-const TONE_DIR = join(tmpdir(), "jayrr-sound-tone");
-
 const findExisting = (candidates: string[]) => {
   for (const candidate of candidates) {
-    if (candidate === "ffmpeg" || existsSync(candidate)) {
+    if (existsSync(candidate)) {
       return candidate;
     }
   }
@@ -46,8 +32,6 @@ const findExisting = (candidates: string[]) => {
 };
 
 const libraryRoot = () => findExisting(LIBRARY_CANDIDATES);
-
-const ffmpegBin = () => findExisting(FFMPEG_CANDIDATES);
 
 const readRelPath = (req: IncomingMessage) => {
   const rawUrl = req.url ?? "";
@@ -63,22 +47,6 @@ const readRelPath = (req: IncomingMessage) => {
     return null;
   }
   return decoded;
-};
-
-const parsePreview = (rel: string) => {
-  const match = rel.match(TAG_RE);
-  if (!match) {
-    return { durationSec: 1.5, centroidHz: 440 };
-  }
-  const hours = Number(match[1]);
-  const minutes = Number(match[2]);
-  const seconds = Number(match[3]);
-  const centroidHz = Number(match[5]);
-  const durationSec = hours * 3600 + minutes * 60 + seconds;
-  return {
-    durationSec: Math.min(30, Math.max(0.25, durationSec || 1.5)),
-    centroidHz: Math.min(8000, Math.max(80, centroidHz || 440)),
-  };
 };
 
 const sendFile = (res: ServerResponse, full: string, req: IncomingMessage) => {
@@ -112,56 +80,6 @@ const sendFile = (res: ServerResponse, full: string, req: IncomingMessage) => {
   createReadStream(full).pipe(res);
 };
 
-const runFfmpeg = (args: string[]) =>
-  new Promise<void>((resolvePromise, reject) => {
-    const bin = ffmpegBin();
-    if (!bin) {
-      reject(new Error("ffmpeg missing"));
-      return;
-    }
-    const child = spawn(bin, args, { windowsHide: true });
-    let stderr = "";
-    child.stderr.on("data", (chunk) => {
-      stderr += chunk.toString();
-    });
-    child.on("error", reject);
-    child.on("close", (code) => {
-      if (code === 0) {
-        resolvePromise();
-        return;
-      }
-      reject(new Error(stderr || `ffmpeg exited ${code}`));
-    });
-  });
-
-const ensureTone = async (rel: string) => {
-  mkdirSync(TONE_DIR, { recursive: true });
-  const id = createHash("sha1").update(rel).digest("hex");
-  const oggPath = join(TONE_DIR, `${id}.ogg`);
-  if (existsSync(oggPath) && statSync(oggPath).size > 0) {
-    return oggPath;
-  }
-  const preview = parsePreview(rel);
-  await runFfmpeg([
-    "-y",
-    "-hide_banner",
-    "-loglevel",
-    "error",
-    "-f",
-    "lavfi",
-    "-i",
-    `anoisesrc=color=brown:duration=${preview.durationSec}:sample_rate=44100`,
-    "-af",
-    `lowpass=f=${preview.centroidHz}`,
-    "-c:a",
-    "libopus",
-    "-b:a",
-    "48k",
-    oggPath,
-  ]);
-  return oggPath;
-};
-
 const handleSound = async (req: IncomingMessage, res: ServerResponse) => {
   if (req.method !== "GET" && req.method !== "HEAD") {
     res.statusCode = 405;
@@ -185,14 +103,8 @@ const handleSound = async (req: IncomingMessage, res: ServerResponse) => {
       }
     }
   }
-  try {
-    const tone = await ensureTone(rel);
-    res.setHeader("X-Jayrr-Sound", "preview");
-    sendFile(res, tone, req);
-  } catch {
-    res.statusCode = 404;
-    res.end("Sound file not found");
-  }
+  res.statusCode = 404;
+  res.end("Sound file not found");
 };
 
 const attach = (middlewares: {

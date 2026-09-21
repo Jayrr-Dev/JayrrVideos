@@ -1,7 +1,14 @@
 import { useExcalidrawAPI } from "@excalidraw/excalidraw";
 import { helpIcon } from "@excalidraw/excalidraw/components/icons";
 import { useAction, useQuery } from "convex/react";
-import { useEffect, useId, useMemo, useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useState,
+  type FormEvent,
+  type KeyboardEvent,
+} from "react";
 
 import type { BinaryFileData } from "@excalidraw/excalidraw/types";
 
@@ -23,7 +30,7 @@ import {
 } from "./buildEditorTimeline";
 
 const INFO =
-  "Pick an image from this board or Docs, or search free Pexels photos.";
+  "Pick an image from this board or Docs, search free Pexels photos, or generate one with OpenRouter. Generating uses credits.";
 
 export type EditorStaticPick = {
   url: string;
@@ -34,7 +41,29 @@ export type EditorStaticPick = {
   height?: number;
 };
 
-type ImageSource = "docs" | "search";
+type ImageSource = "docs" | "search" | "generate";
+
+const GENERATE_ASPECTS = ["16:9", "9:16", "1:1", "4:3", "3:4"] as const;
+
+type GenerateAspect = typeof GENERATE_ASPECTS[number];
+
+type ImageModelRow = {
+  id: string;
+  name: string;
+  supportedAspectRatios: string[];
+  supportedResolutions: string[];
+};
+
+type GeneratedStill = {
+  url: string;
+  label: string;
+  durationMs: number;
+  width?: number;
+  height?: number;
+};
+
+const isGenerateAspect = (value: string): value is GenerateAspect =>
+  GENERATE_ASPECTS.some((item) => item === value);
 
 type StockImage = {
   id: number;
@@ -175,6 +204,8 @@ export const JayrrEditorAddImageDialog = ({
   const descriptionId = useId();
   const excalidrawAPI = useExcalidrawAPI();
   const searchImages = useAction(api.stockImages.search);
+  const listImageModels = useAction(api.editorAi.generateImage.listModels);
+  const generateImage = useAction(api.editorAi.generateImage.generate);
   const [source, setSource] = useState<ImageSource>("docs");
   const [query, setQuery] = useState("");
   const [photos, setPhotos] = useState<StockImage[]>([]);
@@ -184,6 +215,11 @@ export const JayrrEditorAddImageDialog = ({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [localReady, setLocalReady] = useState(false);
+  const [prompt, setPrompt] = useState("");
+  const [models, setModels] = useState<ImageModelRow[]>([]);
+  const [modelId, setModelId] = useState("");
+  const [aspectRatio, setAspectRatio] = useState("16:9");
+  const [generated, setGenerated] = useState<GeneratedStill | null>(null);
 
   const recordings = useQuery(
     api.presentRecordings.listImages,
@@ -228,13 +264,69 @@ export const JayrrEditorAddImageDialog = ({
     return [...byId.values()];
   }, [excalidrawAPI, localFiles, recordings]);
 
+  useEffect(() => {
+    if (!canQuery || source !== "generate") {
+      return;
+    }
+    let cancelled = false;
+    void listImageModels({})
+      .then((rows) => {
+        if (cancelled) {
+          return;
+        }
+        setModels(rows);
+        setModelId((current) => current || rows[0]?.id || "");
+      })
+      .catch((caught: unknown) => {
+        if (cancelled) {
+          return;
+        }
+        setError(
+          caught instanceof Error
+            ? caught.message
+            : "Could not load image models.",
+        );
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [canQuery, listImageModels, source]);
+
+  const selectedModel = models.find((model) => model.id === modelId) ?? null;
+  const aspectOptions = useMemo(() => {
+    if (selectedModel && selectedModel.supportedAspectRatios.length > 0) {
+      const matched =
+        selectedModel.supportedAspectRatios.filter(isGenerateAspect);
+      if (matched.length > 0) {
+        return matched;
+      }
+      return selectedModel.supportedAspectRatios;
+    }
+    return [...GENERATE_ASPECTS];
+  }, [selectedModel]);
+
+  useEffect(() => {
+    if (aspectOptions.includes(aspectRatio)) {
+      return;
+    }
+    const next = aspectOptions[0];
+    if (next) {
+      setAspectRatio(next);
+    }
+  }, [aspectOptions, aspectRatio]);
+
   const selectedPhoto =
     photos.find((photo) => String(photo.id) === selectedKey) ?? null;
   const selectedDoc = docsStills.find((row) => row.id === selectedKey) ?? null;
 
+  const generatePrompt = prompt.trim();
   let canSearch = false;
   if (canQuery && source === "search" && trimmed.length > 0 && !busy) {
     canSearch = true;
+  }
+  let canGenerate = false;
+  if (canQuery && source === "generate" && generatePrompt.length > 0 && !busy) {
+    canGenerate = true;
   }
   let canAdd = false;
   if (!busy) {
@@ -242,6 +334,9 @@ export const JayrrEditorAddImageDialog = ({
       canAdd = true;
     }
     if (source === "docs" && selectedDoc) {
+      canAdd = true;
+    }
+    if (source === "generate" && generated) {
       canAdd = true;
     }
   }
@@ -296,10 +391,48 @@ export const JayrrEditorAddImageDialog = ({
     });
   };
 
+  const pickGenerated = (row: GeneratedStill) => {
+    onPick({
+      url: row.url,
+      label: row.label,
+      durationMs: row.durationMs,
+      mediaKind: "image",
+      ...(row.width && row.width > 0 ? { width: row.width } : {}),
+      ...(row.height && row.height > 0 ? { height: row.height } : {}),
+    });
+  };
+
+  const runGenerate = async () => {
+    if (!canGenerate) {
+      return;
+    }
+    setBusy(true);
+    setError("");
+    setGenerated(null);
+    try {
+      const row = await generateImage({
+        prompt: generatePrompt,
+        aspectRatio,
+        modelId: modelId || undefined,
+      });
+      setGenerated(row);
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Image generation failed.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (source === "search") {
       await runSearch();
+      return;
+    }
+    if (source === "generate") {
+      await runGenerate();
       return;
     }
     if (!selectedDoc) {
@@ -341,7 +474,33 @@ export const JayrrEditorAddImageDialog = ({
   );
 
   let listBody;
-  if (source === "search") {
+  if (source === "generate") {
+    if (!canQuery) {
+      listBody = (
+        <p className="jayrr-editor-add-stock__empty">
+          Sign in to generate images.
+        </p>
+      );
+    } else if (busy) {
+      listBody = (
+        <p className="jayrr-editor-add-stock__empty">Generating image…</p>
+      );
+    } else if (generated) {
+      listBody = (
+        <div className="jayrr-editor-add-stock__preview">
+          <img src={generated.url} alt={generated.label} />
+        </div>
+      );
+    } else if (error) {
+      listBody = <p className="jayrr-editor-add-stock__empty">{error}</p>;
+    } else {
+      listBody = (
+        <p className="jayrr-editor-add-stock__empty">
+          Describe an image, then generate it.
+        </p>
+      );
+    }
+  } else if (source === "search") {
     if (!canQuery) {
       listBody = (
         <p className="jayrr-editor-add-stock__empty">
@@ -370,8 +529,8 @@ export const JayrrEditorAddImageDialog = ({
   } else if (docsStills.length === 0) {
     listBody = (
       <p className="jayrr-editor-add-stock__empty">
-        No images on this board or in Docs. Drop an image on the canvas, or
-        search stock photos.
+        No images on this board or in Docs. Drop an image on the canvas, search
+        stock photos, or generate one.
       </p>
     );
   } else {
@@ -430,6 +589,16 @@ export const JayrrEditorAddImageDialog = ({
           >
             Search
           </button>
+          <button
+            type="button"
+            className={`jayrr-editor-add-stock__source${
+              source === "generate" ? " is-active" : ""
+            }`}
+            aria-pressed={source === "generate"}
+            onClick={() => setImageSource("generate")}
+          >
+            Generate
+          </button>
         </div>
         {source === "search" ? (
           <Field label="Search">
@@ -441,8 +610,75 @@ export const JayrrEditorAddImageDialog = ({
             />
           </Field>
         ) : null}
+        {source === "generate" ? (
+          <>
+            <div className="jayrr-editor-add-stock__generate-row">
+              <Field label="Model">
+                <select
+                  className="jayrr-ui-input"
+                  value={modelId}
+                  disabled={busy || models.length === 0}
+                  aria-label="Image model"
+                  onChange={(event) => setModelId(event.currentTarget.value)}
+                >
+                  {models.length === 0 ? (
+                    <option value="">
+                      {error ? "Auto" : "Loading models…"}
+                    </option>
+                  ) : (
+                    models.map((model) => (
+                      <option key={model.id} value={model.id}>
+                        {model.name}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </Field>
+              <Field label="Aspect">
+                <select
+                  className="jayrr-ui-input"
+                  value={aspectRatio}
+                  disabled={busy}
+                  aria-label="Aspect ratio"
+                  onChange={(event) =>
+                    setAspectRatio(event.currentTarget.value)
+                  }
+                >
+                  {aspectOptions.map((item) => (
+                    <option key={item} value={item}>
+                      {item}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+            <Field label="Prompt">
+              <textarea
+                className="jayrr-ui-input jayrr-editor-add-stock__prompt"
+                value={prompt}
+                rows={3}
+                disabled={!canQuery || busy}
+                placeholder="A red panda astronaut in studio lighting"
+                aria-label="Image prompt"
+                onChange={(event) => setPrompt(event.currentTarget.value)}
+                onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => {
+                  if (
+                    event.key === "Enter" &&
+                    !event.shiftKey &&
+                    !event.nativeEvent.isComposing
+                  ) {
+                    event.preventDefault();
+                    void runGenerate();
+                  }
+                }}
+              />
+            </Field>
+          </>
+        ) : null}
         <div className="jayrr-editor-add-stock__body">{listBody}</div>
-        {photos.length > 0 && error && source === "search" ? (
+        {error &&
+        ((source === "search" && photos.length > 0) ||
+          (source === "generate" && generated)) ? (
           <p className="jayrr-editor-add-stock__error">{error}</p>
         ) : null}
         <div className="jayrr-editor-add-stock__buttons">
@@ -452,6 +688,16 @@ export const JayrrEditorAddImageDialog = ({
           {source === "search" ? (
             <Button type="submit" variant="secondary" disabled={!canSearch}>
               Search
+            </Button>
+          ) : null}
+          {source === "generate" ? (
+            <Button
+              type="submit"
+              variant="secondary"
+              busy={busy}
+              disabled={!canGenerate}
+            >
+              Generate
             </Button>
           ) : null}
           <Button
@@ -464,6 +710,13 @@ export const JayrrEditorAddImageDialog = ({
                   return;
                 }
                 pickPhoto(selectedPhoto);
+                return;
+              }
+              if (source === "generate") {
+                if (!generated) {
+                  return;
+                }
+                pickGenerated(generated);
               }
             }}
           >

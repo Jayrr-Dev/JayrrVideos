@@ -32,11 +32,58 @@
     height: 1rem;
   }
 
+  .jayrr-editor-ai__tabs {
+    display: flex;
+    gap: 0.25rem;
+    width: 100%;
+    margin: 0.15rem 0 0.65rem;
+  }
+
+  .jayrr-editor-ai__tab {
+    flex: 1;
+    min-height: 1.85rem;
+    border: 1.5px solid var(--color-gray-40, var(--default-border-color));
+    border-radius: 0.45rem;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-size: 0.75rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .jayrr-editor-ai__tab.is-on {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+  }
+
   .jayrr-editor-ai__body {
     display: flex;
     flex-direction: column;
     min-height: 18rem;
     max-height: min(30rem, 58vh);
+  }
+
+  .jayrr-editor-ai__generate {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    min-height: 18rem;
+  }
+
+  .jayrr-editor-ai__generate-row {
+    display: flex;
+    gap: 0.55rem;
+    min-width: 0;
+  }
+
+  .jayrr-editor-ai__generate-row--split > * {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .jayrr-editor-ai__generate .jayrr-editor-ai__empty {
+    padding: 0.35rem 0.5rem 0.15rem;
   }
 
   .jayrr-editor-ai__transcript {

@@ -65,6 +65,8 @@ import {
   type OverlapBand,
 } from "./buildEditorTimeline";
 import { filmstripSliceCount, getClipFilmstrip } from "./captureClipFilmstrip";
+import { JayrrSoundWaveform } from "../../sounds/JayrrSoundWaveform";
+import { jayrrSoundPlayUrls } from "../../sounds/jayrrSoundPlayback";
 
 type ZoomMode = "fit" | "fixed";
 
@@ -996,6 +998,7 @@ export const JayrrEditorTimeline = ({
                   pxPerMs={pxPerMs}
                   selected={selectedClipIds.has(clip.id)}
                   playhead={playheadClipId === clip.id}
+                  currentTimeMs={currentTimeMs}
                   hidden={activeClipId === clip.id}
                   resizing={trimDraft?.clipId === clip.id}
                   onResizePointerDown={(edge, event) =>
@@ -1034,6 +1037,7 @@ export const JayrrEditorTimeline = ({
                     pxPerMs={pxPerMs}
                     selected={selectedClipIds.has(clip.id)}
                     playhead={playheadClipId === clip.id}
+                    currentTimeMs={currentTimeMs}
                     hidden={activeClipId === clip.id}
                     resizing={trimDraft?.clipId === clip.id}
                     onResizePointerDown={(edge, event) =>
@@ -1098,6 +1102,7 @@ export const JayrrEditorTimeline = ({
                   pxPerMs={pxPerMs}
                   selected={selectedClipIds.has(activeClip.id)}
                   playhead={playheadClipId === activeClip.id}
+                  currentTimeMs={currentTimeMs}
                   packed
                   dragging
                 />
@@ -1416,6 +1421,7 @@ const ClipFace = ({
   pxPerMs,
   selected,
   playhead,
+  currentTimeMs,
   dragging,
   hidden,
   packed,
@@ -1428,6 +1434,7 @@ const ClipFace = ({
   pxPerMs: number;
   selected: boolean;
   playhead: boolean;
+  currentTimeMs: number;
   dragging?: boolean;
   hidden?: boolean;
   packed?: boolean;
@@ -1452,6 +1459,23 @@ const ClipFace = ({
   }, []);
   const isSound =
     clip.type === EDITOR_SOUND_TYPE || clip.type === EDITOR_AUDIO_TYPE;
+  const soundSources =
+    clip.type === EDITOR_SOUND_TYPE
+      ? jayrrSoundPlayUrls(clip.url, clip.path)
+      : clip.type === EDITOR_AUDIO_TYPE
+        ? [clip.url]
+        : [];
+  const sourceDurationMs = Math.max(
+    1,
+    clip.sourceDurationMs ?? clip.durationMs,
+  );
+  const sourceOffsetMs = clip.sourceOffsetMs ?? 0;
+  const waveStart = sourceOffsetMs / sourceDurationMs;
+  const waveEnd = (sourceOffsetMs + clip.durationMs) / sourceDurationMs;
+  const waveProgress =
+    playhead && clip.durationMs > 0
+      ? Math.min(1, Math.max(0, (currentTimeMs - clip.startMs) / clip.durationMs))
+      : 0;
   const skipFilmstrip =
     isSound ||
     clip.type === EDITOR_HTML_TYPE ||
@@ -1511,6 +1535,17 @@ const ClipFace = ({
           </span>
         ))}
       </span>
+      {isSound ? (
+        <JayrrSoundWaveform
+          sources={soundSources}
+          axis="y"
+          start={waveStart}
+          end={waveEnd}
+          progress={waveProgress}
+          tone={playhead ? "playing" : "idle"}
+          className="jayrr-editor-clip__wave"
+        />
+      ) : null}
       <span className="jayrr-editor-clip__label">{clip.label}</span>
     </button>
   );
@@ -1533,6 +1568,7 @@ const TimelineClip = ({
   pxPerMs,
   selected,
   playhead,
+  currentTimeMs,
   packed,
   hidden,
   resizing,
@@ -1543,6 +1579,7 @@ const TimelineClip = ({
   pxPerMs: number;
   selected: boolean;
   playhead: boolean;
+  currentTimeMs: number;
   packed?: boolean;
   hidden?: boolean;
   resizing?: boolean;
@@ -1575,6 +1612,7 @@ const TimelineClip = ({
         pxPerMs={pxPerMs}
         selected={selected}
         playhead={playhead}
+        currentTimeMs={currentTimeMs}
         packed
         dragging={isDragging}
         buttonRef={setNodeRef}

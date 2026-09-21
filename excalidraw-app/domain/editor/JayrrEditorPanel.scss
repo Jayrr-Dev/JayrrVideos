@@ -919,7 +919,12 @@
     border: 0;
   }
 
-  .jayrr-editor-clip__label {
+  .jayrr-editor-clip__wave {
+    position: absolute;
+    inset: 0.15rem 0.2rem;
+    z-index: 0;
+    pointer-events: none;
+  }
     position: relative;
     z-index: 1;
     margin: 0.15rem 0.3rem;

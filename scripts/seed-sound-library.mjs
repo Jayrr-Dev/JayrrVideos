@@ -60,6 +60,8 @@ const url = process.env.VITE_CONVEX_URL ?? process.env.CONVEX_URL;
 const secret = process.env.SEED_SECRET ?? "";
 const reset = process.argv.includes("--reset");
 const metadataOnly = process.argv.includes("--metadata-only");
+const previewFallback = process.argv.includes("--preview-fallback");
+const keepExisting = process.argv.includes("--keep-existing");
 const limitArg = process.argv.find((arg) => arg.startsWith("--limit="));
 const limit = limitArg ? Number(limitArg.slice("--limit=".length)) : 0;
 const CONCURRENCY = 12;
@@ -259,7 +261,9 @@ if (reset) {
   console.log("Clearing existing sounds...");
   for (;;) {
     const cleared = await client.mutation(api.soundSeed.clearPage, { secret });
-    console.log(`  deleted sounds=${cleared.sounds} folders=${cleared.folders}`);
+    console.log(
+      `  deleted sounds=${cleared.sounds} folders=${cleared.folders}`,
+    );
     if (cleared.sounds === 0 && cleared.folders === 0) {
       break;
     }
@@ -269,14 +273,22 @@ if (reset) {
 const libraryRoot = findLibraryRoot();
 if (!libraryRoot) {
   console.warn(
-    "Flatten library missing. Uploading pitch/duration preview audio until OneDrive syncs C:\\Users\\Main\\OneDrive\\Sound Library\\Flatten",
+    "Flatten library missing at C:\\Users\\Main\\OneDrive\\Sound Library\\Flatten",
   );
+  if (!previewFallback) {
+    console.warn(
+      "Skipping audio upload. Pass --preview-fallback to store brown-noise stand-ins.",
+    );
+  }
 }
 
-const files = Number.isFinite(limit) && limit > 0
-  ? catalog.files.slice(0, limit)
-  : catalog.files;
-console.log(`Catalog files: ${files.length}${limit > 0 ? ` (limit ${limit})` : ""}`);
+const files =
+  Number.isFinite(limit) && limit > 0
+    ? catalog.files.slice(0, limit)
+    : catalog.files;
+console.log(
+  `Catalog files: ${files.length}${limit > 0 ? ` (limit ${limit})` : ""}`,
+);
 console.log(`Library root: ${libraryRoot ?? "(missing)"}`);
 
 const SOUND_BATCH = 80;
@@ -292,12 +304,17 @@ const FOLDER_BATCH = 100;
 console.log(`Upserting ${folders.length} folders...`);
 for (let i = 0; i < folders.length; i += FOLDER_BATCH) {
   const batch = folders.slice(i, i + FOLDER_BATCH);
-  await client.mutation(api.soundSeed.insertFolders, { secret, folders: batch });
+  await client.mutation(api.soundSeed.insertFolders, {
+    secret,
+    folders: batch,
+  });
 }
 
 if (!existsSync(FFMPEG) || metadataOnly) {
   console.log(
-    `Done. Audio conversion skipped (ffmpeg=${existsSync(FFMPEG)} metadataOnly=${metadataOnly}).`,
+    `Done. Audio conversion skipped (ffmpeg=${existsSync(
+      FFMPEG,
+    )} metadataOnly=${metadataOnly}).`,
   );
   process.exit(0);
 }
@@ -305,7 +322,9 @@ if (!existsSync(FFMPEG) || metadataOnly) {
 const CHECK_BATCH = 80;
 const existing = new Map();
 for (let i = 0; i < files.length; i += CHECK_BATCH) {
-  const slice = files.slice(i, i + CHECK_BATCH).map((file) => toSound(file).path);
+  const slice = files
+    .slice(i, i + CHECK_BATCH)
+    .map((file) => toSound(file).path);
   const rows = await client.mutation(api.soundSeed.existingPaths, {
     secret,
     paths: slice,
@@ -318,12 +337,29 @@ for (let i = 0; i < files.length; i += CHECK_BATCH) {
 let converted = 0;
 let previewed = 0;
 let skipped = 0;
+let missing = 0;
 let failed = 0;
 let done = 0;
 
-await mapPool(files, CONCURRENCY, async (file, i) => {
+await mapPool(files, CONCURRENCY, async (file) => {
   const sound = toSound(file);
-  if (existing.get(sound.path) === true) {
+  const sourcePath = sourcePathFor(libraryRoot, file);
+  const hasSource = Boolean(sourcePath && existsSync(sourcePath));
+  const hasAudio = existing.get(sound.path) === true;
+
+  if (!hasSource && !previewFallback) {
+    missing += 1;
+    done += 1;
+    return;
+  }
+
+  if (hasAudio && keepExisting) {
+    skipped += 1;
+    done += 1;
+    return;
+  }
+
+  if (hasAudio && !hasSource && previewFallback) {
     skipped += 1;
     done += 1;
     return;
@@ -331,8 +367,6 @@ await mapPool(files, CONCURRENCY, async (file, i) => {
 
   const hash = createHash("sha1").update(sound.path).digest("hex");
   const oggPath = join(tmpOggDir, `${hash}.ogg`);
-  const sourcePath = sourcePathFor(libraryRoot, file);
-  const hasSource = Boolean(sourcePath && existsSync(sourcePath));
   try {
     if (hasSource) {
       await convertSource(sourcePath, oggPath);
@@ -362,11 +396,11 @@ await mapPool(files, CONCURRENCY, async (file, i) => {
   done += 1;
   if (done % 50 === 0 || done === files.length) {
     console.log(
-      `  ${done}/${files.length} source=${converted} preview=${previewed} skipped=${skipped} failed=${failed}`,
+      `  ${done}/${files.length} source=${converted} preview=${previewed} missing=${missing} skipped=${skipped} failed=${failed}`,
     );
   }
 });
 
 console.log(
-  `Done. source=${converted} preview=${previewed} skipped=${skipped} failed=${failed}`,
+  `Done. source=${converted} preview=${previewed} missing=${missing} skipped=${skipped} failed=${failed}`,
 );

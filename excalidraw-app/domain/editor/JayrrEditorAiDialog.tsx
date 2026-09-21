@@ -31,12 +31,22 @@ import {
   compositionDurationMs,
   wrapHyperframeComposition,
 } from "./hyperframesClip";
+import { JayrrEditorAiGenerateTab } from "./JayrrEditorAiGenerateTab";
 import { useJayrrEditorSession } from "./JayrrEditorSession";
 
 import "./JayrrEditorAiDialog.scss";
 
-const INFO =
+const TABS = [
+  { id: "editor", label: "Editor" },
+  { id: "generate", label: "Generate" },
+] as const;
+
+type EditorAiTab = typeof TABS[number]["id"];
+
+const EDITOR_INFO =
   "Ask Jayrr to make a timed HTML clip for this timeline. Enter sends; Shift+Enter adds a line.";
+const GENERATE_INFO =
+  "Describe a shot. Jayrr generates video with OpenRouter and adds it to the sequence. This uses credits.";
 
 const SUGGESTIONS = [
   "Add a 4-second title card that says Launch day",
@@ -178,6 +188,7 @@ export const JayrrEditorAiDialog = ({ onClose }: JayrrEditorAiDialogProps) => {
   const { isAuthenticated } = useConvexAuth();
   const { clips, timeline, currentTimeMs, addHtmlClip, setSelectedClipIds } =
     useJayrrEditorSession();
+  const [tab, setTab] = useState<EditorAiTab>("editor");
   const [input, setInput] = useState("");
   const [infoError, setInfoError] = useState<string | null>(null);
   const [toolErrors, setToolErrors] = useState<ReadonlyMap<string, string>>(
@@ -362,7 +373,11 @@ export const JayrrEditorAiDialog = ({ onClose }: JayrrEditorAiDialogProps) => {
       title={
         <span className="jayrr-editor-ai__title-row">
           Editor AI
-          <Tooltip label={INFO} long position="top">
+          <Tooltip
+            label={tab === "generate" ? GENERATE_INFO : EDITOR_INFO}
+            long
+            position="top"
+          >
             <span className="jayrr-editor-ai__info" aria-label="More info">
               {helpIcon}
             </span>
@@ -371,107 +386,136 @@ export const JayrrEditorAiDialog = ({ onClose }: JayrrEditorAiDialogProps) => {
       }
     >
       <p id={descriptionId} className="visually-hidden">
-        {INFO}
+        {tab === "generate" ? GENERATE_INFO : EDITOR_INFO}
       </p>
-      <div className="jayrr-editor-ai__body" aria-describedby={descriptionId}>
-        <div
-          ref={scroller}
-          className="jayrr-editor-ai__transcript"
-          role="log"
-          aria-label="Editor AI conversation"
-        >
-          {messages.length === 0 ? (
-            <div className="jayrr-editor-ai__empty">
-              <p>Ask Jayrr to add a clip</p>
-              <div className="jayrr-editor-ai__suggestions">
-                {SUGGESTIONS.map((suggestion) => (
-                  <button
-                    key={suggestion}
-                    type="button"
-                    disabled={busy}
-                    onClick={() => submit(suggestion)}
-                  >
-                    {suggestion}
-                  </button>
-                ))}
+      <div
+        className="jayrr-editor-ai__tabs"
+        role="tablist"
+        aria-label="Editor AI mode"
+      >
+        {TABS.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            role="tab"
+            aria-selected={tab === item.id}
+            className={
+              tab === item.id
+                ? "jayrr-editor-ai__tab is-on"
+                : "jayrr-editor-ai__tab"
+            }
+            onClick={() => setTab(item.id)}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+      {tab === "generate" ? (
+        <div aria-describedby={descriptionId}>
+          <JayrrEditorAiGenerateTab />
+        </div>
+      ) : null}
+      {tab === "editor" ? (
+        <div className="jayrr-editor-ai__body" aria-describedby={descriptionId}>
+          <div
+            ref={scroller}
+            className="jayrr-editor-ai__transcript"
+            role="log"
+            aria-label="Editor AI conversation"
+          >
+            {messages.length === 0 ? (
+              <div className="jayrr-editor-ai__empty">
+                <p>Ask Jayrr to add a clip</p>
+                <div className="jayrr-editor-ai__suggestions">
+                  {SUGGESTIONS.map((suggestion) => (
+                    <button
+                      key={suggestion}
+                      type="button"
+                      disabled={busy}
+                      onClick={() => submit(suggestion)}
+                    >
+                      {suggestion}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
-          ) : (
-            messages.map((message) => {
-              if (message.role === "user") {
-                const text = messageText(message);
-                if (!text) {
-                  return null;
+            ) : (
+              messages.map((message) => {
+                if (message.role === "user") {
+                  const text = messageText(message);
+                  if (!text) {
+                    return null;
+                  }
+                  return (
+                    <div key={message.id} className="jayrr-editor-ai-user">
+                      {text}
+                    </div>
+                  );
                 }
                 return (
-                  <div key={message.id} className="jayrr-editor-ai-user">
-                    {text}
-                  </div>
+                  <AssistantTurn
+                    key={message.id}
+                    message={message}
+                    toolErrors={toolErrors}
+                    live={busy && message.id === last?.id}
+                  />
                 );
-              }
-              return (
-                <AssistantTurn
-                  key={message.id}
-                  message={message}
-                  toolErrors={toolErrors}
-                  live={busy && message.id === last?.id}
-                />
-              );
-            })
-          )}
-          {showThinking ? (
-            <div className="jayrr-editor-ai-chip jayrr-editor-ai-chip--busy">
-              Jayrr is thinking…
-            </div>
-          ) : null}
-          {error || infoError ? (
-            <div className="jayrr-editor-ai-error">
-              {infoError ?? error?.message}
-            </div>
-          ) : null}
-        </div>
-        <form
-          className="jayrr-editor-ai__composer"
-          onSubmit={(event) => {
-            event.preventDefault();
-            submit(input);
-          }}
-        >
-          <div className="jayrr-editor-ai__composer-box">
-            <textarea
-              value={input}
-              rows={2}
-              onChange={(event) => setInput(event.target.value)}
-              onKeyDown={onKeyDown}
-              placeholder={busy ? "Jayrr is busy…" : "Ask for a new clip…"}
-              aria-label="Message editor AI"
-            />
-            {busy ? (
-              <Button
-                type="button"
-                variant="ghost"
-                title="Stop"
-                aria-label="Stop"
-                className="jayrr-editor-ai__send"
-                onClick={() => void stop()}
-              >
-                {StopSquareIcon}
-              </Button>
-            ) : (
-              <Button
-                type="submit"
-                variant="ghost"
-                disabled={!input.trim()}
-                title="Send"
-                aria-label="Send"
-                className="jayrr-editor-ai__send"
-              >
-                {SendPlaneIcon}
-              </Button>
+              })
             )}
+            {showThinking ? (
+              <div className="jayrr-editor-ai-chip jayrr-editor-ai-chip--busy">
+                Jayrr is thinking…
+              </div>
+            ) : null}
+            {error || infoError ? (
+              <div className="jayrr-editor-ai-error">
+                {infoError ?? error?.message}
+              </div>
+            ) : null}
           </div>
-        </form>
-      </div>
+          <form
+            className="jayrr-editor-ai__composer"
+            onSubmit={(event) => {
+              event.preventDefault();
+              submit(input);
+            }}
+          >
+            <div className="jayrr-editor-ai__composer-box">
+              <textarea
+                value={input}
+                rows={2}
+                onChange={(event) => setInput(event.target.value)}
+                onKeyDown={onKeyDown}
+                placeholder={busy ? "Jayrr is busy…" : "Ask for a new clip…"}
+                aria-label="Message editor AI"
+              />
+              {busy ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  title="Stop"
+                  aria-label="Stop"
+                  className="jayrr-editor-ai__send"
+                  onClick={() => void stop()}
+                >
+                  {StopSquareIcon}
+                </Button>
+              ) : (
+                <Button
+                  type="submit"
+                  variant="ghost"
+                  disabled={!input.trim()}
+                  title="Send"
+                  aria-label="Send"
+                  className="jayrr-editor-ai__send"
+                >
+                  {SendPlaneIcon}
+                </Button>
+              )}
+            </div>
+          </form>
+        </div>
+      ) : null}
     </Dialog>
   );
 };
