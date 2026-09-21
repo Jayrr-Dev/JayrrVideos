@@ -1,6 +1,10 @@
-import type { ReactNode } from "react";
+import type { PointerEvent, ReactNode } from "react";
 
 import type { AudioSourceOption } from "../objects/listAudioSources";
+
+const stopCanvasPointer = (event: PointerEvent<HTMLElement>) => {
+  event.stopPropagation();
+};
 
 type LiveStatus = {
   listening: boolean;
@@ -85,11 +89,10 @@ export const LiveWidgetToolbar = ({
     {onToggleConfig ? (
       <button
         type="button"
-        className={
-          configOpen
-            ? "jayrr-called-hyperlink__action is-on"
-            : "jayrr-called-hyperlink__action"
-        }
+        className="jayrr-called-hyperlink__action"
+        aria-pressed={!!configOpen}
+        onPointerDown={stopCanvasPointer}
+        onPointerUp={stopCanvasPointer}
         onClick={(event) => {
           event.stopPropagation();
           onToggleConfig();

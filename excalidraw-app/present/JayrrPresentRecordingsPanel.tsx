@@ -6,7 +6,13 @@ import {
   TrashIcon,
 } from "@excalidraw/excalidraw/components/icons";
 import { useAction, useMutation, useQuery } from "convex/react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type MouseEvent,
+  type ReactNode,
+} from "react";
 
 import { useAtom } from "../app-jotai";
 import { JayrrConfirmDialog } from "../components/ui";
@@ -130,6 +136,23 @@ const RecordingThumbMedia = ({
   );
 };
 
+const openCardMenu = (
+  event: MouseEvent,
+  renaming: boolean,
+  menuOpen: boolean,
+  onMenuToggle: () => void,
+) => {
+  if (event.target instanceof HTMLInputElement) {
+    return;
+  }
+  event.preventDefault();
+  event.stopPropagation();
+  if (renaming || menuOpen) {
+    return;
+  }
+  onMenuToggle();
+};
+
 const EditGlyph = (
   <svg
     aria-hidden="true"
@@ -208,7 +231,12 @@ const RecordingCard = ({
   }, [renaming]);
 
   return (
-    <li className="jayrr-present__recording">
+    <li
+      className="jayrr-present__recording"
+      onContextMenu={(event) =>
+        openCardMenu(event, renaming, menuOpen, onMenuToggle)
+      }
+    >
       {renaming ? (
         <input
           ref={nameInputRef}
@@ -364,7 +392,12 @@ const FolderCard = ({
   }, [renaming]);
 
   return (
-    <li className="jayrr-scene-card">
+    <li
+      className="jayrr-scene-card"
+      onContextMenu={(event) =>
+        openCardMenu(event, renaming, menuOpen, onMenuToggle)
+      }
+    >
       {renaming ? (
         <input
           ref={renameInputRef}

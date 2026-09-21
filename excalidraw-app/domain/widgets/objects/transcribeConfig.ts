@@ -4,6 +4,7 @@ import { JAYRR_CALLED_OBJECT_KEY } from "../model";
 
 export type TranscribeConfig = {
   contextEnabled?: boolean;
+  configOpen?: boolean;
   jevIq: boolean;
   jevSmart: boolean;
   jevMbti: boolean;
@@ -20,6 +21,7 @@ export type TranscribeConfig = {
 
 export const DEFAULT_TRANSCRIBE: TranscribeConfig = {
   contextEnabled: true,
+  configOpen: false,
   jevIq: false,
   jevSmart: false,
   jevMbti: false,
@@ -45,6 +47,7 @@ export const readTranscribeConfig = (
   return {
     contextEnabled:
       (bag as { contextEnabled?: unknown }).contextEnabled !== false,
+    configOpen: (bag as { configOpen?: unknown }).configOpen === true,
     jevIq: (bag as { jevIq?: unknown }).jevIq === true,
     jevSmart: (bag as { jevSmart?: unknown }).jevSmart === true,
     jevMbti: (bag as { jevMbti?: unknown }).jevMbti === true,
@@ -72,6 +75,7 @@ export const writeTranscribeConfig = (
       : {};
   bag.kind = "transcribe";
   bag.contextEnabled = config.contextEnabled === true;
+  bag.configOpen = config.configOpen === true;
   bag.jevIq = config.jevIq;
   bag.jevSmart = config.jevSmart;
   bag.jevMbti = config.jevMbti;

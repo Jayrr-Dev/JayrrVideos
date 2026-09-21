@@ -1,0 +1,93 @@
+.excalidraw {
+  .jayrr-editor-blend-mode .Dialog__content {
+    max-height: min(36rem, 78vh);
+  }
+
+  .jayrr-editor-blend-mode .Dialog__chrome {
+    margin-bottom: 0.75rem;
+    padding-bottom: 0;
+    border-bottom: none;
+  }
+
+  .jayrr-editor-blend-mode .Dialog__title {
+    margin-bottom: 0;
+  }
+
+  .jayrr-editor-blend-mode__title-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    min-width: 0;
+  }
+
+  .jayrr-editor-blend-mode__info {
+    display: inline-flex;
+    flex: 0 0 auto;
+    color: var(--icon-fill-color);
+    cursor: help;
+  }
+
+  .jayrr-editor-blend-mode__info svg {
+    width: 1rem;
+    height: 1rem;
+  }
+
+  .jayrr-editor-blend-mode__form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    min-height: 0;
+  }
+
+  .jayrr-editor-blend-mode__body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+    min-height: 0;
+    max-height: min(24rem, 52vh);
+    overflow: auto;
+  }
+
+  .jayrr-editor-blend-mode__group {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    min-width: 0;
+  }
+
+  .jayrr-editor-blend-mode__group legend {
+    padding: 0;
+    margin: 0 0 0.3rem;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--color-gray-60);
+  }
+
+  .jayrr-editor-blend-mode__option {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    margin: 0 0 0.12rem;
+    padding: 0.32rem 0.5rem;
+    border-radius: var(--border-radius-md);
+    font-size: 0.82rem;
+    cursor: pointer;
+  }
+
+  .jayrr-editor-blend-mode__option:hover,
+  .jayrr-editor-blend-mode__option.is-active {
+    background: var(--button-hover-bg);
+  }
+
+  .jayrr-editor-blend-mode__option input {
+    margin: 0;
+  }
+
+  .jayrr-editor-blend-mode__buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+  }
+}

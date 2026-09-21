@@ -5,6 +5,7 @@
     height: 100%;
     background: #0f172a;
     overflow: hidden;
+    isolation: isolate;
   }
 
   .jayrr-editor-preview-embed__video {

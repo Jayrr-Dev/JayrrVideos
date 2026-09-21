@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useState, type ReactNode } from "react";
 
 type ToolbarRenderer = () => ReactNode;
 
@@ -43,7 +43,7 @@ export const useRegisterWidgetToolbar = (
   render: ToolbarRenderer,
   deps: readonly unknown[],
 ) => {
-  useEffect(
+  useLayoutEffect(
     () => registerWidgetToolbar(elementId, render),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- caller owns deps
     [elementId, ...deps],

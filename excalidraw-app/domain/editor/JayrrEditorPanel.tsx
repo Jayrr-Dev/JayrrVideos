@@ -17,19 +17,25 @@ import "../../components/ui/JayrrLibraryMenu.scss";
 
 import {
   canCutAtTime,
+  clipAtTimeAcrossLanes,
+  EDITOR_CLIP_TYPE,
   EDITOR_CUT_MIN_MS,
+  editorLanes,
   formatEditorClock,
   getMergeableClips,
   mergeProjectClips,
   moveEditorClip,
   newEditorClipId,
-  setClipTransition,
+  setClipsBlendMode,
+  setClipsTransition,
+  type EditorBlendMode,
   type EditorClip,
   type EditorProjectClip,
   type EditorTransitionKind,
 } from "./buildEditorTimeline";
 import { findEditorTargetVideo } from "./editorPreviewModel";
 import { JayrrEditorAddRecordingDialog } from "./JayrrEditorAddRecordingDialog";
+import { JayrrEditorBlendModeDialog } from "./JayrrEditorBlendModeDialog";
 import { useJayrrEditorSession } from "./JayrrEditorSession";
 import { JayrrEditorTimeline } from "./JayrrEditorTimeline";
 import { JayrrEditorVolumeControl } from "./JayrrEditorVolumeControl";
@@ -72,6 +78,7 @@ export const JayrrEditorPanel = () => {
     persist,
     stackLaneIds,
     addStackLane,
+    removeStackLane,
     timeline,
     currentTimeMs,
     playing,
@@ -93,6 +100,10 @@ export const JayrrEditorPanel = () => {
   const [zoomMode, setZoomMode] = useState<"fit" | "fixed">("fit");
   const [selectedClipIds, setSelectedClipIds] = useState<string[]>([]);
   const [addRecordingOpen, setAddRecordingOpen] = useState(false);
+  const [blendPicker, setBlendPicker] = useState<{
+    clipIds: readonly string[];
+    blendMode: EditorBlendMode;
+  } | null>(null);
 
   const selectedIdSet = useMemo(
     () => new Set(selectedClipIds),
@@ -107,18 +118,16 @@ export const JayrrEditorPanel = () => {
     });
   }, [clips]);
 
-  const playheadClipId =
-    timeline.sequence.find(
-      (clip) =>
-        currentTimeMs >= clip.startMs &&
-        currentTimeMs < clip.startMs + clip.durationMs,
-    )?.id ??
-    timeline.overlays.find(
-      (clip) =>
-        currentTimeMs >= clip.startMs &&
-        currentTimeMs < clip.startMs + clip.durationMs,
-    )?.id ??
-    null;
+  const lanes = useMemo(
+    () => editorLanes(timeline, stackLaneIds),
+    [stackLaneIds, timeline],
+  );
+
+  const playheadClip = useMemo(
+    () => clipAtTimeAcrossLanes(lanes, currentTimeMs, selectedIdSet),
+    [currentTimeMs, lanes, selectedIdSet],
+  );
+  const playheadClipId = playheadClip?.id ?? null;
 
   const removeSelected = useCallback(() => {
     if (selectedClipIds.length === 0) {
@@ -131,7 +140,9 @@ export const JayrrEditorPanel = () => {
     stop();
   }, [clips, persist, selectedClipIds, stop]);
 
-  const canCut = canCutAtTime(timeline.sequence, currentTimeMs);
+  const canCut = playheadClip
+    ? canCutAtTime([playheadClip], currentTimeMs)
+    : false;
   const mergeable = useMemo(
     () => getMergeableClips(clips, selectedIdSet),
     [clips, selectedIdSet],
@@ -162,15 +173,8 @@ export const JayrrEditorPanel = () => {
   }, [clips, persist, selectedIdSet]);
 
   const cutAtPlayhead = useCallback(() => {
-    if (!canCutAtTime(timeline.sequence, currentTimeMs)) {
-      return;
-    }
-    const clip = timeline.sequence.find(
-      (item) =>
-        currentTimeMs >= item.startMs &&
-        currentTimeMs < item.startMs + item.durationMs,
-    );
-    if (!clip) {
+    const clip = clipAtTimeAcrossLanes(lanes, currentTimeMs, selectedIdSet);
+    if (!clip || !canCutAtTime([clip], currentTimeMs)) {
       return;
     }
     const offsetInClip = Math.round(currentTimeMs - clip.startMs);
@@ -184,6 +188,7 @@ export const JayrrEditorPanel = () => {
     const startMs = clip.laneStartMs ?? clip.startMs;
     const left: EditorProjectClip = {
       id: clip.id,
+      type: EDITOR_CLIP_TYPE,
       recordingId: clip.recordingId,
       url: clip.url,
       posterUrl: clip.posterUrl,
@@ -192,9 +197,12 @@ export const JayrrEditorPanel = () => {
       sourceOffsetMs,
       laneId: clip.laneId,
       laneStartMs: startMs,
+      ...(clip.transitionKind ? { transitionKind: clip.transitionKind } : {}),
+      ...(clip.blendMode ? { blendMode: clip.blendMode } : {}),
     };
     const right: EditorProjectClip = {
       id: newEditorClipId(),
+      type: EDITOR_CLIP_TYPE,
       recordingId: clip.recordingId,
       url: clip.url,
       posterUrl: clip.posterUrl,
@@ -216,7 +224,7 @@ export const JayrrEditorPanel = () => {
     ];
     persist(next);
     setSelectedClipIds([left.id, right.id]);
-  }, [clips, currentTimeMs, persist, timeline.sequence]);
+  }, [clips, currentTimeMs, lanes, persist, selectedIdSet]);
 
   const selectClip = useCallback(
     (clip: EditorClip, opts?: { toggle?: boolean }) => {
@@ -246,8 +254,19 @@ export const JayrrEditorPanel = () => {
   );
 
   const setTransition = useCallback(
-    (clipId: string, kind: EditorTransitionKind) => {
-      const next = setClipTransition(clips, clipId, kind);
+    (clipIds: readonly string[], kind: EditorTransitionKind) => {
+      const next = setClipsTransition(clips, clipIds, kind);
+      if (!next) {
+        return;
+      }
+      persist(next);
+    },
+    [clips, persist],
+  );
+
+  const setBlendMode = useCallback(
+    (clipIds: readonly string[], blendMode: EditorBlendMode) => {
+      const next = setClipsBlendMode(clips, clipIds, blendMode);
       if (!next) {
         return;
       }
@@ -355,7 +374,11 @@ export const JayrrEditorPanel = () => {
                 onSelectClip={selectClip}
                 onMoveClip={moveClip}
                 onSetTransition={setTransition}
+                onOpenBlend={(args) => {
+                  window.setTimeout(() => setBlendPicker(args), 0);
+                }}
                 onAddStackLane={addStackLane}
+                onRemoveStackLane={removeStackLane}
                 menuContainer={container}
                 emptyAction={
                   <FilledButton
@@ -374,6 +397,7 @@ export const JayrrEditorPanel = () => {
               className="jayrr-editor-menu"
               collisionPadding={8}
               data-prevent-outside-click
+              style={{ maxHeight: "none" }}
             >
               <ContextMenu.Item
                 className="jayrr-editor-menu__item"
@@ -417,6 +441,16 @@ export const JayrrEditorPanel = () => {
             const clipId = addRecording(row);
             setSelectedClipIds([clipId]);
             setAddRecordingOpen(false);
+          }}
+        />
+      ) : null}
+      {blendPicker ? (
+        <JayrrEditorBlendModeDialog
+          value={blendPicker.blendMode}
+          onClose={() => setBlendPicker(null)}
+          onPick={(mode) => {
+            setBlendMode(blendPicker.clipIds, mode);
+            setBlendPicker(null);
           }}
         />
       ) : null}

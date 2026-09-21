@@ -1,12 +1,12 @@
 import clsx from "clsx";
 import React, {
+  forwardRef,
+  useCallback,
   useEffect,
+  useImperativeHandle,
   useLayoutEffect,
   useRef,
   useState,
-  forwardRef,
-  useImperativeHandle,
-  useCallback,
 } from "react";
 
 import {
@@ -23,13 +23,13 @@ import { useOutsideClick } from "../../hooks/useOutsideClick";
 import { useEditorInterface, useExcalidrawSetAppState } from "../App";
 import { Island } from "../Island";
 
+import { SidebarPropsContext } from "./common";
 import { SidebarHeader } from "./SidebarHeader";
+import { SidebarTab } from "./SidebarTab";
+import { SidebarTabs } from "./SidebarTabs";
 import { SidebarTabTrigger } from "./SidebarTabTrigger";
 import { SidebarTabTriggers } from "./SidebarTabTriggers";
 import { SidebarTrigger } from "./SidebarTrigger";
-import { SidebarPropsContext } from "./common";
-import { SidebarTabs } from "./SidebarTabs";
-import { SidebarTab } from "./SidebarTab";
 
 import "./Sidebar.scss";
 
@@ -117,11 +117,14 @@ export const SidebarInner = forwardRef(
           if ((event.target as Element).closest(".sidebar-trigger")) {
             return;
           }
-          if (!docked || !editorInterface.canFitSidebar) {
-            closeLibrary();
+          // Keep a docked sidebar open while selecting canvas objects, even if
+          // the viewport is too narrow to push the canvas aside.
+          if (docked) {
+            return;
           }
+          closeLibrary();
         },
-        [closeLibrary, docked, editorInterface.canFitSidebar],
+        [closeLibrary, docked],
       ),
     );
 

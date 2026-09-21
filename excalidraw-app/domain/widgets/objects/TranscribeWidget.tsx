@@ -1,5 +1,7 @@
 import { CaptureUpdateAction, newElementWith } from "@excalidraw/element";
 import { useExcalidrawAPI } from "@excalidraw/excalidraw";
+import { helpIcon } from "@excalidraw/excalidraw/components/icons";
+import { Popover } from "radix-ui";
 import {
   useCallback,
   useEffect,
@@ -7,6 +9,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type ReactNode,
 } from "react";
 
 import {
@@ -430,6 +433,68 @@ const previousText = (turns: ChatTurn[], index: number) => {
   return parts.join(" ");
 };
 
+const JevCardHeader = ({
+  label,
+  pressed,
+  ariaLabel,
+  onToggle,
+  container,
+  inlineView = true,
+  children,
+}: {
+  label: string;
+  pressed: boolean;
+  ariaLabel: string;
+  onToggle: () => void;
+  container: HTMLElement | null;
+  inlineView?: boolean;
+  children: ReactNode;
+}) => (
+  <>
+    <div className="jayrr-called-embed__title jayrr-called-embed__title--row">
+      <div className="jayrr-called-embed__title-lead">
+        <div className="jayrr-called-embed__label">{label}</div>
+        <Popover.Root>
+          <Popover.Trigger asChild>
+            <button
+              type="button"
+              className="jayrr-called-embed__info"
+              aria-label={`${label} scale`}
+            >
+              {helpIcon}
+            </button>
+          </Popover.Trigger>
+          <Popover.Portal container={container ?? undefined}>
+            <Popover.Content
+              side="bottom"
+              align="start"
+              sideOffset={6}
+              collisionPadding={8}
+              className="jayrr-called-embed__legend"
+            >
+              {children}
+            </Popover.Content>
+          </Popover.Portal>
+        </Popover.Root>
+      </div>
+      <button
+        type="button"
+        className={
+          pressed
+            ? "jayrr-called-embed__switch is-on"
+            : "jayrr-called-embed__switch"
+        }
+        aria-pressed={pressed}
+        aria-label={ariaLabel}
+        onClick={onToggle}
+      >
+        <span className="jayrr-called-embed__knob" />
+      </button>
+    </div>
+    {pressed ? (inlineView ? children : null) : null}
+  </>
+);
+
 const IqBadge = ({ composite }: { composite: number }) => {
   const shade: IqShade = shadeFromComposite(composite);
   return (
@@ -577,7 +642,6 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
   const [names, setNames] = useState<Record<number, string>>({});
   const [editingSpeaker, setEditingSpeaker] = useState<number | null>(null);
   const [status, setStatus] = useState("Pick a source, then Start.");
-  const [configOpen, setConfigOpen] = useState(false);
   const [config, setConfig] = useState<TranscribeConfig>(DEFAULT_TRANSCRIBE);
   const [scores, setScores] = useState<TurnIq[]>([]);
   const [live, setLive] = useState<TurnIq | null>(null);
@@ -660,7 +724,23 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
 
   useEffect(() => {
     resetIq();
-  }, [config, sourceId, conversation.session, resetIq]);
+  }, [
+    config.contextEnabled,
+    config.jevIq,
+    config.jevSmart,
+    config.jevMbti,
+    config.jevMbtiAdvance,
+    config.jevEnneagram,
+    config.jevHype,
+    config.jevEnergy,
+    config.jevOnline,
+    config.jevSocion,
+    config.jevBigFive,
+    config.jevEmotion,
+    sourceId,
+    conversation.session,
+    resetIq,
+  ]);
 
   useEffect(() => {
     const element = editor
@@ -1545,6 +1625,8 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
       : status;
   const speakers = uniqueSpeakers(turns);
   const liveSpeaker = turns[turns.length - 1]?.speaker ?? null;
+  const toggleConfig = () =>
+    applyConfig({ ...config, configOpen: !config.configOpen }, true);
 
   useRegisterWidgetToolbar(
     elementId,
@@ -1557,9 +1639,9 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
         sourceId={sourceId}
         sources={sources}
         clearDisabled={turns.length === 0}
-        configOpen={configOpen}
+        configOpen={!!config.configOpen}
         onClear={clearChat}
-        onToggleConfig={() => setConfigOpen((open) => !open)}
+        onToggleConfig={toggleConfig}
         onStart={() => {
           if (listening && !paused) {
             pause();
@@ -1591,7 +1673,6 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
       sourceId,
       sources,
       turns.length,
-      configOpen,
       config,
     ],
   );
@@ -1611,394 +1692,312 @@ export const TranscribeWidget = ({ elementId }: { elementId: string }) => {
       ref={rootRef}
       className="jayrr-called-embed jayrr-called-embed--transcribe"
     >
-      {config.contextEnabled ? (
-        <ConversationIndicators conversation={conversation} />
-      ) : null}
-      {configOpen ? (
+      {config.configOpen ? (
         <div className="jayrr-called-embed__cards">
-          <label className="jayrr-called-embed__check">
-            <input
-              type="checkbox"
-              checked={!!config.contextEnabled}
-              onChange={(event) =>
+          <div className="jayrr-called-embed__card">
+            <JevCardHeader
+              label="Conversation context"
+              pressed={!!config.contextEnabled}
+              ariaLabel="Show conversation topic view"
+              container={rootRef.current}
+              inlineView={false}
+              onToggle={() =>
                 applyConfig(
-                  { ...config, contextEnabled: event.target.checked },
+                  { ...config, contextEnabled: !config.contextEnabled },
                   true,
                 )
               }
-            />
-            Conversation context (preview)
-          </label>
-          <div className="jayrr-called-embed__card">
-            <div className="jayrr-called-embed__title jayrr-called-embed__title--row">
-              <div className="jayrr-called-embed__label">Jev IQ</div>
-              <button
-                type="button"
-                className={
-                  config.jevIq
-                    ? "jayrr-called-embed__switch is-on"
-                    : "jayrr-called-embed__switch"
-                }
-                aria-pressed={config.jevIq}
-                aria-label="Score speech with Jev IQ"
-                onClick={() => {
-                  const next = { ...config, jevIq: !config.jevIq };
-                  resetIq();
-                  applyConfig(next, true);
-                }}
-              >
-                <span className="jayrr-called-embed__knob" />
-              </button>
-            </div>
-            <div className="jayrr-called-embed__bands">
-              {IQ_BANDS.map((band) => (
-                <span
-                  key={band.label}
-                  className={`jayrr-called-embed__iq jayrr-called-embed__iq--${band.shade}`}
-                >
-                  {band.label}
-                </span>
-              ))}
-            </div>
+            >
+              <div className="jayrr-called-embed__hint">
+                Uses recent talk to pick the active topic on the live view.
+              </div>
+            </JevCardHeader>
           </div>
           <div className="jayrr-called-embed__card">
-            <div className="jayrr-called-embed__title jayrr-called-embed__title--row">
-              <div className="jayrr-called-embed__label">Jev Smart</div>
-              <button
-                type="button"
-                className={
-                  config.jevSmart
-                    ? "jayrr-called-embed__switch is-on"
-                    : "jayrr-called-embed__switch"
-                }
-                aria-pressed={config.jevSmart}
-                aria-label="Score speech with Jev Smart"
-                onClick={() => {
-                  const next = { ...config, jevSmart: !config.jevSmart };
-                  resetIq();
-                  applyConfig(next, true);
-                }}
-              >
-                <span className="jayrr-called-embed__knob" />
-              </button>
-            </div>
-            <div className="jayrr-called-embed__bands jayrr-called-embed__bands--hype">
-              {SMART_BANDS.map((band) => (
-                <span
-                  key={band.id}
-                  className={`jayrr-called-embed__iq jayrr-called-embed__smart jayrr-called-embed__smart--${band.id}`}
-                  title={band.what}
-                >
-                  {band.label}
-                </span>
-              ))}
-            </div>
+            <JevCardHeader
+              label="Jev IQ"
+              pressed={!!config.jevIq}
+              ariaLabel="Show Jev IQ view"
+              container={rootRef.current}
+              onToggle={() => {
+                const next = { ...config, jevIq: !config.jevIq };
+                resetIq();
+                applyConfig(next, true);
+              }}
+            >
+              <div className="jayrr-called-embed__bands">
+                {IQ_BANDS.map((band) => (
+                  <span
+                    key={band.label}
+                    className={`jayrr-called-embed__iq jayrr-called-embed__iq--${band.shade}`}
+                  >
+                    {band.label}
+                  </span>
+                ))}
+              </div>
+            </JevCardHeader>
           </div>
           <div className="jayrr-called-embed__card">
-            <div className="jayrr-called-embed__title jayrr-called-embed__title--row">
-              <div className="jayrr-called-embed__label">Jev Hype</div>
-              <button
-                type="button"
-                className={
-                  config.jevHype
-                    ? "jayrr-called-embed__switch is-on"
-                    : "jayrr-called-embed__switch"
-                }
-                aria-pressed={config.jevHype}
-                aria-label="Score speech with the hype meter"
-                onClick={() => {
-                  const next = { ...config, jevHype: !config.jevHype };
-                  resetIq();
-                  applyConfig(next, true);
-                }}
-              >
-                <span className="jayrr-called-embed__knob" />
-              </button>
-            </div>
-            <div className="jayrr-called-embed__bands jayrr-called-embed__bands--hype">
-              {HYPE_BANDS.map((band) => (
-                <span
-                  key={band.id}
-                  className={`jayrr-called-embed__iq jayrr-called-embed__hype jayrr-called-embed__hype--${band.id}`}
-                  title={band.what}
-                >
-                  {band.label}
-                </span>
-              ))}
-            </div>
+            <JevCardHeader
+              label="Jev Smart"
+              pressed={!!config.jevSmart}
+              ariaLabel="Score speech with Jev Smart"
+              container={rootRef.current}
+              onToggle={() => {
+                const next = { ...config, jevSmart: !config.jevSmart };
+                resetIq();
+                applyConfig(next, true);
+              }}
+            >
+              <div className="jayrr-called-embed__bands jayrr-called-embed__bands--hype">
+                {SMART_BANDS.map((band) => (
+                  <span
+                    key={band.id}
+                    className={`jayrr-called-embed__iq jayrr-called-embed__smart jayrr-called-embed__smart--${band.id}`}
+                    title={band.what}
+                  >
+                    {band.label}
+                  </span>
+                ))}
+              </div>
+            </JevCardHeader>
           </div>
           <div className="jayrr-called-embed__card">
-            <div className="jayrr-called-embed__title jayrr-called-embed__title--row">
-              <div className="jayrr-called-embed__label">Jev Energy</div>
-              <button
-                type="button"
-                className={
-                  config.jevEnergy
-                    ? "jayrr-called-embed__switch is-on"
-                    : "jayrr-called-embed__switch"
-                }
-                aria-pressed={config.jevEnergy}
-                aria-label="Score speech with Dodson energy levels"
-                onClick={() => {
-                  const next = { ...config, jevEnergy: !config.jevEnergy };
-                  resetIq();
-                  applyConfig(next, true);
-                }}
-              >
-                <span className="jayrr-called-embed__knob" />
-              </button>
-            </div>
-            <div className="jayrr-called-embed__bands jayrr-called-embed__bands--energy">
-              {ENERGY_BANDS.map((band) => (
-                <span
-                  key={band.id}
-                  className={`jayrr-called-embed__iq jayrr-called-embed__energy jayrr-called-embed__energy--${band.zone} jayrr-called-embed__energy--${band.id}`}
-                  title={`${band.level} ${band.name}. ${band.what}`}
-                >
-                  {String(band.level)}
-                </span>
-              ))}
-            </div>
+            <JevCardHeader
+              label="Jev Hype"
+              pressed={!!config.jevHype}
+              ariaLabel="Score speech with the hype meter"
+              container={rootRef.current}
+              onToggle={() => {
+                const next = { ...config, jevHype: !config.jevHype };
+                resetIq();
+                applyConfig(next, true);
+              }}
+            >
+              <div className="jayrr-called-embed__bands jayrr-called-embed__bands--hype">
+                {HYPE_BANDS.map((band) => (
+                  <span
+                    key={band.id}
+                    className={`jayrr-called-embed__iq jayrr-called-embed__hype jayrr-called-embed__hype--${band.id}`}
+                    title={band.what}
+                  >
+                    {band.label}
+                  </span>
+                ))}
+              </div>
+            </JevCardHeader>
           </div>
           <div className="jayrr-called-embed__card">
-            <div className="jayrr-called-embed__title jayrr-called-embed__title--row">
-              <div className="jayrr-called-embed__label">Jev Online</div>
-              <button
-                type="button"
-                className={
-                  config.jevOnline
-                    ? "jayrr-called-embed__switch is-on"
-                    : "jayrr-called-embed__switch"
-                }
-                aria-pressed={config.jevOnline}
-                aria-label="Score speech with online behaviour levels"
-                onClick={() => {
-                  const next = { ...config, jevOnline: !config.jevOnline };
-                  resetIq();
-                  applyConfig(next, true);
-                }}
-              >
-                <span className="jayrr-called-embed__knob" />
-              </button>
-            </div>
-            <div className="jayrr-called-embed__bands jayrr-called-embed__bands--hype">
-              {ONLINE_BANDS.map((band) => (
-                <span
-                  key={band.id}
-                  className={`jayrr-called-embed__iq jayrr-called-embed__online jayrr-called-embed__online--${band.id}`}
-                  title={`${band.label}. ${band.what} Example: ${band.example}`}
-                >
-                  {band.label}
-                </span>
-              ))}
-            </div>
+            <JevCardHeader
+              label="Jev Energy"
+              pressed={!!config.jevEnergy}
+              ariaLabel="Score speech with Dodson energy levels"
+              container={rootRef.current}
+              onToggle={() => {
+                const next = { ...config, jevEnergy: !config.jevEnergy };
+                resetIq();
+                applyConfig(next, true);
+              }}
+            >
+              <div className="jayrr-called-embed__bands jayrr-called-embed__bands--energy">
+                {ENERGY_BANDS.map((band) => (
+                  <span
+                    key={band.id}
+                    className={`jayrr-called-embed__iq jayrr-called-embed__energy jayrr-called-embed__energy--${band.zone} jayrr-called-embed__energy--${band.id}`}
+                    title={`${band.level} ${band.name}. ${band.what}`}
+                  >
+                    {String(band.level)}
+                  </span>
+                ))}
+              </div>
+            </JevCardHeader>
           </div>
           <div className="jayrr-called-embed__card">
-            <div className="jayrr-called-embed__title jayrr-called-embed__title--row">
-              <div className="jayrr-called-embed__label">Jev Socion</div>
-              <button
-                type="button"
-                className={
-                  config.jevSocion
-                    ? "jayrr-called-embed__switch is-on"
-                    : "jayrr-called-embed__switch"
-                }
-                aria-pressed={config.jevSocion}
-                aria-label="Score speech with socionic types"
-                onClick={() => {
-                  const next = { ...config, jevSocion: !config.jevSocion };
-                  resetIq();
-                  applyConfig(next, true);
-                }}
-              >
-                <span className="jayrr-called-embed__knob" />
-              </button>
-            </div>
-            <div className="jayrr-called-embed__bands jayrr-called-embed__bands--socion">
-              {SOCION_BANDS.map((band) => (
-                <span
-                  key={band.id}
-                  className={`jayrr-called-embed__iq jayrr-called-embed__socion jayrr-called-embed__socion--${
-                    band.quadra
-                  } jayrr-called-embed__socion--${band.id.toLowerCase()}`}
-                  title={`${band.id} ${band.code4} · ${band.nick} · ${band.ego}. ${band.name}`}
-                >
-                  {band.id}
-                </span>
-              ))}
-            </div>
+            <JevCardHeader
+              label="Jev Online"
+              pressed={!!config.jevOnline}
+              ariaLabel="Score speech with online behaviour levels"
+              container={rootRef.current}
+              onToggle={() => {
+                const next = { ...config, jevOnline: !config.jevOnline };
+                resetIq();
+                applyConfig(next, true);
+              }}
+            >
+              <div className="jayrr-called-embed__bands jayrr-called-embed__bands--hype">
+                {ONLINE_BANDS.map((band) => (
+                  <span
+                    key={band.id}
+                    className={`jayrr-called-embed__iq jayrr-called-embed__online jayrr-called-embed__online--${band.id}`}
+                    title={`${band.label}. ${band.what} Example: ${band.example}`}
+                  >
+                    {band.label}
+                  </span>
+                ))}
+              </div>
+            </JevCardHeader>
           </div>
           <div className="jayrr-called-embed__card">
-            <div className="jayrr-called-embed__title jayrr-called-embed__title--row">
-              <div className="jayrr-called-embed__label">Jev Big Five</div>
-              <button
-                type="button"
-                className={
-                  config.jevBigFive
-                    ? "jayrr-called-embed__switch is-on"
-                    : "jayrr-called-embed__switch"
-                }
-                aria-pressed={config.jevBigFive}
-                aria-label="Score speech with Big Five traits"
-                onClick={() => {
-                  const next = { ...config, jevBigFive: !config.jevBigFive };
-                  resetIq();
-                  applyConfig(next, true);
-                }}
-              >
-                <span className="jayrr-called-embed__knob" />
-              </button>
-            </div>
-            <div className="jayrr-called-embed__bands jayrr-called-embed__bands--big5">
-              {BIG5_BANDS.map((band) => (
-                <span
-                  key={band.id}
-                  className={`jayrr-called-embed__iq jayrr-called-embed__big5 jayrr-called-embed__big5--${band.id.toLowerCase()}`}
-                  title={`${band.id} ${band.name}. ${band.what}`}
-                >
-                  {band.id}
-                </span>
-              ))}
-            </div>
+            <JevCardHeader
+              label="Jev Socion"
+              pressed={!!config.jevSocion}
+              ariaLabel="Score speech with socionic types"
+              container={rootRef.current}
+              onToggle={() => {
+                const next = { ...config, jevSocion: !config.jevSocion };
+                resetIq();
+                applyConfig(next, true);
+              }}
+            >
+              <div className="jayrr-called-embed__bands jayrr-called-embed__bands--socion">
+                {SOCION_BANDS.map((band) => (
+                  <span
+                    key={band.id}
+                    className={`jayrr-called-embed__iq jayrr-called-embed__socion jayrr-called-embed__socion--${
+                      band.quadra
+                    } jayrr-called-embed__socion--${band.id.toLowerCase()}`}
+                    title={`${band.id} ${band.code4} · ${band.nick} · ${band.ego}. ${band.name}`}
+                  >
+                    {band.id}
+                  </span>
+                ))}
+              </div>
+            </JevCardHeader>
           </div>
           <div className="jayrr-called-embed__card">
-            <div className="jayrr-called-embed__title jayrr-called-embed__title--row">
-              <div className="jayrr-called-embed__label">Jev MBTI</div>
-              <button
-                type="button"
-                className={
-                  config.jevMbti
-                    ? "jayrr-called-embed__switch is-on"
-                    : "jayrr-called-embed__switch"
-                }
-                aria-pressed={config.jevMbti}
-                aria-label="Score speech with Jev MBTI"
-                onClick={() => {
-                  const next = { ...config, jevMbti: !config.jevMbti };
-                  resetIq();
-                  applyConfig(next, true);
-                }}
-              >
-                <span className="jayrr-called-embed__knob" />
-              </button>
-            </div>
-            <div className="jayrr-called-embed__bands jayrr-called-embed__bands--pairs">
-              {MBTI_BANDS.map((band) => (
-                <span
-                  key={band.letter}
-                  className={`jayrr-called-embed__iq jayrr-called-embed__mbti jayrr-called-embed__mbti--${band.letter.toLowerCase()}`}
-                >
-                  {band.letter}
-                </span>
-              ))}
-            </div>
+            <JevCardHeader
+              label="Jev Big Five"
+              pressed={!!config.jevBigFive}
+              ariaLabel="Score speech with Big Five traits"
+              container={rootRef.current}
+              onToggle={() => {
+                const next = { ...config, jevBigFive: !config.jevBigFive };
+                resetIq();
+                applyConfig(next, true);
+              }}
+            >
+              <div className="jayrr-called-embed__bands jayrr-called-embed__bands--big5">
+                {BIG5_BANDS.map((band) => (
+                  <span
+                    key={band.id}
+                    className={`jayrr-called-embed__iq jayrr-called-embed__big5 jayrr-called-embed__big5--${band.id.toLowerCase()}`}
+                    title={`${band.id} ${band.name}. ${band.what}`}
+                  >
+                    {band.id}
+                  </span>
+                ))}
+              </div>
+            </JevCardHeader>
           </div>
           <div className="jayrr-called-embed__card">
-            <div className="jayrr-called-embed__title jayrr-called-embed__title--row">
-              <div className="jayrr-called-embed__label">Jev Advance</div>
-              <button
-                type="button"
-                className={
-                  config.jevMbtiAdvance
-                    ? "jayrr-called-embed__switch is-on"
-                    : "jayrr-called-embed__switch"
-                }
-                aria-pressed={config.jevMbtiAdvance}
-                aria-label="Score speech with advanced MBTI cognitive functions"
-                onClick={() => {
-                  const next = {
-                    ...config,
-                    jevMbtiAdvance: !config.jevMbtiAdvance,
-                  };
-                  resetIq();
-                  applyConfig(next, true);
-                }}
-              >
-                <span className="jayrr-called-embed__knob" />
-              </button>
-            </div>
-            <div className="jayrr-called-embed__bands jayrr-called-embed__bands--pairs">
-              {COG_BANDS.map((fn) => (
-                <span
-                  key={fn}
-                  className={`jayrr-called-embed__iq jayrr-called-embed__fn jayrr-called-embed__fn--${fn.toLowerCase()}`}
-                >
-                  {fn}
-                </span>
-              ))}
-            </div>
+            <JevCardHeader
+              label="Jev MBTI"
+              pressed={!!config.jevMbti}
+              ariaLabel="Score speech with Jev MBTI"
+              container={rootRef.current}
+              onToggle={() => {
+                const next = { ...config, jevMbti: !config.jevMbti };
+                resetIq();
+                applyConfig(next, true);
+              }}
+            >
+              <div className="jayrr-called-embed__bands jayrr-called-embed__bands--pairs">
+                {MBTI_BANDS.map((band) => (
+                  <span
+                    key={band.letter}
+                    className={`jayrr-called-embed__iq jayrr-called-embed__mbti jayrr-called-embed__mbti--${band.letter.toLowerCase()}`}
+                  >
+                    {band.letter}
+                  </span>
+                ))}
+              </div>
+            </JevCardHeader>
           </div>
           <div className="jayrr-called-embed__card">
-            <div className="jayrr-called-embed__title jayrr-called-embed__title--row">
-              <div className="jayrr-called-embed__label">Jev Enneagram</div>
-              <button
-                type="button"
-                className={
-                  config.jevEnneagram
-                    ? "jayrr-called-embed__switch is-on"
-                    : "jayrr-called-embed__switch"
-                }
-                aria-pressed={config.jevEnneagram}
-                aria-label="Score speech with Enneagram types"
-                onClick={() => {
-                  const next = {
-                    ...config,
-                    jevEnneagram: !config.jevEnneagram,
-                  };
-                  resetIq();
-                  applyConfig(next, true);
-                }}
-              >
-                <span className="jayrr-called-embed__knob" />
-              </button>
-            </div>
-            <div className="jayrr-called-embed__bands jayrr-called-embed__bands--ennea">
-              {ENNEA_BANDS.map((band) => (
-                <span
-                  key={band.id}
-                  className={`jayrr-called-embed__iq jayrr-called-embed__ennea jayrr-called-embed__ennea--${band.id}`}
-                  title={`Type ${band.id} · The ${band.name}`}
-                >
-                  {band.id}
-                </span>
-              ))}
-            </div>
+            <JevCardHeader
+              label="Jev Advance"
+              pressed={!!config.jevMbtiAdvance}
+              ariaLabel="Score speech with advanced MBTI cognitive functions"
+              container={rootRef.current}
+              onToggle={() => {
+                const next = {
+                  ...config,
+                  jevMbtiAdvance: !config.jevMbtiAdvance,
+                };
+                resetIq();
+                applyConfig(next, true);
+              }}
+            >
+              <div className="jayrr-called-embed__bands jayrr-called-embed__bands--pairs">
+                {COG_BANDS.map((fn) => (
+                  <span
+                    key={fn}
+                    className={`jayrr-called-embed__iq jayrr-called-embed__fn jayrr-called-embed__fn--${fn.toLowerCase()}`}
+                  >
+                    {fn}
+                  </span>
+                ))}
+              </div>
+            </JevCardHeader>
           </div>
           <div className="jayrr-called-embed__card">
-            <div className="jayrr-called-embed__title jayrr-called-embed__title--row">
-              <div className="jayrr-called-embed__label">Jev Emotion</div>
-              <button
-                type="button"
-                className={
-                  config.jevEmotion
-                    ? "jayrr-called-embed__switch is-on"
-                    : "jayrr-called-embed__switch"
-                }
-                aria-pressed={config.jevEmotion}
-                aria-label="Score speech with Jev Emotion"
-                onClick={() => {
-                  const next = { ...config, jevEmotion: !config.jevEmotion };
-                  resetIq();
-                  applyConfig(next, true);
-                }}
-              >
-                <span className="jayrr-called-embed__knob" />
-              </button>
-            </div>
-            <div className="jayrr-called-embed__bands jayrr-called-embed__bands--emotion">
-              {EMOTION_BANDS.map((band) => (
-                <span
-                  key={band.tone}
-                  className={`jayrr-called-embed__emo jayrr-called-embed__emo--${band.tone}`}
-                >
-                  {band.label}
-                </span>
-              ))}
-            </div>
+            <JevCardHeader
+              label="Jev Enneagram"
+              pressed={!!config.jevEnneagram}
+              ariaLabel="Score speech with Enneagram types"
+              container={rootRef.current}
+              onToggle={() => {
+                const next = {
+                  ...config,
+                  jevEnneagram: !config.jevEnneagram,
+                };
+                resetIq();
+                applyConfig(next, true);
+              }}
+            >
+              <div className="jayrr-called-embed__bands jayrr-called-embed__bands--ennea">
+                {ENNEA_BANDS.map((band) => (
+                  <span
+                    key={band.id}
+                    className={`jayrr-called-embed__iq jayrr-called-embed__ennea jayrr-called-embed__ennea--${band.id}`}
+                    title={`Type ${band.id} · The ${band.name}`}
+                  >
+                    {band.id}
+                  </span>
+                ))}
+              </div>
+            </JevCardHeader>
+          </div>
+          <div className="jayrr-called-embed__card">
+            <JevCardHeader
+              label="Jev Emotion"
+              pressed={!!config.jevEmotion}
+              ariaLabel="Score speech with Jev Emotion"
+              container={rootRef.current}
+              onToggle={() => {
+                const next = { ...config, jevEmotion: !config.jevEmotion };
+                resetIq();
+                applyConfig(next, true);
+              }}
+            >
+              <div className="jayrr-called-embed__bands jayrr-called-embed__bands--emotion">
+                {EMOTION_BANDS.map((band) => (
+                  <span
+                    key={band.tone}
+                    className={`jayrr-called-embed__emo jayrr-called-embed__emo--${band.tone}`}
+                  >
+                    {band.label}
+                  </span>
+                ))}
+              </div>
+            </JevCardHeader>
           </div>
         </div>
       ) : (
         <>
+          {config.contextEnabled ? (
+            <ConversationIndicators conversation={conversation} />
+          ) : null}
           <div className="jayrr-called-embed__body">
             <div className="jayrr-called-embed__main">
               {hint ? (

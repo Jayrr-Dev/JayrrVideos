@@ -16,20 +16,26 @@ export const SEQUENCE_LANE_ID = "sequence";
 export const MAX_STACK_LANES = 8;
 
 export const EDITOR_TRANSITION_KINDS = [
+  "none",
   "fade",
   "cut",
   "fadeBlack",
   "wipe",
 ] as const;
 
-export type EditorTransitionKind = (typeof EDITOR_TRANSITION_KINDS)[number];
+export type EditorTransitionKind = typeof EDITOR_TRANSITION_KINDS[number];
 
-export const DEFAULT_OVERLAP_TRANSITION: EditorTransitionKind = "fade";
+export const DEFAULT_OVERLAP_TRANSITION: EditorTransitionKind = "none";
+/** Edges count as touching / lined up within this window. */
+export const EDITOR_EDGE_ALIGN_MS = 50;
+/** Blend length used when clips only touch instead of overlapping. */
+export const EDITOR_TOUCH_BLEND_MS = 400;
 
 export const EDITOR_TRANSITION_OPTIONS: ReadonlyArray<{
   id: EditorTransitionKind;
   label: string;
 }> = [
+  { id: "none", label: "None" },
   { id: "fade", label: "Fade" },
   { id: "cut", label: "Cut" },
   { id: "fadeBlack", label: "Fade black" },
@@ -42,20 +48,106 @@ export const isEditorTransitionKind = (
   typeof value === "string" &&
   (EDITOR_TRANSITION_KINDS as readonly string[]).includes(value);
 
+/** CSS mix-blend-mode values that match Photoshop groups. */
+export const EDITOR_BLEND_MODES = [
+  "normal",
+  "darken",
+  "multiply",
+  "color-burn",
+  "lighten",
+  "screen",
+  "color-dodge",
+  "overlay",
+  "soft-light",
+  "hard-light",
+  "difference",
+  "exclusion",
+  "hue",
+  "saturation",
+  "color",
+  "luminosity",
+] as const;
+
+export type EditorBlendMode = typeof EDITOR_BLEND_MODES[number];
+
+export const DEFAULT_OVERLAP_BLEND: EditorBlendMode = "normal";
+
+export const EDITOR_BLEND_GROUPS: ReadonlyArray<{
+  label: string;
+  options: ReadonlyArray<{ id: EditorBlendMode; label: string }>;
+}> = [
+  { label: "Normal", options: [{ id: "normal", label: "Normal" }] },
+  {
+    label: "Darken",
+    options: [
+      { id: "darken", label: "Darken" },
+      { id: "multiply", label: "Multiply" },
+      { id: "color-burn", label: "Color Burn" },
+    ],
+  },
+  {
+    label: "Lighten",
+    options: [
+      { id: "lighten", label: "Lighten" },
+      { id: "screen", label: "Screen" },
+      { id: "color-dodge", label: "Color Dodge" },
+    ],
+  },
+  {
+    label: "Contrast",
+    options: [
+      { id: "overlay", label: "Overlay" },
+      { id: "soft-light", label: "Soft Light" },
+      { id: "hard-light", label: "Hard Light" },
+    ],
+  },
+  {
+    label: "Inversion",
+    options: [
+      { id: "difference", label: "Difference" },
+      { id: "exclusion", label: "Exclusion" },
+    ],
+  },
+  {
+    label: "Component",
+    options: [
+      { id: "hue", label: "Hue" },
+      { id: "saturation", label: "Saturation" },
+      { id: "color", label: "Color" },
+      { id: "luminosity", label: "Luminosity" },
+    ],
+  },
+];
+
+export const isEditorBlendMode = (value: unknown): value is EditorBlendMode =>
+  typeof value === "string" &&
+  (EDITOR_BLEND_MODES as readonly string[]).includes(value);
+
+export const EDITOR_CLIP_TYPE = "clip" as const;
+
+export type EditorTimelineItemType = typeof EDITOR_CLIP_TYPE;
+
+export const isEditorClipType = (
+  value: unknown,
+): value is typeof EDITOR_CLIP_TYPE => value === EDITOR_CLIP_TYPE;
+
 /** User-ordered clip on the timeline (before layout). */
 export type EditorProjectClip = EditorRecordingSource & {
   id: string;
+  /** Discriminator so later items (markers, etc.) can share the track. */
+  type: typeof EDITOR_CLIP_TYPE;
   /** Sequence is the main packed track; any other id is a stack overlay. */
   laneId?: string;
   /** Start time on the clip's lane. Sequence and stacks both keep this. */
   laneStartMs?: number;
   /** How this clip blends over the column to its left while they overlap. */
   transitionKind?: EditorTransitionKind;
+  /** Pixel mix while this clip covers the column to its left. */
+  blendMode?: EditorBlendMode;
 };
 
 export type EditorClip = EditorProjectClip & {
   startMs: number;
-  kind: "recording";
 };
 
 export type EditorTimeline = {
@@ -78,13 +170,24 @@ const toLaidClip = (clip: EditorProjectClip, startMs: number): EditorClip => {
   const durationMs = Math.max(1, Math.round(clip.durationMs));
   return {
     ...clip,
-    kind: "recording",
+    type: EDITOR_CLIP_TYPE,
     startMs: Math.max(0, Math.round(startMs)),
     durationMs,
     sourceOffsetMs: clip.sourceOffsetMs ?? 0,
     laneId: clipLaneId(clip),
   };
 };
+
+export const editorLanes = (
+  timeline: EditorTimeline,
+  stackLaneIds: readonly string[],
+): Array<{ laneId: string; clips: EditorClip[] }> => [
+  { laneId: SEQUENCE_LANE_ID, clips: timeline.sequence },
+  ...stackLaneIds.map((laneId) => ({
+    laneId,
+    clips: timeline.overlays.filter((clip) => clipLaneId(clip) === laneId),
+  })),
+];
 
 const clipDurationMs = (clip: { durationMs: number }) =>
   Math.max(1, Math.round(clip.durationMs));
@@ -269,17 +372,69 @@ export const moveEditorClip = ({
   return frozen.map((clip) => (clip.id === clipId ? updated : clip));
 };
 
+/** Drop a stack column and fold its clips onto the column to its left. */
+export const removeStackLane = (
+  clips: readonly EditorProjectClip[],
+  stackLaneIds: readonly string[],
+  laneId: string,
+): { clips: EditorProjectClip[]; stackLaneIds: string[] } | null => {
+  const index = stackLaneIds.indexOf(laneId);
+  if (index < 0) {
+    return null;
+  }
+  const destLaneId =
+    index === 0
+      ? SEQUENCE_LANE_ID
+      : stackLaneIds[index - 1] ?? SEQUENCE_LANE_ID;
+  const frozen = withFrozenStarts(clips);
+  return {
+    clips: frozen.map((clip) =>
+      clipLaneId(clip) === laneId
+        ? {
+            ...clip,
+            laneId: destLaneId,
+            laneStartMs: clip.laneStartMs ?? 0,
+          }
+        : clip,
+    ),
+    stackLaneIds: stackLaneIds.filter((id) => id !== laneId),
+  };
+};
+
 export const setClipTransition = (
   clips: readonly EditorProjectClip[],
   clipId: string,
   transitionKind: EditorTransitionKind,
+): EditorProjectClip[] | null =>
+  setClipsTransition(clips, [clipId], transitionKind);
+
+export const setClipsTransition = (
+  clips: readonly EditorProjectClip[],
+  clipIds: readonly string[],
+  transitionKind: EditorTransitionKind,
 ): EditorProjectClip[] | null => {
   const frozen = withFrozenStarts(clips);
-  if (!frozen.some((clip) => clip.id === clipId)) {
+  const update = new Set(clipIds);
+  if (!frozen.some((clip) => update.has(clip.id))) {
     return null;
   }
   return frozen.map((clip) =>
-    clip.id === clipId ? { ...clip, transitionKind } : clip,
+    update.has(clip.id) ? { ...clip, transitionKind } : clip,
+  );
+};
+
+export const setClipsBlendMode = (
+  clips: readonly EditorProjectClip[],
+  clipIds: readonly string[],
+  blendMode: EditorBlendMode,
+): EditorProjectClip[] | null => {
+  const frozen = withFrozenStarts(clips);
+  const update = new Set(clipIds);
+  if (!frozen.some((clip) => update.has(clip.id))) {
+    return null;
+  }
+  return frozen.map((clip) =>
+    update.has(clip.id) ? { ...clip, blendMode } : clip,
   );
 };
 
@@ -292,10 +447,30 @@ export type LaneOverlap = {
   startMs: number;
   endMs: number;
   transitionKind: EditorTransitionKind;
+  blendMode: EditorBlendMode;
 };
 
 const clipEndMs = (clip: { startMs: number; durationMs: number }) =>
   clip.startMs + clip.durationMs;
+
+const edgesAlign = (a: number, b: number) =>
+  Math.abs(a - b) <= EDITOR_EDGE_ALIGN_MS;
+
+export const overlapWindow = (overlap: LaneOverlap) => {
+  if (overlap.endMs - overlap.startMs >= 1) {
+    return { startMs: overlap.startMs, endMs: overlap.endMs };
+  }
+  const half = Math.round(EDITOR_TOUCH_BLEND_MS / 2);
+  return {
+    startMs: overlap.startMs - half,
+    endMs: overlap.startMs + half,
+  };
+};
+
+export const overlapContainsTime = (overlap: LaneOverlap, timeMs: number) => {
+  const window = overlapWindow(overlap);
+  return timeMs >= window.startMs && timeMs < window.endMs;
+};
 
 export const collectLaneOverlaps = (
   lanes: ReadonlyArray<{
@@ -304,34 +479,156 @@ export const collectLaneOverlaps = (
   }>,
 ): LaneOverlap[] => {
   const out: LaneOverlap[] = [];
-  for (let index = 0; index < lanes.length - 1; index++) {
-    const left = lanes[index];
-    const right = lanes[index + 1];
-    if (!left || !right) {
-      continue;
+  const pushPair = (
+    outgoing: EditorClip,
+    incoming: EditorClip,
+    leftLaneId: string,
+    rightLaneId: string,
+  ) => {
+    const overlapStart = Math.max(outgoing.startMs, incoming.startMs);
+    const overlapEnd = Math.min(clipEndMs(outgoing), clipEndMs(incoming));
+    let startMs = overlapStart;
+    let endMs = overlapEnd;
+    if (endMs - startMs < 1) {
+      const outStart = outgoing.startMs;
+      const outEnd = clipEndMs(outgoing);
+      const inStart = incoming.startMs;
+      const inEnd = clipEndMs(incoming);
+      let join: number | null = null;
+      if (edgesAlign(outEnd, inStart)) {
+        join = inStart;
+      } else if (edgesAlign(outStart, inStart)) {
+        join = inStart;
+      } else if (edgesAlign(outEnd, inEnd)) {
+        join = outEnd;
+      } else if (edgesAlign(outStart, inEnd)) {
+        join = outStart;
+      }
+      if (join === null) {
+        return;
+      }
+      startMs = join;
+      endMs = join;
     }
-    for (const a of left.clips) {
-      for (const b of right.clips) {
-        const startMs = Math.max(a.startMs, b.startMs);
-        const endMs = Math.min(clipEndMs(a), clipEndMs(b));
-        if (endMs - startMs < 1) {
+    out.push({
+      id: `${outgoing.id}:${incoming.id}`,
+      leftClipId: outgoing.id,
+      rightClipId: incoming.id,
+      leftLaneId,
+      rightLaneId,
+      startMs,
+      endMs,
+      transitionKind: incoming.transitionKind ?? DEFAULT_OVERLAP_TRANSITION,
+      blendMode: incoming.blendMode ?? DEFAULT_OVERLAP_BLEND,
+    });
+  };
+
+  for (const lane of lanes) {
+    const sorted = [...lane.clips].sort(
+      (a, b) => a.startMs - b.startMs || a.id.localeCompare(b.id),
+    );
+    for (let i = 0; i < sorted.length; i++) {
+      const outgoing = sorted[i];
+      if (!outgoing) {
+        continue;
+      }
+      for (let j = i + 1; j < sorted.length; j++) {
+        const incoming = sorted[j];
+        if (!incoming) {
           continue;
         }
-        out.push({
-          id: `${a.id}:${b.id}`,
-          leftClipId: a.id,
-          rightClipId: b.id,
-          leftLaneId: left.laneId,
-          rightLaneId: right.laneId,
-          startMs,
-          endMs,
-          transitionKind: b.transitionKind ?? DEFAULT_OVERLAP_TRANSITION,
-        });
+        pushPair(outgoing, incoming, lane.laneId, lane.laneId);
+      }
+    }
+  }
+
+  for (let leftIndex = 0; leftIndex < lanes.length; leftIndex++) {
+    const left = lanes[leftIndex];
+    if (!left) {
+      continue;
+    }
+    for (
+      let rightIndex = leftIndex + 1;
+      rightIndex < lanes.length;
+      rightIndex++
+    ) {
+      const right = lanes[rightIndex];
+      if (!right) {
+        continue;
+      }
+      for (const a of left.clips) {
+        for (const b of right.clips) {
+          pushPair(a, b, left.laneId, right.laneId);
+        }
       }
     }
   }
   return out;
 };
+
+export type OverlapBand = {
+  id: string;
+  joinMs: number;
+  laneIds: readonly string[];
+  clipIds: readonly string[];
+  transitionKind: EditorTransitionKind;
+  blendMode: EditorBlendMode;
+};
+
+const uniquePush = (list: string[], value: string) => {
+  if (!list.includes(value)) {
+    list.push(value);
+  }
+};
+
+/** Merge joins that share a time so the handle spans every involved column. */
+export const collectOverlapBands = (
+  overlaps: readonly LaneOverlap[],
+  laneOrder: readonly string[],
+): OverlapBand[] => {
+  const laneRank = (laneId: string) => {
+    const index = laneOrder.indexOf(laneId);
+    return index < 0 ? Number.MAX_SAFE_INTEGER : index;
+  };
+  const sorted = [...overlaps].sort(
+    (a, b) => a.startMs - b.startMs || a.id.localeCompare(b.id),
+  );
+  const bands: Array<{
+    id: string;
+    joinMs: number;
+    laneIds: string[];
+    clipIds: string[];
+    transitionKind: EditorTransitionKind;
+    blendMode: EditorBlendMode;
+  }> = [];
+  for (const overlap of sorted) {
+    const last = bands[bands.length - 1];
+    if (last && edgesAlign(overlap.startMs, last.joinMs)) {
+      last.id = `${last.id}+${overlap.id}`;
+      uniquePush(last.laneIds, overlap.leftLaneId);
+      uniquePush(last.laneIds, overlap.rightLaneId);
+      uniquePush(last.clipIds, overlap.rightClipId);
+      continue;
+    }
+    bands.push({
+      id: overlap.id,
+      joinMs: overlap.startMs,
+      laneIds: [overlap.leftLaneId, overlap.rightLaneId].filter(
+        (laneId, index, all) => all.indexOf(laneId) === index,
+      ),
+      clipIds: [overlap.rightClipId],
+      transitionKind: overlap.transitionKind,
+      blendMode: overlap.blendMode,
+    });
+  }
+  return bands.map((band) => ({
+    ...band,
+    laneIds: [...band.laneIds].sort((a, b) => laneRank(a) - laneRank(b)),
+  }));
+};
+
+export const isSameLaneOverlap = (overlap: LaneOverlap) =>
+  overlap.leftLaneId === overlap.rightLaneId;
 
 export const overlapAtTime = (
   overlaps: readonly LaneOverlap[],
@@ -339,15 +636,13 @@ export const overlapAtTime = (
   timeMs: number,
 ): LaneOverlap | null =>
   overlaps.find(
-    (item) =>
-      item.rightClipId === clipId &&
-      timeMs >= item.startMs &&
-      timeMs < item.endMs,
+    (item) => item.rightClipId === clipId && overlapContainsTime(item, timeMs),
   ) ?? null;
 
 export type LayerBlend = {
   opacity: number;
   clipPath: string | null;
+  mixBlendMode: EditorBlendMode | null;
 };
 
 export const stackBlendAtTime = (
@@ -356,24 +651,34 @@ export const stackBlendAtTime = (
   overlap: LaneOverlap | null,
   coveringBase: boolean,
 ): LayerBlend => {
+  const mixBlendMode =
+    coveringBase && overlap && overlap.blendMode !== DEFAULT_OVERLAP_BLEND
+      ? overlap.blendMode
+      : null;
   if (!coveringBase || !overlap) {
-    return { opacity: 1, clipPath: null };
+    return { opacity: 1, clipPath: null, mixBlendMode };
   }
-  const span = Math.max(1, overlap.endMs - overlap.startMs);
-  const t = Math.min(1, Math.max(0, (timeMs - overlap.startMs) / span));
-  if (overlap.transitionKind === "cut") {
-    return { opacity: 1, clipPath: null };
+  const window = overlapWindow(overlap);
+  const span = Math.max(1, window.endMs - window.startMs);
+  const t = Math.min(1, Math.max(0, (timeMs - window.startMs) / span));
+  if (overlap.transitionKind === "none" || overlap.transitionKind === "cut") {
+    return { opacity: 1, clipPath: null, mixBlendMode };
   }
   if (overlap.transitionKind === "wipe") {
     return {
       opacity: 1,
       clipPath: `inset(0 ${Math.round((1 - t) * 100)}% 0 0)`,
+      mixBlendMode,
     };
   }
   if (overlap.transitionKind === "fadeBlack") {
-    return { opacity: t < 0.5 ? 0 : (t - 0.5) * 2, clipPath: null };
+    return {
+      opacity: t < 0.5 ? 0 : (t - 0.5) * 2,
+      clipPath: null,
+      mixBlendMode,
+    };
   }
-  return { opacity: t, clipPath: null };
+  return { opacity: t, clipPath: null, mixBlendMode };
 };
 
 export const baseBlendAtTime = (
@@ -381,11 +686,12 @@ export const baseBlendAtTime = (
   overlap: LaneOverlap | null,
 ): LayerBlend => {
   if (!overlap || overlap.transitionKind !== "fadeBlack") {
-    return { opacity: 1, clipPath: null };
+    return { opacity: 1, clipPath: null, mixBlendMode: null };
   }
-  const span = Math.max(1, overlap.endMs - overlap.startMs);
-  const t = Math.min(1, Math.max(0, (timeMs - overlap.startMs) / span));
-  return { opacity: t < 0.5 ? 1 - t * 2 : 0, clipPath: null };
+  const window = overlapWindow(overlap);
+  const span = Math.max(1, window.endMs - window.startMs);
+  const t = Math.min(1, Math.max(0, (timeMs - window.startMs) / span));
+  return { opacity: t < 0.5 ? 1 - t * 2 : 0, clipPath: null, mixBlendMode: null };
 };
 
 export const clipAtTime = (
@@ -399,6 +705,35 @@ export const clipAtTime = (
   for (const clip of clips) {
     if (t >= clip.startMs && t < clip.startMs + clip.durationMs) {
       return clip;
+    }
+  }
+  return null;
+};
+
+/** Rightmost covering lane wins so stack clips beat sequence at the same time. */
+export const clipAtTimeAcrossLanes = (
+  lanes: ReadonlyArray<{ clips: readonly EditorClip[] }>,
+  timeMs: number,
+  selectedIds?: ReadonlySet<string>,
+): EditorClip | null => {
+  const t = Math.max(0, timeMs);
+  if (selectedIds && selectedIds.size > 0) {
+    for (let i = lanes.length - 1; i >= 0; i--) {
+      for (const clip of lanes[i]?.clips ?? []) {
+        if (
+          selectedIds.has(clip.id) &&
+          t >= clip.startMs &&
+          t < clip.startMs + clip.durationMs
+        ) {
+          return clip;
+        }
+      }
+    }
+  }
+  for (let i = lanes.length - 1; i >= 0; i--) {
+    const hit = clipAtTime(lanes[i]?.clips ?? [], timeMs);
+    if (hit) {
+      return hit;
     }
   }
   return null;
@@ -512,6 +847,7 @@ export const mergeProjectClips = (
   }
   return {
     id: first.id,
+    type: EDITOR_CLIP_TYPE,
     recordingId: first.recordingId,
     url: first.url,
     posterUrl: first.posterUrl,
@@ -521,5 +857,8 @@ export const mergeProjectClips = (
     laneId: first.laneId,
     laneStartMs: first.laneStartMs ?? 0,
     ...(first.transitionKind ? { transitionKind: first.transitionKind } : {}),
+    ...(first.blendMode && first.blendMode !== DEFAULT_OVERLAP_BLEND
+      ? { blendMode: first.blendMode }
+      : {}),
   };
 };

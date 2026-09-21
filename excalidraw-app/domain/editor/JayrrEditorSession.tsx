@@ -19,6 +19,10 @@ import { api, isConvexLinked } from "../../convexClient";
 import {
   buildEditorTimeline,
   clipLaneId,
+  EDITOR_CLIP_TYPE,
+  removeStackLane as foldStackLane,
+  isEditorBlendMode,
+  isEditorClipType,
   isEditorTransitionKind,
   MAX_STACK_LANES,
   newEditorClipId,
@@ -42,12 +46,14 @@ const STACK_LANES_KEY = "jayrr-editor-stack-lanes-v1";
 
 type StoredClip = {
   id: string;
+  type?: string;
   recordingId: string;
   durationMs?: number;
   sourceOffsetMs?: number;
   laneId?: string;
   laneStartMs?: number;
   transitionKind?: EditorProjectClip["transitionKind"];
+  blendMode?: EditorProjectClip["blendMode"];
 };
 
 const readStoredClips = (): StoredClip[] => {
@@ -73,8 +79,14 @@ const readStoredClips = (): StoredClip[] => {
         const laneRaw = Reflect.get(item, "laneId");
         const laneStartRaw = Reflect.get(item, "laneStartMs");
         const transitionRaw = Reflect.get(item, "transitionKind");
+        const blendRaw = Reflect.get(item, "blendMode");
+        const typeRaw = Reflect.get(item, "type");
+        if (typeRaw !== undefined && !isEditorClipType(typeRaw)) {
+          continue;
+        }
         out.push({
           id: Reflect.get(item, "id") as string,
+          type: EDITOR_CLIP_TYPE,
           recordingId: Reflect.get(item, "recordingId") as string,
           ...(typeof durationRaw === "number" && Number.isFinite(durationRaw)
             ? { durationMs: Math.max(1, Math.round(durationRaw)) }
@@ -91,6 +103,7 @@ const readStoredClips = (): StoredClip[] => {
           ...(isEditorTransitionKind(transitionRaw)
             ? { transitionKind: transitionRaw }
             : {}),
+          ...(isEditorBlendMode(blendRaw) ? { blendMode: blendRaw } : {}),
         });
       }
     }
@@ -103,6 +116,7 @@ const readStoredClips = (): StoredClip[] => {
 const writeStoredClips = (clips: readonly EditorProjectClip[]) => {
   const payload: StoredClip[] = clips.map((clip) => ({
     id: clip.id,
+    type: clip.type,
     recordingId: clip.recordingId,
     durationMs: clip.durationMs,
     sourceOffsetMs: clip.sourceOffsetMs ?? 0,
@@ -111,6 +125,7 @@ const writeStoredClips = (clips: readonly EditorProjectClip[]) => {
       ? { laneStartMs: clip.laneStartMs }
       : {}),
     ...(clip.transitionKind ? { transitionKind: clip.transitionKind } : {}),
+    ...(clip.blendMode ? { blendMode: clip.blendMode } : {}),
   }));
   localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
 };
@@ -179,6 +194,7 @@ type EditorSessionValue = {
   persist: (next: EditorProjectClip[]) => void;
   stackLaneIds: readonly string[];
   addStackLane: () => void;
+  removeStackLane: (laneId: string) => void;
   timeline: ReturnType<typeof buildEditorTimeline>;
   currentTimeMs: number;
   playing: boolean;
@@ -294,6 +310,7 @@ export const JayrrEditorSession = ({ children }: { children: ReactNode }) => {
       const maxDuration = Math.max(1, row.durationMs - sourceOffsetMs);
       restored.push({
         id: item.id,
+        type: EDITOR_CLIP_TYPE,
         recordingId: row._id,
         url: row.url,
         posterUrl: row.posterUrl,
@@ -307,9 +324,8 @@ export const JayrrEditorSession = ({ children }: { children: ReactNode }) => {
         ...(typeof item.laneStartMs === "number"
           ? { laneStartMs: item.laneStartMs }
           : {}),
-        ...(item.transitionKind
-          ? { transitionKind: item.transitionKind }
-          : {}),
+        ...(item.transitionKind ? { transitionKind: item.transitionKind } : {}),
+        ...(item.blendMode ? { blendMode: item.blendMode } : {}),
       });
     }
     if (restored.length > 0) {
@@ -376,6 +392,19 @@ export const JayrrEditorSession = ({ children }: { children: ReactNode }) => {
       return next;
     });
   }, []);
+
+  const removeStackLane = useCallback(
+    (laneId: string) => {
+      const next = foldStackLane(clips, stackLaneIds, laneId);
+      if (!next) {
+        return;
+      }
+      persist(next.clips);
+      setStackLaneIds(next.stackLaneIds);
+      writeStoredStackLanes(next.stackLaneIds);
+    },
+    [clips, persist, stackLaneIds],
+  );
 
   const selectedLinkable = useMemo(() => {
     if (!apiExcal) {
@@ -449,6 +478,7 @@ export const JayrrEditorSession = ({ children }: { children: ReactNode }) => {
       const frozen = withFrozenStarts(clips);
       const next: EditorProjectClip = {
         id: newEditorClipId(),
+        type: EDITOR_CLIP_TYPE,
         recordingId: row._id,
         url: row.url,
         posterUrl: row.posterUrl,
@@ -475,6 +505,7 @@ export const JayrrEditorSession = ({ children }: { children: ReactNode }) => {
       persist,
       stackLaneIds,
       addStackLane,
+      removeStackLane,
       timeline,
       currentTimeMs,
       playing,
@@ -509,6 +540,7 @@ export const JayrrEditorSession = ({ children }: { children: ReactNode }) => {
       play,
       playing,
       previewElementId,
+      removeStackLane,
       seek,
       selectedLinkable,
       stackLaneIds,

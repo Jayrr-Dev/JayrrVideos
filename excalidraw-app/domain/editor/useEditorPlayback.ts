@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
+  baseBlendAtTime,
   clipAtTime,
+  clipLaneId,
   collectLaneOverlaps,
   editorHasClips,
-  overlayOnLaneAtTime,
+  isSameLaneOverlap,
   overlapAtTime,
-  stackBlendAtTime,
-  baseBlendAtTime,
-  clipLaneId,
+  overlapContainsTime,
+  overlayOnLaneAtTime,
   SEQUENCE_LANE_ID,
+  stackBlendAtTime,
   type EditorClip,
   type EditorTimeline,
   type LaneOverlap,
@@ -36,6 +38,7 @@ const applyBlend = (video: HTMLVideoElement, blend: LayerBlend | null) => {
   if (!blend) {
     video.style.removeProperty("--jayrr-layer-opacity");
     video.style.removeProperty("clip-path");
+    video.style.removeProperty("mix-blend-mode");
     return;
   }
   video.style.setProperty("--jayrr-layer-opacity", String(blend.opacity));
@@ -43,6 +46,11 @@ const applyBlend = (video: HTMLVideoElement, blend: LayerBlend | null) => {
     video.style.clipPath = blend.clipPath;
   } else {
     video.style.removeProperty("clip-path");
+  }
+  if (blend.mixBlendMode) {
+    video.style.mixBlendMode = blend.mixBlendMode;
+  } else {
+    video.style.removeProperty("mix-blend-mode");
   }
 };
 
@@ -52,7 +60,10 @@ const setLayerVisible = (
   blend?: LayerBlend | null,
 ) => {
   video.classList.toggle(LAYER_ON, on);
-  applyBlend(video, on ? (blend ?? { opacity: 1, clipPath: null }) : null);
+  applyBlend(
+    video,
+    on ? blend ?? { opacity: 1, clipPath: null, mixBlendMode: null } : null,
+  );
 };
 /** Start warming the next cut this far before the boundary. */
 const PREFETCH_LEAD_MS = 900;
@@ -324,6 +335,52 @@ export const useEditorPlayback = ({
     [applyClipToLayer, getActiveBase, getIdleBase, prepareSrc],
   );
 
+  const applySameLaneSequence = useCallback(
+    async (
+      layers: EditorPreviewLayers,
+      outgoing: EditorClip,
+      incoming: EditorClip,
+      overlap: LaneOverlap,
+      timeMs: number,
+      shouldPlay: boolean,
+    ): Promise<string | null> => {
+      const leftVideo = layers.base;
+      const rightVideo = layers.baseAlt;
+      if (!rightVideo) {
+        return applyBaseClip(
+          layers,
+          outgoing,
+          timeMs,
+          shouldPlay,
+          baseBlendAtTime(timeMs, overlap),
+        );
+      }
+      baseActiveIsAltRef.current = false;
+      prefetchUrlRef.current = null;
+      const leftId = await applyClipToLayer(
+        leftVideo,
+        outgoing,
+        timeMs,
+        shouldPlay,
+        baseBlendAtTime(timeMs, overlap),
+        true,
+      );
+      if (!playingRef.current && shouldPlay) {
+        return leftId;
+      }
+      await applyClipToLayer(
+        rightVideo,
+        incoming,
+        timeMs,
+        shouldPlay,
+        stackBlendAtTime(incoming, timeMs, overlap, true),
+        false,
+      );
+      return leftId;
+    },
+    [applyBaseClip, applyClipToLayer],
+  );
+
   const prefetchNextBase = useCallback(
     (layers: EditorPreviewLayers, timeMs: number) => {
       const idle = getIdleBase(layers);
@@ -388,12 +445,17 @@ export const useEditorPlayback = ({
           : null;
       const baseClip = sequenceClip ?? orphanOverlay;
       const overlaps = timelineOverlaps(timelineRef.current);
+      const sameLaneSequence = overlaps.find(
+        (item) =>
+          isSameLaneOverlap(item) &&
+          item.leftLaneId === SEQUENCE_LANE_ID &&
+          overlapContainsTime(item, timeMs),
+      );
       const coveringOverlap = sequenceClip
         ? overlaps.find(
             (item) =>
               item.leftClipId === sequenceClip.id &&
-              timeMs >= item.startMs &&
-              timeMs < item.endMs,
+              overlapContainsTime(item, timeMs),
           ) ?? null
         : null;
 
@@ -411,13 +473,29 @@ export const useEditorPlayback = ({
         return;
       }
 
-      const nextBaseId = await applyBaseClip(
-        layers,
-        baseClip,
-        timeMs,
-        shouldPlay,
-        baseBlendAtTime(timeMs, coveringOverlap),
-      );
+      const outgoing = sameLaneSequence
+        ? sequence.find((clip) => clip.id === sameLaneSequence.leftClipId)
+        : null;
+      const incoming = sameLaneSequence
+        ? sequence.find((clip) => clip.id === sameLaneSequence.rightClipId)
+        : null;
+      const nextBaseId =
+        sameLaneSequence && outgoing && incoming
+          ? await applySameLaneSequence(
+              layers,
+              outgoing,
+              incoming,
+              sameLaneSequence,
+              timeMs,
+              shouldPlay,
+            )
+          : await applyBaseClip(
+              layers,
+              baseClip,
+              timeMs,
+              shouldPlay,
+              baseBlendAtTime(timeMs, coveringOverlap),
+            );
       if (!playingRef.current && shouldPlay) {
         return;
       }
@@ -450,11 +528,12 @@ export const useEditorPlayback = ({
       }
       stackClipIdsRef.current = nextStackIds;
 
-      if (shouldPlay && sequenceClip) {
+      if (shouldPlay && sequenceClip && !sameLaneSequence) {
         prefetchNextBase(layers, timeMs);
       }
     },
     [
+      applySameLaneSequence,
       applyBaseClip,
       applyClipToLayer,
       pauseAll,
@@ -537,36 +616,64 @@ export const useEditorPlayback = ({
       .join("|");
     const prevOrphan = clipAtTime(timelineNow.overlays, prevMs)?.id ?? null;
     const nextOrphan = clipAtTime(timelineNow.overlays, nextMs)?.id ?? null;
+    const overlapsNow = timelineOverlaps(timelineNow);
+    const seqOverlapId = (timeMs: number) =>
+      overlapsNow.find(
+        (item) =>
+          isSameLaneOverlap(item) &&
+          item.leftLaneId === SEQUENCE_LANE_ID &&
+          overlapContainsTime(item, timeMs),
+      )?.id ?? "";
     const layers = resolveLayers();
     if (
       prevSeq !== nextSeq ||
       prevOverlay !== nextOverlay ||
-      prevOrphan !== nextOrphan
+      prevOrphan !== nextOrphan ||
+      seqOverlapId(prevMs) !== seqOverlapId(nextMs)
     ) {
       void applyProgram(nextMs, true);
     } else if (layers) {
       const sequenceClip = clipAtTime(timelineNow.sequence, nextMs);
-      const overlaps = timelineOverlaps(timelineNow);
+      const overlaps = overlapsNow;
+      const sameLaneSequence =
+        overlaps.find(
+          (item) =>
+            isSameLaneOverlap(item) &&
+            item.leftLaneId === SEQUENCE_LANE_ID &&
+            overlapContainsTime(item, nextMs),
+        ) ?? null;
       const coveringOverlap = sequenceClip
         ? overlaps.find(
             (item) =>
               item.leftClipId === sequenceClip.id &&
-              nextMs >= item.startMs &&
-              nextMs < item.endMs,
+              overlapContainsTime(item, nextMs),
           ) ?? null
         : null;
       if (sequenceClip && baseClipIdRef.current === sequenceClip.id) {
-        const active = getActiveBase(layers);
+        const active = layers.base;
         const expected = sourceOffsetSec(sequenceClip, nextMs);
         if (Math.abs(active.currentTime - expected) > 0.12) {
           seekVideo(active, expected);
         }
-        setLayerVisible(
-          active,
-          true,
-          baseBlendAtTime(nextMs, coveringOverlap),
-        );
-        prefetchNextBase(layers, nextMs);
+        setLayerVisible(active, true, baseBlendAtTime(nextMs, coveringOverlap));
+        if (sameLaneSequence && layers.baseAlt) {
+          const incoming = timelineNow.sequence.find(
+            (clip) => clip.id === sameLaneSequence.rightClipId,
+          );
+          if (incoming) {
+            const expectedIn = sourceOffsetSec(incoming, nextMs);
+            if (Math.abs(layers.baseAlt.currentTime - expectedIn) > 0.12) {
+              seekVideo(layers.baseAlt, expectedIn);
+            }
+            setLayerVisible(
+              layers.baseAlt,
+              true,
+              stackBlendAtTime(incoming, nextMs, sameLaneSequence, true),
+            );
+          }
+        } else if (!sameLaneSequence) {
+          prefetchNextBase(layers, nextMs);
+        }
       }
       stackLaneIdsRef.current.forEach((laneId, index) => {
         const clip = overlayOnLaneAtTime(timelineNow.overlays, laneId, nextMs);
@@ -589,7 +696,6 @@ export const useEditorPlayback = ({
     rafRef.current = requestAnimationFrame(tick);
   }, [
     applyProgram,
-    getActiveBase,
     prefetchNextBase,
     resolveLayers,
     stopAtEnd,

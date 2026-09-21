@@ -16,14 +16,14 @@ import { hitElementBoundingBox } from "@excalidraw/element";
 
 import { isElementLink } from "@excalidraw/element";
 
-import { getEmbedLink, embeddableURLValidator } from "@excalidraw/element";
+import { embeddableURLValidator, getEmbedLink } from "@excalidraw/element";
 
 import {
+  isLocalLink,
+  normalizeLink,
   sceneCoordsToViewportCoords,
   viewportCoordsToSceneCoords,
   wrapEvent,
-  isLocalLink,
-  normalizeLink,
 } from "@excalidraw/common";
 
 import { isEmbeddableElement } from "@excalidraw/element";
@@ -41,10 +41,10 @@ import { getTooltipDiv, updateTooltipPosition } from "../../components/Tooltip";
 
 import { t } from "../../i18n";
 
+import { getSelectedElements } from "../../scene";
 import { useAppProps, useEditorInterface, useExcalidrawAppState } from "../App";
 import { IconButton } from "../IconButton";
 import { FreedrawIcon, TrashIcon, elementLinkIcon } from "../icons";
-import { getSelectedElements } from "../../scene";
 
 import { getLinkHandleFromCoords } from "./helpers";
 
@@ -89,6 +89,11 @@ export const Hyperlink = ({
   const appState = useExcalidrawAppState();
   const appProps = useAppProps();
   const editorInterface = useEditorInterface();
+  const customPopup = appProps.renderHyperlinkPopup?.({
+    element,
+    appState,
+  });
+  const hasCustomPopup = customPopup !== false && customPopup != null;
 
   const linkVal = element.link || "";
 
@@ -196,6 +201,9 @@ export const Hyperlink = ({
   }, [isEditing, editorInterface.formFactor, editorInterface.isTouchScreen]);
 
   useEffect(() => {
+    if (hasCustomPopup) {
+      return;
+    }
     let timeoutId: number | null = null;
 
     const handlePointerMove = (event: PointerEvent) => {
@@ -224,7 +232,7 @@ export const Hyperlink = ({
         clearTimeout(timeoutId);
       }
     };
-  }, [appState, element, isEditing, setAppState, elementsMap]);
+  }, [appState, element, hasCustomPopup, isEditing, setAppState, elementsMap]);
 
   const handleRemove = useCallback(() => {
     trackEvent("hyperlink", "delete");
@@ -248,11 +256,7 @@ export const Hyperlink = ({
     return null;
   }
 
-  const customPopup = appProps.renderHyperlinkPopup?.({
-    element,
-    appState,
-  });
-  if (customPopup !== false && customPopup != null) {
+  if (hasCustomPopup) {
     return (
       <div
         className="excalidraw-hyperlinkContainer excalidraw-hyperlinkContainer--custom"
@@ -261,7 +265,7 @@ export const Hyperlink = ({
           left: `${x}px`,
           minWidth: POPUP_WIDTH,
           width: "max-content",
-          maxWidth: 560,
+          maxWidth: 640,
           padding: POPUP_PADDING,
         }}
       >

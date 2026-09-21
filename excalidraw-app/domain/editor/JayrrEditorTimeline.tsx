@@ -26,10 +26,17 @@ import {
   type ReactNode,
 } from "react";
 
-import { Popover } from "radix-ui";
+import {
+  checkIcon,
+  CloseIcon,
+  PlusIcon,
+} from "@excalidraw/excalidraw/components/icons";
+import { DropdownMenu } from "radix-ui";
 
 import {
   clipLaneId,
+  collectLaneOverlaps,
+  collectOverlapBands,
   collectSnapPointsMs,
   EDITOR_PX_PER_SECOND,
   EDITOR_TRANSITION_OPTIONS,
@@ -37,11 +44,11 @@ import {
   MAX_STACK_LANES,
   SEQUENCE_LANE_ID,
   snapClipStart,
-  collectLaneOverlaps,
+  type EditorBlendMode,
   type EditorClip,
   type EditorTimeline,
   type EditorTransitionKind,
-  type LaneOverlap,
+  type OverlapBand,
 } from "./buildEditorTimeline";
 import { filmstripSliceCount, getClipFilmstrip } from "./captureClipFilmstrip";
 
@@ -80,8 +87,16 @@ type JayrrEditorTimelineProps = {
     toLaneId: string;
     startMs: number;
   }) => void;
-  onSetTransition: (clipId: string, kind: EditorTransitionKind) => void;
+  onSetTransition: (
+    clipIds: readonly string[],
+    kind: EditorTransitionKind,
+  ) => void;
+  onOpenBlend: (args: {
+    clipIds: readonly string[];
+    blendMode: EditorBlendMode;
+  }) => void;
   onAddStackLane: () => void;
+  onRemoveStackLane: (laneId: string) => void;
   menuContainer?: HTMLElement | null;
 };
 
@@ -90,6 +105,16 @@ const msToPx = (ms: number, pxPerMs: number) => ms * pxPerMs;
 const RULER_TICK_MS = 1000;
 const TRACK_PAD_PX = 10;
 const SNAP_THRESHOLD_PX = 8;
+const CLIP_SHADE_COUNT = 5;
+
+const clipShadeIndex = (clipId: string) => {
+  let hash = 0;
+  for (let i = 0; i < clipId.length; i++) {
+    hash = (hash << 5) - hash + clipId.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash) % CLIP_SHADE_COUNT;
+};
 
 const collideLanes: CollisionDetection = (args) => {
   const pointerHits = pointerWithin(args);
@@ -118,7 +143,9 @@ export const JayrrEditorTimeline = ({
   onSelectClip,
   onMoveClip,
   onSetTransition,
+  onOpenBlend,
   onAddStackLane,
+  onRemoveStackLane,
   menuContainer,
 }: JayrrEditorTimelineProps) => {
   const bodyRef = useRef<HTMLDivElement | null>(null);
@@ -129,6 +156,7 @@ export const JayrrEditorTimeline = ({
   const [bodyHeight, setBodyHeight] = useState(360);
   const [activeClipId, setActiveClipId] = useState<string | null>(null);
   const [placement, setPlacement] = useState<DragPlacement | null>(null);
+  const [hoveredStackId, setHoveredStackId] = useState<string | null>(null);
 
   const clipsById = useMemo(() => {
     const map = new Map<string, EditorClip>();
@@ -170,18 +198,20 @@ export const JayrrEditorTimeline = ({
     [overlaysByLane, stackLaneIds, timeline.sequence],
   );
 
-  const overlapsByLeftLane = useMemo(() => {
-    const map = new Map<string, LaneOverlap[]>();
-    for (const overlap of laneOverlaps) {
-      const list = map.get(overlap.leftLaneId);
-      if (list) {
-        list.push(overlap);
-        continue;
-      }
-      map.set(overlap.leftLaneId, [overlap]);
-    }
+  const overlapBands = useMemo(
+    () =>
+      collectOverlapBands(laneOverlaps, [SEQUENCE_LANE_ID, ...stackLaneIds]),
+    [laneOverlaps, stackLaneIds],
+  );
+
+  const laneIndexById = useMemo(() => {
+    const map = new Map<string, number>();
+    map.set(SEQUENCE_LANE_ID, 0);
+    stackLaneIds.forEach((laneId, index) => {
+      map.set(laneId, index + 1);
+    });
     return map;
-  }, [laneOverlaps]);
+  }, [stackLaneIds]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -558,7 +588,13 @@ export const JayrrEditorTimeline = ({
           onAdd={onAddStackLane}
         />
         {stackLaneIds.map((laneId, index) => (
-          <LaneHeader key={laneId} label={`Stack ${index + 1}`} />
+          <LaneHeader
+            key={laneId}
+            label={`Stack ${index + 1}`}
+            hovered={hoveredStackId === laneId}
+            onHover={(inside) => setHoveredStackId(inside ? laneId : null)}
+            onRemove={() => onRemoveStackLane(laneId)}
+          />
         ))}
       </div>
       <div
@@ -621,24 +657,12 @@ export const JayrrEditorTimeline = ({
                   }}
                 />
               ))}
-              {(overlapsByLeftLane.get(SEQUENCE_LANE_ID) ?? []).map(
-                (overlap) => (
-                  <OverlapHandle
-                    key={overlap.id}
-                    overlap={overlap}
-                    pxPerMs={pxPerMs}
-                    container={menuContainer}
-                    onPick={(kind) =>
-                      onSetTransition(overlap.rightClipId, kind)
-                    }
-                  />
-                ),
-              )}
             </TrackLane>
             {stackLaneIds.map((laneId) => (
               <TrackLane
                 key={laneId}
                 laneId={laneId}
+                onHover={(inside) => setHoveredStackId(inside ? laneId : null)}
                 dropSlot={
                   placement?.toLaneId === laneId &&
                   dropSlotTop != null &&
@@ -667,18 +691,23 @@ export const JayrrEditorTimeline = ({
                     }}
                   />
                 ))}
-                {(overlapsByLeftLane.get(laneId) ?? []).map((overlap) => (
-                  <OverlapHandle
-                    key={overlap.id}
-                    overlap={overlap}
-                    pxPerMs={pxPerMs}
-                    container={menuContainer}
-                    onPick={(kind) =>
-                      onSetTransition(overlap.rightClipId, kind)
-                    }
-                  />
-                ))}
               </TrackLane>
+            ))}
+            {overlapBands.map((band) => (
+              <OverlapHandle
+                key={band.id}
+                band={band}
+                laneIndexById={laneIndexById}
+                pxPerMs={pxPerMs}
+                container={menuContainer}
+                onPick={(kind) => onSetTransition(band.clipIds, kind)}
+                onOpenBlend={() =>
+                  onOpenBlend({
+                    clipIds: band.clipIds,
+                    blendMode: band.blendMode,
+                  })
+                }
+              />
             ))}
             {snapLineTop != null && placement?.guideMs != null ? (
               <div
@@ -730,13 +759,27 @@ export const JayrrEditorTimeline = ({
 const LaneHeader = ({
   label,
   addDisabled,
+  hovered,
   onAdd,
+  onRemove,
+  onHover,
 }: {
   label: string;
   addDisabled?: boolean;
+  hovered?: boolean;
   onAdd?: () => void;
+  onRemove?: () => void;
+  onHover?: (inside: boolean) => void;
 }) => (
-  <div className="jayrr-editor-timeline__col-label jayrr-editor-timeline__col-label--sequence">
+  <div
+    className={`jayrr-editor-timeline__col-label${
+      onAdd
+        ? " jayrr-editor-timeline__col-label--sequence"
+        : " jayrr-editor-timeline__col-label--stack"
+    }${hovered ? " is-hovered" : ""}`}
+    onPointerEnter={() => onHover?.(true)}
+    onPointerLeave={() => onHover?.(false)}
+  >
     <span>{label}</span>
     {onAdd ? (
       <button
@@ -751,6 +794,20 @@ const LaneHeader = ({
         }}
       >
         {PlusIcon}
+      </button>
+    ) : null}
+    {onRemove ? (
+      <button
+        type="button"
+        className="jayrr-editor-timeline__remove-lane"
+        aria-label="Remove stack column"
+        title="Move clips left and remove column"
+        onClick={(event) => {
+          event.stopPropagation();
+          onRemove();
+        }}
+      >
+        {CloseIcon}
       </button>
     ) : null}
   </div>
@@ -785,54 +842,87 @@ const DropSlot = ({ top, height }: { top: number; height: number }) => (
 );
 
 const OverlapHandle = ({
-  overlap,
+  band,
+  laneIndexById,
   pxPerMs,
   container,
   onPick,
+  onOpenBlend,
 }: {
-  overlap: LaneOverlap;
+  band: OverlapBand;
+  laneIndexById: ReadonlyMap<string, number>;
   pxPerMs: number;
   container?: HTMLElement | null;
   onPick: (kind: EditorTransitionKind) => void;
+  onOpenBlend: () => void;
 }) => {
-  const top = TRACK_PAD_PX + msToPx(overlap.startMs, pxPerMs);
-  const height = Math.max(10, msToPx(overlap.endMs - overlap.startMs, pxPerMs));
+  const [open, setOpen] = useState(false);
+  const indexes = band.laneIds
+    .map((laneId) => laneIndexById.get(laneId))
+    .filter((index): index is number => index !== undefined);
+  if (indexes.length === 0) {
+    return null;
+  }
+  const fromIndex = Math.min(...indexes);
+  const toIndex = Math.max(...indexes);
+  const top = TRACK_PAD_PX + msToPx(band.joinMs, pxPerMs);
+  const gridColumn = `${fromIndex + 2} / ${toIndex + 3}`;
   return (
-    <Popover.Root>
-      <Popover.Trigger asChild>
+    <DropdownMenu.Root modal={false} open={open} onOpenChange={setOpen}>
+      <DropdownMenu.Trigger asChild>
         <button
           type="button"
           className="jayrr-editor-timeline__overlap"
-          style={{ top, height }}
+          style={{ top, gridColumn }}
           aria-label="Choose overlap transition"
-          title="Transition"
+          title="Choose transition"
           onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => event.stopPropagation()}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setOpen(true);
+          }}
         />
-      </Popover.Trigger>
-      <Popover.Portal container={container ?? undefined}>
-        <Popover.Content
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal container={container ?? undefined}>
+        <DropdownMenu.Content
+          collisionPadding={8}
+          className="jayrr-editor-menu"
+          data-prevent-outside-click
           side="right"
           align="start"
-          sideOffset={6}
-          collisionPadding={8}
-          className="jayrr-editor-timeline__overlap-menu"
+          style={{ maxHeight: "none" }}
           onPointerDown={(event) => event.stopPropagation()}
+          onCloseAutoFocus={(event) => event.preventDefault()}
         >
-          {EDITOR_TRANSITION_OPTIONS.map((option) => (
-            <button
-              key={option.id}
-              type="button"
-              className={`jayrr-editor-timeline__overlap-item${
-                overlap.transitionKind === option.id ? " is-active" : ""
-              }`}
-              onClick={() => onPick(option.id)}
-            >
-              {option.label}
-            </button>
-          ))}
-        </Popover.Content>
-      </Popover.Portal>
-    </Popover.Root>
+          {EDITOR_TRANSITION_OPTIONS.map((option) => {
+            const selected = band.transitionKind === option.id;
+            return (
+              <DropdownMenu.Item
+                key={option.id}
+                className={`jayrr-editor-menu__item${
+                  selected ? " is-active" : ""
+                }`}
+                onSelect={() => onPick(option.id)}
+              >
+                <span>{option.label}</span>
+                <span className="jayrr-editor-menu__check" aria-hidden>
+                  {selected ? checkIcon : null}
+                </span>
+              </DropdownMenu.Item>
+            );
+          })}
+          <DropdownMenu.Separator className="jayrr-editor-menu__separator" />
+          <DropdownMenu.Item
+            className="jayrr-editor-menu__item"
+            onSelect={onOpenBlend}
+          >
+            Blend…
+          </DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
   );
 };
 
@@ -840,10 +930,12 @@ const TrackLane = ({
   laneId,
   children,
   dropSlot,
+  onHover,
 }: {
   laneId: string;
   children: ReactNode;
   dropSlot?: ReactNode;
+  onHover?: (inside: boolean) => void;
 }) => {
   const { setNodeRef, isOver } = useDroppable({
     id: laneDroppableId(laneId),
@@ -854,6 +946,8 @@ const TrackLane = ({
       className={`jayrr-editor-timeline__lane jayrr-editor-timeline__lane--stack${
         isOver ? " is-drop-target" : ""
       }`}
+      onPointerEnter={() => onHover?.(true)}
+      onPointerLeave={() => onHover?.(false)}
     >
       {dropSlot}
       {children}
@@ -976,11 +1070,12 @@ const ClipFace = ({
     <button
       ref={setRefs}
       type="button"
-      className={`jayrr-editor-clip jayrr-editor-clip--recording${
+      className={`jayrr-editor-clip jayrr-editor-clip--clip${
         packed ? "" : " jayrr-editor-clip--overlay"
       }${selected ? " is-selected" : ""}${playhead ? " is-playhead" : ""}${
         dragging ? " is-dragging" : ""
       }${hidden ? " is-hidden" : ""}`}
+      data-shade={clipShadeIndex(clip.id)}
       style={mergedStyle}
       title={clip.label}
       {...draggableProps}
