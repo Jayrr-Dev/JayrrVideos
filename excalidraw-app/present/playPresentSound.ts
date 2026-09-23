@@ -14,15 +14,20 @@ type Cue = {
   gen: number;
 };
 
+const SOUND_FADE_MS = 800;
+
 const frameCue: Cue = { audio: null, gen: 0 };
 const objectCue: Cue = { audio: null, gen: 0 };
+const fading = new Set<HTMLAudioElement>();
 let stepKey: string | null = null;
+let frameId: string | null = null;
 
 const stopAudio = (audio: HTMLAudioElement | null) => {
   if (!audio) {
     return;
   }
   audio.pause();
+  audio.volume = 1;
   audio.removeAttribute("src");
   audio.load();
 };
@@ -31,6 +36,44 @@ const stopCue = (cue: Cue) => {
   cue.gen += 1;
   stopAudio(cue.audio);
   cue.audio = null;
+};
+
+const fadeOutAudio = (audio: HTMLAudioElement | null) => {
+  if (!audio) {
+    return;
+  }
+  if (audio.paused) {
+    stopAudio(audio);
+    return;
+  }
+  fading.add(audio);
+  const startVol = audio.volume;
+  const started = performance.now();
+  const tick = (now: number) => {
+    if (!fading.has(audio)) {
+      return;
+    }
+    const t = Math.min(1, (now - started) / SOUND_FADE_MS);
+    audio.volume = startVol * (1 - t);
+    if (t < 1) {
+      requestAnimationFrame(tick);
+      return;
+    }
+    fading.delete(audio);
+    stopAudio(audio);
+  };
+  requestAnimationFrame(tick);
+};
+
+const releaseCue = (cue: Cue, fade: boolean) => {
+  cue.gen += 1;
+  const audio = cue.audio;
+  cue.audio = null;
+  if (fade) {
+    fadeOutAudio(audio);
+    return;
+  }
+  stopAudio(audio);
 };
 
 const resolveUrls = async (sound: PresentSound) => {
@@ -54,6 +97,7 @@ const resolveUrls = async (sound: PresentSound) => {
 const playUrl = async (current: HTMLAudioElement | null, url: string) => {
   const audio = current ?? new Audio();
   audio.loop = false;
+  audio.volume = 1;
   audio.src = url;
   try {
     await audio.play();
@@ -99,6 +143,11 @@ const playCue = async (cue: Cue, sound: PresentSound) => {
 
 export const stopPresentSounds = () => {
   stepKey = null;
+  frameId = null;
+  for (const audio of fading) {
+    stopAudio(audio);
+  }
+  fading.clear();
   stopCue(frameCue);
   stopCue(objectCue);
 };
@@ -116,6 +165,11 @@ export const syncPresentSounds = (deck: PresentDeck, stepIndex: number) => {
     return;
   }
   stepKey = nextKey;
+  if (frameId && frameId !== step.frameId) {
+    releaseCue(frameCue, true);
+    releaseCue(objectCue, true);
+  }
+  frameId = step.frameId;
   if (step.type !== "reveal") {
     return;
   }
