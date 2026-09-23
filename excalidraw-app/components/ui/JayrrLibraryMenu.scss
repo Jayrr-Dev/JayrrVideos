@@ -149,6 +149,55 @@
     padding: 0.35rem;
   }
 
+  .jayrr-scene-card--folder .jayrr-scene-card__preview {
+    aspect-ratio: 5 / 4;
+    border: none;
+    border-radius: 0;
+    padding: 0;
+    overflow: visible;
+    background: none;
+  }
+
+  .jayrr-scene-card--folder .jayrr-scene-card__preview:hover {
+    border: none;
+  }
+
+  .jayrr-scene-card--folder.jayrr-scene-card--drop .jayrr-scene-card__preview {
+    border: none;
+    box-shadow: none;
+  }
+
+  .jayrr-folder-card__shape {
+    width: 100%;
+    height: 100%;
+    display: block;
+    color: var(--icon-fill-color);
+    pointer-events: none;
+  }
+
+  .jayrr-scene-card--folder
+    .jayrr-scene-card__preview:hover
+    .jayrr-folder-card__shape,
+  .jayrr-scene-card--folder.jayrr-scene-card--drop .jayrr-folder-card__shape {
+    color: var(--color-primary);
+  }
+
+  .jayrr-scene-card--folder .jayrr-scene-card__name,
+  .jayrr-scene-card--folder .jayrr-scene-card__name-input {
+    top: 54%;
+    left: 14%;
+    max-width: calc(72% - 1.5rem);
+  }
+
+  .jayrr-scene-card--folder .jayrr-scene-card__name-input {
+    width: calc(72% - 1.5rem);
+  }
+
+  .jayrr-scene-card--folder .jayrr-scene-card__menu.dropdown-menu-button {
+    top: calc(54% - 0.2rem);
+    right: 10%;
+  }
+
   .jayrr-scene-card__menu.dropdown-menu-button {
     position: absolute;
     top: 0.15rem;

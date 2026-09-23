@@ -1097,7 +1097,9 @@ const FolderCard = ({
   return (
     <li
       className={
-        isOver ? "jayrr-scene-card jayrr-scene-card--drop" : "jayrr-scene-card"
+        isOver
+          ? "jayrr-scene-card jayrr-scene-card--folder jayrr-scene-card--drop"
+          : "jayrr-scene-card jayrr-scene-card--folder"
       }
       onDragOver={(event) => {
         if (busy) {
@@ -1161,10 +1163,7 @@ const FolderCard = ({
           onOpen();
         }}
       >
-        <FolderCardThumbs
-          folderId={folder._id}
-          sceneCount={folder.sceneCount}
-        />
+        <FolderCardShape />
       </button>
       <DropdownMenu open={menuOpen}>
         <DropdownMenu.Trigger
@@ -1207,40 +1206,23 @@ const FolderCard = ({
   );
 };
 
-const FolderCardThumbs = ({
-  folderId,
-  sceneCount,
-}: {
-  folderId: Id<"sceneFolders">;
-  sceneCount: number;
-}) => {
-  const scenes = useQuery(
-    api.scenes.list,
-    sceneCount > 0 ? { folderId } : "skip",
-  );
-  const previews = scenes?.slice(0, 4) ?? [];
-
-  if (sceneCount === 0 || (scenes && previews.length === 0)) {
-    return <span className="jayrr-scene-card__empty">Empty</span>;
-  }
-
-  return (
-    <span className="jayrr-library-card__thumbs">
-      {previews.map((scene) =>
-        scene.previewDataUrl ? (
-          <img
-            key={scene._id}
-            className="jayrr-library-card__thumb"
-            alt=""
-            src={scene.previewDataUrl}
-          />
-        ) : (
-          <span key={scene._id} className="jayrr-library-card__thumb" />
-        ),
-      )}
-    </span>
-  );
-};
+const FolderCardShape = () => (
+  <svg
+    className="jayrr-folder-card__shape"
+    viewBox="0 0 200 156"
+    aria-hidden="true"
+    focusable="false"
+  >
+    <path
+      d="M26 34h48c6 0 9 2 12 6l8 11c2 3 5 5 9 5h69c10 0 14 4 14 14v62c0 10-4 14-14 14H26c-10 0-14-4-14-14V48c0-10 4-14 14-14z"
+      fill="var(--island-bg-color)"
+      stroke="currentColor"
+      strokeWidth="8"
+      strokeLinejoin="round"
+      strokeLinecap="round"
+    />
+  </svg>
+);
 
 const DeleteConfirm = ({
   pendingDelete,
