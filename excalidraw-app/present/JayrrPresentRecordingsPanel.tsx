@@ -518,12 +518,12 @@ const RecordingsShell = ({
   children: ReactNode;
 }) => {
   return (
-    <div className="jayrr-present jayrr-present--recordings">
-      <div className="jayrr-present__title-row">
+    <div className="layer-ui__library jayrr-library jayrr-present jayrr-present--recordings">
+      <div className="jayrr-library__header">
         {onBack ? (
           <button
             type="button"
-            className="jayrr-present__back"
+            className="jayrr-library__icon-button"
             aria-label="Back to recordings"
             onClick={onBack}
           >
@@ -531,11 +531,13 @@ const RecordingsShell = ({
           </button>
         ) : null}
         {typeof title === "string" ? (
-          <h2 className="jayrr-present__title">{title}</h2>
+          <h2 className="jayrr-library__title">{title}</h2>
         ) : (
           title
         )}
-        {toolbar}
+        {toolbar ? (
+          <div className="jayrr-library__header-actions">{toolbar}</div>
+        ) : null}
         <span className="jayrr-present__sr">
           Saved slideshow recordings in folders. Drag a clip onto the canvas.
           Rename, move, or delete from the menu.
@@ -771,7 +773,7 @@ const JayrrPresentRecordingsAuthed = ({
           ) : (
             <button
               type="button"
-              className="jayrr-present__folder-title"
+              className="jayrr-library__title"
               onClick={() => {
                 setDraftName(openFolder.name);
                 setRenamingFolderId(openFolder._id);

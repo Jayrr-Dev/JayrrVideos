@@ -45,9 +45,9 @@ import {
   type ReactNode,
 } from "react";
 
-import { FilledButton, Island, Switch, Tooltip } from "../components/ui";
-
 import { listJayrrMics, unlockJayrrMics } from "../camera/jayrrCameraStreams";
+import { FilledButton, Island, Switch, Tooltip } from "../components/ui";
+import "../components/ui/JayrrLibraryMenu.scss";
 import { isConvexLinked } from "../convexClient";
 
 import {
@@ -976,7 +976,7 @@ const PresentSettingsPopover = () => {
       <Popover.Trigger asChild>
         <button
           type="button"
-          className="jayrr-present__settings"
+          className="jayrr-library__icon-button"
           aria-label="Present settings"
           aria-expanded={open}
         >
@@ -1933,252 +1933,261 @@ export const JayrrPresentPanel = ({
   }
 
   return (
-    <div className="jayrr-present">
-      <div className="jayrr-present__title-row">
-        <h2 className="jayrr-present__title">Present</h2>
+    <div className="layer-ui__library jayrr-library jayrr-present">
+      <div className="jayrr-library__header">
+        <h2 className="jayrr-library__title">Present</h2>
         <span className="jayrr-present__sr">
           Nested reveal order for frames and the shapes inside them. Drag a
           block to reorder. Right-click a row to set its transition. Text rows
           also have text-effect.
         </span>
-        <PresentSettingsPopover />
+        <div className="jayrr-library__header-actions">
+          <PresentSettingsPopover />
+        </div>
       </div>
-      <div className="jayrr-present__actions">
-        {presenting ? (
-          <FilledButton
-            color="muted"
-            variant="outlined"
-            label="Exit"
-            onClick={stopPresent}
-            fullWidth
-          >
-            Exit
-          </FilledButton>
-        ) : (
-          <>
+      <div className="jayrr-present__body">
+        <div className="jayrr-present__actions">
+          {presenting ? (
             <FilledButton
-              color="primary"
-              label="Present"
-              icon={presentationIcon}
-              onClick={startPresent}
-              disabled={deck.frames.length === 0}
+              color="muted"
+              variant="outlined"
+              label="Exit"
+              onClick={stopPresent}
+              fullWidth
             >
-              Present
+              Exit
             </FilledButton>
-            <FilledButton
-              color="danger"
-              label="Record"
-              icon={recordIcon}
-              onClick={startRecordPresent}
-              disabled={
-                deck.frames.length === 0 || uploading || !isConvexLinked
-              }
-              status={uploading ? "loading" : null}
-            >
-              Record
-            </FilledButton>
-          </>
-        )}
-      </div>
-      {frameIds.length === 0 ? (
-        <p className="jayrr-present__empty">
-          Draw a frame, drop shapes in it, then set the order here.
-        </p>
-      ) : (
-        <DndContext
-          sensors={sensors}
-          collisionDetection={collisionDetection}
-          modifiers={[restrictToVerticalAxis]}
-          onDragStart={onDragStart}
-          onDragOver={onDragOver}
-          onDragEnd={onDragEnd}
-          onDragCancel={onDragCancel}
-        >
-          <SortableContext
-            items={frameIds}
-            strategy={verticalListSortingStrategy}
-          >
-            <ol
-              className={
-                activeId
-                  ? "jayrr-present__frames is-sorting"
-                  : "jayrr-present__frames"
-              }
-            >
-              {frameIds.map((frameId, frameIndex) => {
-                const frame = frameById.get(frameId);
-                if (!frame) {
-                  return null;
+          ) : (
+            <>
+              <FilledButton
+                color="primary"
+                label="Present"
+                icon={presentationIcon}
+                onClick={startPresent}
+                disabled={deck.frames.length === 0}
+              >
+                Present
+              </FilledButton>
+              <FilledButton
+                color="danger"
+                label="Record"
+                icon={recordIcon}
+                onClick={startRecordPresent}
+                disabled={
+                  deck.frames.length === 0 || uploading || !isConvexLinked
                 }
-                const childIds = objectIds[frame.id] ?? [];
-                return (
-                  <SortableFrameBlock
-                    key={frame.id}
-                    id={frame.id}
-                    index={frameIndex + 1}
-                    disabled={
-                      presenting || renamingId !== null || frameIds.length < 2
-                    }
-                    name={frame.label}
-                    selected={Boolean(selectedElementIds[frame.id])}
-                    collapsed={Boolean(collapsedFrameIds[frame.id])}
-                    renaming={renamingId === frame.id}
-                    draftName={draftName}
-                    effect={frame.effect}
-                    zoomPercent={frame.zoomPercent}
-                    onSelect={() => selectId(frame.id)}
-                    onToggleCollapse={() => {
-                      setCollapsedFrameIds((current) => ({
-                        ...current,
-                        [frame.id]: !current[frame.id],
-                      }));
-                    }}
-                    onStartRename={() => startRename(frame.id, frame.label)}
-                    onDraftChange={setDraftName}
-                    onCommit={commitRename}
-                    onCancel={cancelRename}
-                    onEffect={(effect) =>
-                      persistPresentEffect([frame.id], effect)
-                    }
-                    onZoomPercent={(zoomPercent) =>
-                      persistPresentZoomPercent([frame.id], zoomPercent)
-                    }
-                    sound={frame.sound}
-                    onSound={(sound) => persistPresentSound([frame.id], sound)}
-                  >
-                    {childIds.length === 0 ? (
-                      <p className="jayrr-present__empty">
-                        No shapes in this frame.
-                      </p>
-                    ) : (
-                      <SortableContext
-                        items={childIds}
-                        strategy={verticalListSortingStrategy}
-                      >
-                        <ol className="jayrr-present__objects">
-                          {(() => {
-                            let counted = 0;
-                            return childIds.map((objectId) => {
-                              const object = frame.objects.find(
-                                (item) => item.id === objectId,
-                              );
-                              if (!object) {
-                                return null;
-                              }
-                              const index =
-                                object.skip || object.hide ? null : ++counted;
-                              return (
-                                <SortableObjectBlock
-                                  key={object.id}
-                                  id={object.id}
-                                  index={index}
-                                  disabled={
-                                    presenting ||
-                                    renamingId !== null ||
-                                    childIds.length < 2
-                                  }
-                                  name={object.label}
-                                  selected={Boolean(
-                                    selectedElementIds[object.id],
-                                  )}
-                                  renaming={renamingId === object.id}
-                                  draftName={draftName}
-                                  effect={object.effect}
-                                  camera={object.camera}
-                                  motion={object.motion}
-                                  exit={object.exit}
-                                  translation={object.translation}
-                                  zoomPercent={object.zoomPercent}
-                                  skip={object.skip}
-                                  hide={object.hide}
-                                  text={
-                                    object.memberIds.length > 0 &&
-                                    object.memberIds.every((id) =>
-                                      textIds.has(id),
-                                    )
-                                  }
-                                  textEffect={object.textEffect}
-                                  sound={object.sound}
-                                  placeIds={object.memberIds}
-                                  onSelect={() => selectId(object.id)}
-                                  onStartRename={() =>
-                                    startRename(object.id, object.label)
-                                  }
-                                  onDraftChange={setDraftName}
-                                  onCommit={commitRename}
-                                  onCancel={cancelRename}
-                                  onEffect={(effect) =>
-                                    persistPresentEffect(
-                                      object.memberIds,
-                                      effect,
-                                    )
-                                  }
-                                  onCamera={(camera) =>
-                                    persistPresentCamera(
-                                      object.memberIds,
-                                      camera,
-                                    )
-                                  }
-                                  onMotion={(motion) =>
-                                    persistPresentMotion(
-                                      object.memberIds,
-                                      motion,
-                                    )
-                                  }
-                                  onExit={(exit) =>
-                                    persistPresentExit(object.memberIds, exit)
-                                  }
-                                  onTranslation={(translation) =>
-                                    persistPresentTranslation(
-                                      object.memberIds,
-                                      translation,
-                                    )
-                                  }
-                                  onZoomPercent={(zoomPercent) =>
-                                    persistPresentZoomPercent(
-                                      object.memberIds,
-                                      zoomPercent,
-                                    )
-                                  }
-                                  onPresence={(presence) =>
-                                    persistPresentPresence(
-                                      object.memberIds,
-                                      presence,
-                                    )
-                                  }
-                                  onTextEffect={(textEffect) =>
-                                    persistPresentTextEffect(
-                                      object.memberIds,
-                                      textEffect,
-                                    )
-                                  }
-                                  onSound={(sound) =>
-                                    persistPresentSound(object.memberIds, sound)
-                                  }
-                                />
-                              );
-                            });
-                          })()}
-                        </ol>
-                      </SortableContext>
-                    )}
-                  </SortableFrameBlock>
-                );
-              })}
-            </ol>
-          </SortableContext>
-        </DndContext>
-      )}
-      {presenting ? (
-        <p className="jayrr-present__status" aria-live="polite">
-          {stepCaption(deck, stepIndex)}
-        </p>
-      ) : null}
-      {uploading ? (
-        <p className="jayrr-present__status" aria-live="polite">
-          Saving recording…
-        </p>
-      ) : null}
+                status={uploading ? "loading" : null}
+              >
+                Record
+              </FilledButton>
+            </>
+          )}
+        </div>
+        {frameIds.length === 0 ? (
+          <p className="jayrr-present__empty">
+            Draw a frame, drop shapes in it, then set the order here.
+          </p>
+        ) : (
+          <DndContext
+            sensors={sensors}
+            collisionDetection={collisionDetection}
+            modifiers={[restrictToVerticalAxis]}
+            onDragStart={onDragStart}
+            onDragOver={onDragOver}
+            onDragEnd={onDragEnd}
+            onDragCancel={onDragCancel}
+          >
+            <SortableContext
+              items={frameIds}
+              strategy={verticalListSortingStrategy}
+            >
+              <ol
+                className={
+                  activeId
+                    ? "jayrr-present__frames is-sorting"
+                    : "jayrr-present__frames"
+                }
+              >
+                {frameIds.map((frameId, frameIndex) => {
+                  const frame = frameById.get(frameId);
+                  if (!frame) {
+                    return null;
+                  }
+                  const childIds = objectIds[frame.id] ?? [];
+                  return (
+                    <SortableFrameBlock
+                      key={frame.id}
+                      id={frame.id}
+                      index={frameIndex + 1}
+                      disabled={
+                        presenting || renamingId !== null || frameIds.length < 2
+                      }
+                      name={frame.label}
+                      selected={Boolean(selectedElementIds[frame.id])}
+                      collapsed={Boolean(collapsedFrameIds[frame.id])}
+                      renaming={renamingId === frame.id}
+                      draftName={draftName}
+                      effect={frame.effect}
+                      zoomPercent={frame.zoomPercent}
+                      onSelect={() => selectId(frame.id)}
+                      onToggleCollapse={() => {
+                        setCollapsedFrameIds((current) => ({
+                          ...current,
+                          [frame.id]: !current[frame.id],
+                        }));
+                      }}
+                      onStartRename={() => startRename(frame.id, frame.label)}
+                      onDraftChange={setDraftName}
+                      onCommit={commitRename}
+                      onCancel={cancelRename}
+                      onEffect={(effect) =>
+                        persistPresentEffect([frame.id], effect)
+                      }
+                      onZoomPercent={(zoomPercent) =>
+                        persistPresentZoomPercent([frame.id], zoomPercent)
+                      }
+                      sound={frame.sound}
+                      onSound={(sound) =>
+                        persistPresentSound([frame.id], sound)
+                      }
+                    >
+                      {childIds.length === 0 ? (
+                        <p className="jayrr-present__empty">
+                          No shapes in this frame.
+                        </p>
+                      ) : (
+                        <SortableContext
+                          items={childIds}
+                          strategy={verticalListSortingStrategy}
+                        >
+                          <ol className="jayrr-present__objects">
+                            {(() => {
+                              let counted = 0;
+                              return childIds.map((objectId) => {
+                                const object = frame.objects.find(
+                                  (item) => item.id === objectId,
+                                );
+                                if (!object) {
+                                  return null;
+                                }
+                                const index =
+                                  object.skip || object.hide ? null : ++counted;
+                                return (
+                                  <SortableObjectBlock
+                                    key={object.id}
+                                    id={object.id}
+                                    index={index}
+                                    disabled={
+                                      presenting ||
+                                      renamingId !== null ||
+                                      childIds.length < 2
+                                    }
+                                    name={object.label}
+                                    selected={Boolean(
+                                      selectedElementIds[object.id],
+                                    )}
+                                    renaming={renamingId === object.id}
+                                    draftName={draftName}
+                                    effect={object.effect}
+                                    camera={object.camera}
+                                    motion={object.motion}
+                                    exit={object.exit}
+                                    translation={object.translation}
+                                    zoomPercent={object.zoomPercent}
+                                    skip={object.skip}
+                                    hide={object.hide}
+                                    text={
+                                      object.memberIds.length > 0 &&
+                                      object.memberIds.every((id) =>
+                                        textIds.has(id),
+                                      )
+                                    }
+                                    textEffect={object.textEffect}
+                                    sound={object.sound}
+                                    placeIds={object.memberIds}
+                                    onSelect={() => selectId(object.id)}
+                                    onStartRename={() =>
+                                      startRename(object.id, object.label)
+                                    }
+                                    onDraftChange={setDraftName}
+                                    onCommit={commitRename}
+                                    onCancel={cancelRename}
+                                    onEffect={(effect) =>
+                                      persistPresentEffect(
+                                        object.memberIds,
+                                        effect,
+                                      )
+                                    }
+                                    onCamera={(camera) =>
+                                      persistPresentCamera(
+                                        object.memberIds,
+                                        camera,
+                                      )
+                                    }
+                                    onMotion={(motion) =>
+                                      persistPresentMotion(
+                                        object.memberIds,
+                                        motion,
+                                      )
+                                    }
+                                    onExit={(exit) =>
+                                      persistPresentExit(object.memberIds, exit)
+                                    }
+                                    onTranslation={(translation) =>
+                                      persistPresentTranslation(
+                                        object.memberIds,
+                                        translation,
+                                      )
+                                    }
+                                    onZoomPercent={(zoomPercent) =>
+                                      persistPresentZoomPercent(
+                                        object.memberIds,
+                                        zoomPercent,
+                                      )
+                                    }
+                                    onPresence={(presence) =>
+                                      persistPresentPresence(
+                                        object.memberIds,
+                                        presence,
+                                      )
+                                    }
+                                    onTextEffect={(textEffect) =>
+                                      persistPresentTextEffect(
+                                        object.memberIds,
+                                        textEffect,
+                                      )
+                                    }
+                                    onSound={(sound) =>
+                                      persistPresentSound(
+                                        object.memberIds,
+                                        sound,
+                                      )
+                                    }
+                                  />
+                                );
+                              });
+                            })()}
+                          </ol>
+                        </SortableContext>
+                      )}
+                    </SortableFrameBlock>
+                  );
+                })}
+              </ol>
+            </SortableContext>
+          </DndContext>
+        )}
+        {presenting ? (
+          <p className="jayrr-present__status" aria-live="polite">
+            {stepCaption(deck, stepIndex)}
+          </p>
+        ) : null}
+        {uploading ? (
+          <p className="jayrr-present__status" aria-live="polite">
+            Saving recording…
+          </p>
+        ) : null}
+      </div>
     </div>
   );
 };

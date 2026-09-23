@@ -122,6 +122,37 @@ export const LibraryIcon = handdrawnUIIcon("library");
 
 export const SceneIcon = handdrawnUIIcon("sketch");
 
+export const FolderPlusIcon = createIcon(
+  <g strokeWidth="1.5">
+    <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+    <path d="M12 19h-7a2 2 0 0 1 -2 -2v-11a2 2 0 0 1 2 -2h4l3 3h7a2 2 0 0 1 2 2v3.5" />
+    <path d="M16 19h6" />
+    <path d="M19 16v6" />
+  </g>,
+  tablerIconProps,
+);
+
+export const FilePlusIcon = createIcon(
+  <g strokeWidth="1.5">
+    <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+    <path d="M14 3v4a1 1 0 0 0 1 1h4" />
+    <path d="M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2z" />
+    <path d="M12 11l0 6" />
+    <path d="M9 14l6 0" />
+  </g>,
+  tablerIconProps,
+);
+
+export const DeviceFloppyIcon = createIcon(
+  <g strokeWidth="1.5">
+    <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+    <path d="M6 4h10l4 4v10a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2" />
+    <path d="M12 14m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" />
+    <path d="M14 4l0 4l-6 0l0 -4" />
+  </g>,
+  tablerIconProps,
+);
+
 // tabler-icons: plus
 export const PlusIcon = handdrawnUIIcon("plus");
 

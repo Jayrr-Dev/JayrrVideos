@@ -43,6 +43,17 @@
   color: var(--color-danger, #c0392b);
 }
 
+.jayrr-camera-picker__cutout {
+  margin-top: 0.6rem;
+}
+
+.jayrr-camera-picker__tune {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-top: 0.6rem;
+}
+
 .excalidraw .jayrr-camera-picker__menu.dropdown-menu {
   z-index: var(--zIndex-ui-styles-popup);
   min-width: 11rem;

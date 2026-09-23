@@ -93,4 +93,4 @@ export { actionToggleStats } from "./actionToggleStats";
 
 export { actionToggleSearchMenu } from "./actionToggleSearchMenu";
 
-export { actionToggleCropEditor } from "./actionCropEditor";
+export { actionToggleCropEditor, actionChangeCropAspectRatio } from "./actionCropEditor";

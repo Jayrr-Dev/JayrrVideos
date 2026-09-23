@@ -17,6 +17,8 @@ import {
 import {
   canLinkJayrrCamera,
   isJayrrDisplay,
+  readDisplayQuality,
+  readDisplayRate,
   readJayrrCamera,
   type JayrrCamera,
 } from "./jayrrCamera";
@@ -25,9 +27,12 @@ import { setJayrrCameraVideo } from "./jayrrCameraLive";
 import {
   acquireJayrrCamera,
   acquireJayrrDisplay,
+  displayWantedSize,
   peekJayrrDisplayStream,
   releaseJayrrCamera,
   releaseJayrrDisplay,
+  tuneJayrrDisplay,
+  type DisplayTune,
 } from "./jayrrCameraStreams";
 
 import "./JayrrCameraOverlay.scss";
@@ -36,6 +41,15 @@ type LinkedFill = {
   id: string;
   camera: JayrrCamera;
   element: NonDeletedExcalidrawElement;
+};
+
+const fitDisplayVideo = (video: HTMLVideoElement, tune: DisplayTune) => {
+  const view = video.ownerDocument.defaultView ?? undefined;
+  const wanted = displayWantedSize(tune, view);
+  video.width = wanted.width;
+  video.height = wanted.height;
+  video.style.width = `${wanted.width}px`;
+  video.style.height = `${wanted.height}px`;
 };
 
 const CameraVideo = ({
@@ -54,6 +68,10 @@ const CameraVideo = ({
   const cameraId = display ? null : camera.deviceId;
   const nonce = display ? camera.nonce ?? 0 : 0;
   const surface = display ? camera.surface : undefined;
+  const quality = readDisplayQuality(display ? camera : null);
+  const frameRate = readDisplayRate(display ? camera : null);
+  const tuneRef = useRef({ quality, frameRate });
+  tuneRef.current = { quality, frameRate };
   const [settingsTick, setSettingsTick] = useState(0);
   const [streamReady, setStreamReady] = useState(false);
 
@@ -73,8 +91,11 @@ const CameraVideo = ({
     let cancelled = false;
     let held: MediaStream | null = null;
     setStreamReady(false);
+    if (display) {
+      fitDisplayVideo(video, tuneRef.current);
+    }
     const start = display
-      ? acquireJayrrDisplay(elementId, surface)
+      ? acquireJayrrDisplay(elementId, surface, tuneRef.current)
       : acquireJayrrCamera(cameraId ?? "default");
     void start
       .then((stream) => {
@@ -87,10 +108,17 @@ const CameraVideo = ({
           return;
         }
         held = stream;
+        if (display) {
+          fitDisplayVideo(video, tuneRef.current);
+        }
         video.srcObject = stream;
         const track = stream.getVideoTracks()[0];
         const facing = track?.getSettings().facingMode;
         video.dataset.jayrrMirror = !display && facing === "user" ? "1" : "";
+        if (!display) {
+          video.style.width = "";
+          video.style.height = "";
+        }
         setJayrrCameraVideo(elementId, video);
         setStreamReady(true);
         return video.play().catch(() => undefined);
@@ -111,6 +139,18 @@ const CameraVideo = ({
       }
     };
   }, [cameraId, display, elementId, nonce, surface]);
+
+  useEffect(() => {
+    if (!display || !streamReady) {
+      return;
+    }
+    const video = videoRef.current;
+    if (!video) {
+      return;
+    }
+    fitDisplayVideo(video, { quality, frameRate });
+    void tuneJayrrDisplay(elementId, { quality, frameRate });
+  }, [display, elementId, frameRate, quality, streamReady]);
 
   useEffect(() => {
     if (!display || !streamReady) {

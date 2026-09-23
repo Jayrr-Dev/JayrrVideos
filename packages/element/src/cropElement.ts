@@ -30,6 +30,127 @@ import type {
 
 export const MINIMAL_CROP_SIZE = 10;
 
+export const CROP_ASPECT_RATIO_FREE = "free";
+export const CROP_ASPECT_RATIO_ORIGINAL = "original";
+
+export const CROP_ASPECT_RATIO_PRESETS = [
+  { id: "1:1", width: 1, height: 1 },
+  { id: "16:9", width: 16, height: 9 },
+  { id: "9:16", width: 9, height: 16 },
+  { id: "4:3", width: 4, height: 3 },
+  { id: "3:2", width: 3, height: 2 },
+  { id: "4:5", width: 4, height: 5 },
+] as const;
+
+export type CropAspectRatioId =
+  | typeof CROP_ASPECT_RATIO_FREE
+  | typeof CROP_ASPECT_RATIO_ORIGINAL
+  | typeof CROP_ASPECT_RATIO_PRESETS[number]["id"];
+
+export const isCropAspectRatioId = (value: string): value is CropAspectRatioId => {
+  if (value === CROP_ASPECT_RATIO_FREE || value === CROP_ASPECT_RATIO_ORIGINAL) {
+    return true;
+  }
+  return CROP_ASPECT_RATIO_PRESETS.some((preset) => preset.id === value);
+};
+
+export const getCropWidthAspectRatio = (
+  ratioId: CropAspectRatioId,
+  element: ExcalidrawImageElement,
+): number | undefined => {
+  if (ratioId === CROP_ASPECT_RATIO_FREE) {
+    return undefined;
+  }
+  if (ratioId === CROP_ASPECT_RATIO_ORIGINAL) {
+    const { width, height } = getUncroppedWidthAndHeight(element);
+    return width / height;
+  }
+  const preset = CROP_ASPECT_RATIO_PRESETS.find((item) => item.id === ratioId);
+  if (!preset) {
+    return undefined;
+  }
+  return preset.width / preset.height;
+};
+
+export const cropImageToAspectRatio = (
+  element: ExcalidrawImageElement,
+  widthAspectRatio: number,
+  naturalWidth: number,
+  naturalHeight: number,
+) => {
+  const { width: uncroppedWidth, height: uncroppedHeight } =
+    getUncroppedWidthAndHeight(element);
+
+  const naturalWidthToUncropped = naturalWidth / uncroppedWidth;
+  const naturalHeightToUncropped = naturalHeight / uncroppedHeight;
+
+  let nextWidth: number;
+  let nextHeight: number;
+
+  if (uncroppedWidth / uncroppedHeight > widthAspectRatio) {
+    nextHeight = uncroppedHeight;
+    nextWidth = nextHeight * widthAspectRatio;
+  } else {
+    nextWidth = uncroppedWidth;
+    nextHeight = nextWidth / widthAspectRatio;
+  }
+
+  if (nextWidth > uncroppedWidth) {
+    nextWidth = uncroppedWidth;
+    nextHeight = nextWidth / widthAspectRatio;
+  }
+  if (nextHeight > uncroppedHeight) {
+    nextHeight = uncroppedHeight;
+    nextWidth = nextHeight * widthAspectRatio;
+  }
+
+  nextWidth = Math.max(nextWidth, MINIMAL_CROP_SIZE);
+  nextHeight = Math.max(nextHeight, MINIMAL_CROP_SIZE);
+
+  const cropWidth = nextWidth * naturalWidthToUncropped;
+  const cropHeight = nextHeight * naturalHeightToUncropped;
+
+  const currentCrop = element.crop ?? {
+    x: 0,
+    y: 0,
+    width: naturalWidth,
+    height: naturalHeight,
+    naturalWidth,
+    naturalHeight,
+  };
+
+  const centerX = currentCrop.x + currentCrop.width / 2;
+  const centerY = currentCrop.y + currentCrop.height / 2;
+
+  const cropX = clamp(centerX - cropWidth / 2, 0, naturalWidth - cropWidth);
+  const cropY = clamp(centerY - cropHeight / 2, 0, naturalHeight - cropHeight);
+
+  let crop: ImageCrop | null = {
+    ...currentCrop,
+    x: cropX,
+    y: cropY,
+    width: cropWidth,
+    height: cropHeight,
+    naturalWidth,
+    naturalHeight,
+  };
+
+  if (
+    isCloseTo(crop.width, crop.naturalWidth) &&
+    isCloseTo(crop.height, crop.naturalHeight)
+  ) {
+    crop = null;
+  }
+
+  return {
+    x: element.x + element.width / 2 - nextWidth / 2,
+    y: element.y + element.height / 2 - nextHeight / 2,
+    width: nextWidth,
+    height: nextHeight,
+    crop,
+  };
+};
+
 export const cropElement = (
   element: ExcalidrawImageElement,
   elementsMap: ElementsMap,

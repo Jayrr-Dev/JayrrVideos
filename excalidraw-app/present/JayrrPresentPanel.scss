@@ -2,28 +2,24 @@
   .jayrr-present {
     display: flex;
     flex-direction: column;
+    gap: 0;
+    padding: 0;
+    overflow: hidden;
+    flex: 1;
+    min-height: 0;
+  }
+
+  .jayrr-present__body {
+    display: flex;
+    flex-direction: column;
     gap: 0.75rem;
-    padding: 0.5rem 0.75rem 1rem;
+    padding: 0 0.75rem 1rem;
     overflow: auto;
     flex: 1;
     min-height: 0;
   }
 
-  .jayrr-present__title-row {
-    display: flex;
-    align-items: center;
-    gap: 0.35rem;
-    min-width: 0;
-  }
-
-  .jayrr-present__title {
-    margin: 0;
-    font-size: 1rem;
-    min-width: 0;
-  }
-
   .jayrr-docs__views {
-    margin-left: auto;
     display: inline-flex;
     gap: 0.25rem;
     flex-shrink: 0;
@@ -45,35 +41,6 @@
     background: var(--color-surface-mid);
   }
 
-  .jayrr-present__settings {
-    margin-left: auto;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 1.75rem;
-    height: 1.75rem;
-    padding: 0;
-    border: none;
-    background: none;
-    color: var(--icon-fill-color);
-    cursor: pointer;
-    border-radius: var(--border-radius-md);
-  }
-
-  .jayrr-present__settings:hover {
-    color: var(--color-primary);
-    background: var(--color-surface-mid);
-  }
-
-  .jayrr-present__settings svg {
-    width: 1.125rem;
-    height: 1.125rem;
-  }
-
-  .jayrr-present__settings[aria-expanded="true"] {
-    color: var(--color-primary);
-    background: var(--color-surface-mid);
-  }
 
   .jayrr-present__settings-popover {
     z-index: var(--zIndex-popup);
@@ -173,6 +140,11 @@
     flex: 1;
     min-height: 0;
     overflow: auto;
+    padding: 0 0.75rem;
+  }
+
+  .jayrr-present--recordings > .jayrr-present__status {
+    padding: 0 0.75rem;
   }
 
   .jayrr-present__back {
@@ -196,26 +168,10 @@
   }
 
   .jayrr-present__back svg {
-    width: 1rem;
-    height: 1rem;
+    width: 1.125rem;
+    height: 1.125rem;
   }
 
-  .jayrr-present__folder-title {
-    flex: 1;
-    min-width: 0;
-    margin: 0;
-    padding: 0;
-    border: none;
-    background: none;
-    text-align: left;
-    font-size: 1rem;
-    font-weight: 700;
-    color: var(--color-primary);
-    cursor: pointer;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
 
   .jayrr-present__folder-rename {
     flex: 1;
@@ -247,7 +203,7 @@
   .jayrr-present__recordings-footer {
     margin-top: auto;
     flex-shrink: 0;
-    padding: 0.75rem 0 0;
+    padding: 0.75rem 0.75rem 0;
     border-top: 1px solid var(--sidebar-border-color);
   }
 

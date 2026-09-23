@@ -7,7 +7,7 @@ import type {
   throttleRAF,
 } from "@excalidraw/common";
 
-import type { LinearElementEditor } from "@excalidraw/element";
+import type { CropAspectRatioId, LinearElementEditor } from "@excalidraw/element";
 
 import type { MaybeTransformHandleType } from "@excalidraw/element";
 
@@ -468,6 +468,7 @@ export interface AppState {
     | "compactStrokeStyles"
     | "compactOtherProperties"
     | "compactArrowProperties"
+    | "compactImageCrop"
     | null;
   openSidebar: { name: SidebarName; tab?: SidebarTabName } | null;
   openDialog:
@@ -539,6 +540,7 @@ export interface AppState {
   /** image cropping */
   isCropping: boolean;
   croppingElementId: ExcalidrawElement["id"] | null;
+  cropAspectRatio: CropAspectRatioId;
 
   /** null if no search matches found / search closed */
   searchMatches: Readonly<{

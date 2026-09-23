@@ -17,7 +17,6 @@ import {
 import type { NonDeletedExcalidrawElement } from "@excalidraw/element/types";
 
 import { api, convexClient, isConvexLinked } from "../../convexClient";
-import type { EditorRecordingLookup } from "./editorProjectStore";
 
 import { jayrrLocalSoundUrl } from "../../sounds/jayrrSoundPlayback";
 
@@ -75,6 +74,8 @@ import {
 import { insertEditorPreview } from "./insertEditorPreview";
 import { type EditorRecordingPick } from "./JayrrEditorAddRecordingDialog";
 import { useEditorPlayback } from "./useEditorPlayback";
+
+import type { EditorRecordingLookup } from "./editorProjectStore";
 
 import type { JayrrSoundPick } from "../../components/ui/JayrrSoundLibraryDialog";
 

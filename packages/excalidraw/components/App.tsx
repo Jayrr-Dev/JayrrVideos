@@ -122,6 +122,7 @@ import {
   convertToExcalidrawElements,
   createSrcDoc,
   cropElement,
+  getCropWidthAspectRatio,
   deepCopyElement,
   DEFAULT_BOUND_TEXT_LABEL_POSITION,
   doBoundsIntersect,
@@ -13825,9 +13826,13 @@ class App extends React.Component<AppProps, AppState> {
             image.naturalHeight,
             x + snapOffset.x,
             y + snapOffset.y,
-            event.shiftKey
-              ? croppingAtStateStart.width / croppingAtStateStart.height
-              : undefined,
+            getCropWidthAspectRatio(
+              this.state.cropAspectRatio,
+              croppingAtStateStart,
+            ) ??
+              (event.shiftKey
+                ? croppingAtStateStart.width / croppingAtStateStart.height
+                : undefined),
           ),
         );
 

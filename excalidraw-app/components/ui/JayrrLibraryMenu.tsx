@@ -9,7 +9,6 @@ import {
 } from "react";
 
 import {
-  Button,
   exportToSvg,
   restoreLibraryItems,
   useExcalidrawAPI,
@@ -23,15 +22,15 @@ import {
   chevronLeftIcon,
 } from "@excalidraw/excalidraw/components/icons";
 
-import type { BinaryFiles } from "@excalidraw/excalidraw/types";
-
 import type { NonDeletedExcalidrawElement } from "@excalidraw/element/types";
+import type { BinaryFiles } from "@excalidraw/excalidraw/types";
 
 import { useAtom } from "../../app-jotai";
 import { STORAGE_KEYS } from "../../app_constants";
 import { api, isConvexLinked } from "../../convexClient";
 import {
   openLibraryIdAtom,
+  readStoredOpenLibraryId,
   serializeFilesForElements,
 } from "../../data/jayrrLibraries";
 
@@ -154,11 +153,24 @@ const JayrrLibraryMenuConnected = () => {
   const selectedElementIds = useExcalidrawStateValue("selectedElementIds");
 
   useEffect(() => {
-    persistOpenLibraryId(openLibraryId);
+    if (openLibraryId) {
+      persistOpenLibraryId(openLibraryId);
+    }
   }, [openLibraryId]);
 
   useEffect(() => {
-    if (openLibraryId && openLibrary === null) {
+    const stored = readStoredOpenLibraryId();
+    if (stored) {
+      setOpenLibraryId(stored);
+    }
+  }, [setOpenLibraryId]);
+
+  useEffect(() => {
+    if (!openLibraryId || openLibrary === undefined) {
+      return;
+    }
+    if (openLibrary === null) {
+      persistOpenLibraryId(null);
       setOpenLibraryId(null);
     }
   }, [openLibrary, openLibraryId, setOpenLibraryId]);
@@ -309,7 +321,25 @@ const JayrrLibraryMenuConnected = () => {
     );
   }
 
-  if (openLibraryId && openLibrary) {
+  if (openLibraryId) {
+    if (!openLibrary) {
+      return (
+        <div className="layer-ui__library jayrr-library">
+          <div className="jayrr-library__header">
+            <button
+              type="button"
+              className="jayrr-library__icon-button"
+              aria-label="Back to libraries"
+              onClick={() => setOpenLibraryId(null)}
+            >
+              {chevronLeftIcon}
+            </button>
+            <div className="jayrr-library__title">Loading library…</div>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="layer-ui__library jayrr-library">
         <div className="jayrr-library__header">
@@ -405,6 +435,19 @@ const JayrrLibraryMenuConnected = () => {
     <div className="layer-ui__library jayrr-library">
       <div className="jayrr-library__header">
         <div className="jayrr-library__title">Libraries</div>
+        <div className="jayrr-library__header-actions">
+          <button
+            type="button"
+            className="jayrr-library__icon-button"
+            aria-label="Create library"
+            title="Create library"
+            onClick={() => {
+              void onCreateLibrary();
+            }}
+          >
+            {PlusIcon}
+          </button>
+        </div>
       </div>
       <div className="jayrr-library__body">
         {libraries.length === 0 && (
@@ -415,14 +458,6 @@ const JayrrLibraryMenuConnected = () => {
             <div className="library-menu-items__no-items__hint">
               Create a library, then drop canvas selections into it.
             </div>
-            <Button
-              className="jayrr-library__create"
-              onSelect={() => {
-                void onCreateLibrary();
-              }}
-            >
-              Create library
-            </Button>
           </div>
         )}
         {libraries.length > 0 && (
@@ -449,7 +484,13 @@ const JayrrLibraryMenuConnected = () => {
                     }}
                   />
                 ) : (
-                  <span className="jayrr-scene-card__name">{library.name}</span>
+                  <button
+                    type="button"
+                    className="jayrr-scene-card__name"
+                    onClick={() => openLibraryById(library._id)}
+                  >
+                    {library.name}
+                  </button>
                 )}
                 <button
                   type="button"
@@ -505,18 +546,6 @@ const JayrrLibraryMenuConnected = () => {
           </ul>
         )}
       </div>
-      {libraries.length > 0 && (
-        <div className="jayrr-library__footer">
-          <Button
-            className="jayrr-library__create"
-            onSelect={() => {
-              void onCreateLibrary();
-            }}
-          >
-            Create library
-          </Button>
-        </div>
-      )}
       {pendingDelete ? (
         <JayrrConfirmDialog
           title={`Delete "${pendingDelete.name}"?`}
