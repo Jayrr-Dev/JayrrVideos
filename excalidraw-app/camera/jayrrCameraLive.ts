@@ -6,14 +6,18 @@ import type {
   StaticCanvasAppState,
 } from "@excalidraw/excalidraw/types";
 
+import { appJotaiStore } from "../app-jotai";
 import { readCaption } from "../domain/transcription";
 
 import {
   canLinkJayrrCamera,
+  isFullDisplayCrop,
   isJayrrDisplay,
+  readDisplayCrop,
   readJayrrCamera,
 } from "./jayrrCamera";
 import { getJayrrCameraCutout } from "./jayrrCameraCutout";
+import { desktopCropElementIdAtom } from "./jayrrDisplayCrop";
 
 const videos = new Map<string, HTMLVideoElement>();
 
@@ -27,6 +31,9 @@ export const setJayrrCameraVideo = (
   }
   videos.delete(elementId);
 };
+
+export const getJayrrCameraVideo = (elementId: string) =>
+  videos.get(elementId) ?? null;
 
 const clipFill = (
   context: CanvasRenderingContext2D,
@@ -74,16 +81,28 @@ const drawFitted = (
   width: number,
   height: number,
   contain: boolean,
+  cropX = 0,
+  cropY = 0,
+  cropW = sourceW,
+  cropH = sourceH,
 ) => {
+  const sx = Math.max(0, cropX);
+  const sy = Math.max(0, cropY);
+  const sw = Math.max(1, Math.min(cropW, sourceW - sx));
+  const sh = Math.max(1, Math.min(cropH, sourceH - sy));
   const scale = contain
-    ? Math.min(width / sourceW, height / sourceH)
-    : Math.max(width / sourceW, height / sourceH);
-  const drawW = sourceW * scale;
-  const drawH = sourceH * scale;
+    ? Math.min(width / sw, height / sh)
+    : Math.max(width / sw, height / sh);
+  const drawW = sw * scale;
+  const drawH = sh * scale;
   context.imageSmoothingEnabled = true;
   context.imageSmoothingQuality = "high";
   context.drawImage(
     source,
+    sx,
+    sy,
+    sw,
+    sh,
     (width - drawW) / 2,
     (height - drawH) / 2,
     drawW,
@@ -199,6 +218,13 @@ export const paintJayrrCameraLive = (
         sourceH = cutout.height;
       }
     }
+    const editingCrop =
+      appJotaiStore.get(desktopCropElementIdAtom) === element.id;
+    const crop =
+      !editingCrop && isJayrrDisplay(camera)
+        ? readDisplayCrop(camera)
+        : undefined;
+    const useCrop = crop && !isFullDisplayCrop(crop);
     drawFitted(
       context,
       source,
@@ -207,6 +233,10 @@ export const paintJayrrCameraLive = (
       width,
       height,
       isJayrrDisplay(camera),
+      useCrop ? crop.x * sourceW : 0,
+      useCrop ? crop.y * sourceH : 0,
+      useCrop ? crop.width * sourceW : sourceW,
+      useCrop ? crop.height * sourceH : sourceH,
     );
     paintCaption(context, readCaption(element.id), width, height);
   } catch {

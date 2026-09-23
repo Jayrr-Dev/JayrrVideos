@@ -54,6 +54,21 @@
   margin-top: 0.6rem;
 }
 
+.jayrr-camera-picker__crop {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.jayrr-camera-picker__crop-reset {
+  border: 0;
+  background: transparent;
+  color: var(--color-primary, #6965db);
+  font-size: 0.75rem;
+  cursor: pointer;
+  padding: 0 0.15rem;
+}
+
 .excalidraw .jayrr-camera-picker__menu.dropdown-menu {
   z-index: var(--zIndex-ui-styles-popup);
   min-width: 11rem;

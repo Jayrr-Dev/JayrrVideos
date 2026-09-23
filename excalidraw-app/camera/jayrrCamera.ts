@@ -21,6 +21,22 @@ export const JAYRR_DISPLAY_RATES = [30, 60] as const;
 
 export type JayrrDisplayRate = typeof JAYRR_DISPLAY_RATES[number];
 
+export type JayrrDisplayCrop = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+export const FULL_DISPLAY_CROP: JayrrDisplayCrop = {
+  x: 0,
+  y: 0,
+  width: 1,
+  height: 1,
+};
+
+export const MIN_DISPLAY_CROP = 0.04;
+
 export type JayrrCamera =
   | {
       kind?: "camera";
@@ -34,6 +50,7 @@ export type JayrrCamera =
       surface?: JayrrDisplaySurface;
       quality?: JayrrDisplayQuality;
       frameRate?: JayrrDisplayRate;
+      crop?: JayrrDisplayCrop;
     };
 
 export const jayrrDisplaySurfaceLabel = (surface?: JayrrDisplaySurface) => {
@@ -70,6 +87,66 @@ const isDisplaySurface = (value: unknown): value is JayrrDisplaySurface =>
   typeof value === "string" &&
   (JAYRR_DISPLAY_SURFACES as readonly string[]).includes(value);
 
+const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
+
+export const clampDisplayCrop = (
+  crop: JayrrDisplayCrop,
+): JayrrDisplayCrop => {
+  const width = Math.min(1, Math.max(MIN_DISPLAY_CROP, crop.width));
+  const height = Math.min(1, Math.max(MIN_DISPLAY_CROP, crop.height));
+  const x = clamp01(Math.min(crop.x, 1 - width));
+  const y = clamp01(Math.min(crop.y, 1 - height));
+  return {
+    x,
+    y,
+    width: Math.min(width, 1 - x),
+    height: Math.min(height, 1 - y),
+  };
+};
+
+export const parseDisplayCrop = (value: unknown): JayrrDisplayCrop | undefined => {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+  const bag = value as {
+    x?: unknown;
+    y?: unknown;
+    width?: unknown;
+    height?: unknown;
+  };
+  if (
+    typeof bag.x !== "number" ||
+    typeof bag.y !== "number" ||
+    typeof bag.width !== "number" ||
+    typeof bag.height !== "number"
+  ) {
+    return undefined;
+  }
+  if (
+    ![bag.x, bag.y, bag.width, bag.height].every((item) => Number.isFinite(item))
+  ) {
+    return undefined;
+  }
+  return clampDisplayCrop({
+    x: bag.x,
+    y: bag.y,
+    width: bag.width,
+    height: bag.height,
+  });
+};
+
+export const isFullDisplayCrop = (crop?: JayrrDisplayCrop | null) => {
+  if (!crop) {
+    return true;
+  }
+  return (
+    crop.x <= 0 &&
+    crop.y <= 0 &&
+    crop.width >= 1 - 1e-6 &&
+    crop.height >= 1 - 1e-6
+  );
+};
+
 export const jayrrCameraLabel = (camera: JayrrCamera | null) => {
   if (!camera) {
     return null;
@@ -100,6 +177,7 @@ export const readJayrrCamera = (
     surface?: unknown;
     quality?: unknown;
     frameRate?: unknown;
+    crop?: unknown;
   };
   const label = typeof bag.label === "string" ? bag.label : undefined;
   if (bag.kind === "display") {
@@ -109,6 +187,7 @@ export const readJayrrCamera = (
       surface: isDisplaySurface(bag.surface) ? bag.surface : undefined,
       quality: isDisplayQuality(bag.quality) ? bag.quality : undefined,
       frameRate: isDisplayRate(bag.frameRate) ? bag.frameRate : undefined,
+      crop: parseDisplayCrop(bag.crop),
       label,
     };
   }
@@ -157,4 +236,13 @@ export const readDisplayRate = (
     return 30;
   }
   return camera.frameRate;
+};
+
+export const readDisplayCrop = (
+  camera: JayrrCamera | null,
+): JayrrDisplayCrop | undefined => {
+  if (!isJayrrDisplay(camera)) {
+    return undefined;
+  }
+  return camera.crop;
 };

@@ -3,6 +3,7 @@ import { setLiveMediaPainter } from "@excalidraw/excalidraw/liveMedia";
 import { useEffect } from "react";
 
 import { jayrrCameraAction } from "./jayrrCameraAction";
+import { JayrrCameraCropOverlay } from "./JayrrCameraCropOverlay";
 import { paintJayrrCameraLive } from "./jayrrCameraLive";
 import { JayrrCameraOverlay } from "./JayrrCameraOverlay";
 
@@ -28,5 +29,10 @@ export const JayrrCameraHost = ({
     };
   }, []);
 
-  return <JayrrCameraOverlay presenting={presenting} />;
+  return (
+    <>
+      <JayrrCameraOverlay presenting={presenting} />
+      <JayrrCameraCropOverlay />
+    </>
+  );
 };

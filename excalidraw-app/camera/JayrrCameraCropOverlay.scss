@@ -1,0 +1,131 @@
+.jayrr-desktop-crop-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: var(--zIndex-wysiwyg);
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.jayrr-desktop-crop-window {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: top left;
+}
+
+.jayrr-desktop-crop-window__inner {
+  width: 100%;
+  height: 100%;
+  transform-origin: center center;
+}
+
+.jayrr-desktop-crop {
+  position: absolute;
+  pointer-events: none;
+}
+
+.jayrr-desktop-crop__dim {
+  display: block;
+  width: 100%;
+  height: 100%;
+  fill: rgba(0, 0, 0, 0.42);
+}
+
+.jayrr-desktop-crop__frame {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1.5px solid #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
+  cursor: move;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.jayrr-desktop-crop__handle {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.45);
+  box-sizing: border-box;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.jayrr-desktop-crop__handle.is-n,
+.jayrr-desktop-crop__handle.is-s {
+  left: 50%;
+  margin-left: -5px;
+  cursor: ns-resize;
+}
+
+.jayrr-desktop-crop__handle.is-e,
+.jayrr-desktop-crop__handle.is-w {
+  top: 50%;
+  margin-top: -5px;
+  cursor: ew-resize;
+}
+
+.jayrr-desktop-crop__handle.is-n,
+.jayrr-desktop-crop__handle.is-ne,
+.jayrr-desktop-crop__handle.is-nw {
+  top: -5px;
+}
+
+.jayrr-desktop-crop__handle.is-s,
+.jayrr-desktop-crop__handle.is-se,
+.jayrr-desktop-crop__handle.is-sw {
+  bottom: -5px;
+}
+
+.jayrr-desktop-crop__handle.is-e,
+.jayrr-desktop-crop__handle.is-ne,
+.jayrr-desktop-crop__handle.is-se {
+  right: -5px;
+}
+
+.jayrr-desktop-crop__handle.is-w,
+.jayrr-desktop-crop__handle.is-nw,
+.jayrr-desktop-crop__handle.is-sw {
+  left: -5px;
+}
+
+.jayrr-desktop-crop__handle.is-ne,
+.jayrr-desktop-crop__handle.is-sw {
+  cursor: nesw-resize;
+}
+
+.jayrr-desktop-crop__handle.is-nw,
+.jayrr-desktop-crop__handle.is-se {
+  cursor: nwse-resize;
+}
+
+.jayrr-desktop-crop__done {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  pointer-events: auto;
+  border: 0;
+  border-radius: 0.5rem;
+  padding: 0.25rem 0.65rem;
+  font-size: 0.75rem;
+  background: var(--island-bg-color);
+  color: var(--text-primary-color);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+  cursor: pointer;
+}
+
+.jayrr-camera-picker__crop {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.jayrr-camera-picker__crop-reset {
+  border: 0;
+  background: transparent;
+  color: var(--color-primary, #6965db);
+  font-size: 0.75rem;
+  cursor: pointer;
+  padding: 0 0.15rem;
+}
