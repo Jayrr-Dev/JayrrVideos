@@ -173,6 +173,10 @@ export const saveCanvasAsScene = async (
     previewDataUrl: await buildScenePreviewDataUrl(sceneJson),
     folderId,
   });
-  setActiveSceneId(sceneId);
   return sceneId;
+};
+
+export const openBlankCanvas = (apiClient: ExcalidrawImperativeAPI) => {
+  setActiveSceneId(null);
+  apiClient.resetScene({ resetLoadingState: true });
 };

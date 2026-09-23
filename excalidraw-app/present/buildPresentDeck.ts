@@ -12,6 +12,8 @@ import type {
   NonDeletedExcalidrawElement,
 } from "@excalidraw/element/types";
 
+import { readJayrrFrame } from "../frame/jayrrFrame";
+
 export const JAYRR_PRESENT_KEY = "jayrrPresent";
 export const JAYRR_PRESENT_TAB = "jayrrPresent";
 export const JAYRR_PRESENT_REVEAL_MS = 320;
@@ -946,6 +948,9 @@ export const buildPresentDeck = (
 
   elements.forEach((element, index) => {
     if (isFrameLikeElement(element)) {
+      if (readJayrrFrame(element).hideFromPresent) {
+        return;
+      }
       frameEls.push({
         element,
         order: readPresentOrder(element),

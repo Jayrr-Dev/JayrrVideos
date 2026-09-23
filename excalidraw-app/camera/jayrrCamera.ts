@@ -8,6 +8,19 @@ export const JAYRR_DISPLAY_SURFACES = ["monitor", "window", "browser"] as const;
 
 export type JayrrDisplaySurface = typeof JAYRR_DISPLAY_SURFACES[number];
 
+export const JAYRR_DISPLAY_QUALITIES = [
+  "screen",
+  "1080",
+  "1440",
+  "2160",
+] as const;
+
+export type JayrrDisplayQuality = typeof JAYRR_DISPLAY_QUALITIES[number];
+
+export const JAYRR_DISPLAY_RATES = [30, 60] as const;
+
+export type JayrrDisplayRate = typeof JAYRR_DISPLAY_RATES[number];
+
 export type JayrrCamera =
   | {
       kind?: "camera";
@@ -19,6 +32,8 @@ export type JayrrCamera =
       nonce?: number;
       label?: string;
       surface?: JayrrDisplaySurface;
+      quality?: JayrrDisplayQuality;
+      frameRate?: JayrrDisplayRate;
     };
 
 export const jayrrDisplaySurfaceLabel = (surface?: JayrrDisplaySurface) => {
@@ -30,6 +45,26 @@ export const jayrrDisplaySurfaceLabel = (surface?: JayrrDisplaySurface) => {
   }
   return "Screen";
 };
+
+export const jayrrDisplayQualityLabel = (quality: JayrrDisplayQuality) => {
+  if (quality === "1080") {
+    return "1080p";
+  }
+  if (quality === "1440") {
+    return "1440p";
+  }
+  if (quality === "2160") {
+    return "4K";
+  }
+  return "Screen size";
+};
+
+const isDisplayQuality = (value: unknown): value is JayrrDisplayQuality =>
+  typeof value === "string" &&
+  (JAYRR_DISPLAY_QUALITIES as readonly string[]).includes(value);
+
+const isDisplayRate = (value: unknown): value is JayrrDisplayRate =>
+  value === 30 || value === 60;
 
 const isDisplaySurface = (value: unknown): value is JayrrDisplaySurface =>
   typeof value === "string" &&
@@ -63,6 +98,8 @@ export const readJayrrCamera = (
     nonce?: unknown;
     label?: unknown;
     surface?: unknown;
+    quality?: unknown;
+    frameRate?: unknown;
   };
   const label = typeof bag.label === "string" ? bag.label : undefined;
   if (bag.kind === "display") {
@@ -70,6 +107,8 @@ export const readJayrrCamera = (
       kind: "display",
       nonce: typeof bag.nonce === "number" ? bag.nonce : undefined,
       surface: isDisplaySurface(bag.surface) ? bag.surface : undefined,
+      quality: isDisplayQuality(bag.quality) ? bag.quality : undefined,
+      frameRate: isDisplayRate(bag.frameRate) ? bag.frameRate : undefined,
       label,
     };
   }
@@ -101,3 +140,21 @@ export const isJayrrDisplay = (
   camera: JayrrCamera | null,
 ): camera is Extract<JayrrCamera, { kind: "display" }> =>
   camera?.kind === "display";
+
+export const readDisplayQuality = (
+  camera: JayrrCamera | null,
+): JayrrDisplayQuality => {
+  if (!isJayrrDisplay(camera) || !camera.quality) {
+    return "screen";
+  }
+  return camera.quality;
+};
+
+export const readDisplayRate = (
+  camera: JayrrCamera | null,
+): JayrrDisplayRate => {
+  if (!isJayrrDisplay(camera) || !camera.frameRate) {
+    return 30;
+  }
+  return camera.frameRate;
+};

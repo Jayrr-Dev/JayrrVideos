@@ -30,6 +30,7 @@ import {
 
 import { Tooltip } from "../components/ui";
 import { convexSiteUrl } from "../convexClient";
+import "../components/ui/JayrrLibraryMenu.scss";
 
 import {
   applyCanvasTool,
@@ -219,8 +220,8 @@ export const JayrrAiChat = () => {
   if (!convexSiteUrl) {
     return (
       <div className="layer-ui__library jayrr-ai">
-        <div className="jayrr-ai__header">
-          <h2 className="jayrr-ai__title">Canvas AI</h2>
+        <div className="jayrr-library__header">
+          <h2 className="jayrr-library__title">Canvas AI</h2>
         </div>
         <div className="library-menu-items__no-items">
           <div className="library-menu-items__no-items__label">
@@ -385,26 +386,29 @@ const JayrrAiChatSession = () => {
 
   return (
     <div className="layer-ui__library jayrr-ai">
-      <div className="jayrr-ai__header">
-        <h2 className="jayrr-ai__title">
-          Canvas AI
+      <div className="jayrr-library__header">
+        <h2 className="jayrr-library__title">Canvas AI</h2>
+        <p className="visually-hidden">{AI_INFO}</p>
+        <div className="jayrr-library__header-actions">
           <Tooltip label={AI_INFO} long>
-            <span className="jayrr-ai-info" aria-label="About canvas AI">
+            <span
+              className="jayrr-library__icon-button"
+              aria-label="About canvas AI"
+            >
               {helpIcon}
             </span>
           </Tooltip>
-        </h2>
-        <p className="visually-hidden">{AI_INFO}</p>
-        <Button
-          type="button"
-          onSelect={clearChat}
-          disabled={messages.length === 0 && !error}
-          title="Clear chat"
-          aria-label="Clear chat"
-          className="jayrr-ai__icon-btn"
-        >
-          {EraserIcon}
-        </Button>
+          <button
+            type="button"
+            onClick={clearChat}
+            disabled={messages.length === 0 && !error}
+            title="Clear chat"
+            aria-label="Clear chat"
+            className="jayrr-library__icon-button"
+          >
+            {EraserIcon}
+          </button>
+        </div>
       </div>
 
       <div

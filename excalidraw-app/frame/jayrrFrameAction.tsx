@@ -222,11 +222,25 @@ const FramePanel = ({
     />
   );
 
+  const hideFromPresent = (
+    <label className="jayrr-frame-picker__check">
+      <input
+        type="checkbox"
+        checked={settings.hideFromPresent}
+        onChange={(event) =>
+          onChange({ hideFromPresent: event.target.checked })
+        }
+      />
+      Hide from Present
+    </label>
+  );
+
   if (compact) {
     return (
       <>
         <div className="compact-action-item">{aspect}</div>
         <div className="compact-action-item">{grid}</div>
+        <div className="compact-action-item">{hideFromPresent}</div>
       </>
     );
   }
@@ -237,6 +251,7 @@ const FramePanel = ({
       <div className="jayrr-frame-picker__fields">
         {aspect}
         {grid}
+        {hideFromPresent}
       </div>
     </fieldset>
   );
@@ -268,6 +283,7 @@ export const jayrrFrameAction: Action = {
       const next: JayrrFrameSettings = {
         aspect: patch.aspect ?? current.aspect,
         grid: patch.grid ?? current.grid,
+        hideFromPresent: patch.hideFromPresent ?? current.hideFromPresent,
       };
       const customData = writeJayrrFrame(element, next);
       const aspectChanged =

@@ -6,6 +6,7 @@ import {
 import { useExcalidrawContainer } from "@excalidraw/excalidraw/components/App";
 import { getDropdownMenuItemClassName } from "@excalidraw/excalidraw/components/dropdownMenu/common";
 import { getSelectedElements } from "@excalidraw/excalidraw/scene";
+import { useConvexAuth, useMutation } from "convex/react";
 import { Popover } from "radix-ui";
 import { useEffect, useState, type ReactNode } from "react";
 
@@ -15,18 +16,34 @@ import type {
 } from "@excalidraw/element/types";
 import type { Action } from "@excalidraw/excalidraw/actions/types";
 
+import { useAtomValue, useSetAtom } from "../app-jotai";
 import { IconButton, Island, RadioButton } from "../components/ui";
+import { api, isConvexLinked } from "../convexClient";
+import {
+  CAMERA_CUTOUT_FLAG,
+  CAMERA_CUTOUT_OPTIONS,
+  cameraCutoutAtom,
+  isCameraCutout,
+  type CameraCutout,
+} from "../domain/flags/cameraCutoutFlag";
 
 import {
+  JAYRR_DISPLAY_QUALITIES,
+  JAYRR_DISPLAY_RATES,
   JAYRR_DISPLAY_SOURCE,
   JAYRR_DISPLAY_SURFACES,
   canLinkJayrrCamera,
   isJayrrDisplay,
   jayrrCameraLabel,
+  jayrrDisplayQualityLabel,
   jayrrDisplaySurfaceLabel,
+  readDisplayQuality,
+  readDisplayRate,
   readJayrrCamera,
   writeJayrrCamera,
   type JayrrCamera,
+  type JayrrDisplayQuality,
+  type JayrrDisplayRate,
   type JayrrDisplaySurface,
 } from "./jayrrCamera";
 import { stopJayrrDisplay, unlockJayrrCameras } from "./jayrrCameraStreams";
@@ -208,10 +225,23 @@ const cameraFromValue = (
         (JAYRR_DISPLAY_SURFACES as readonly string[]).includes(bag.surface)
           ? (bag.surface as JayrrDisplaySurface)
           : undefined;
+      const quality =
+        "quality" in bag &&
+        typeof bag.quality === "string" &&
+        (JAYRR_DISPLAY_QUALITIES as readonly string[]).includes(bag.quality)
+          ? (bag.quality as JayrrDisplayQuality)
+          : undefined;
+      const frameRate =
+        bag.frameRate === 30 || bag.frameRate === 60
+          ? bag.frameRate
+          : undefined;
+      const nonce = typeof bag.nonce === "number" ? bag.nonce : Date.now();
       return {
         kind: "display",
-        nonce: Date.now(),
+        nonce,
         surface,
+        quality,
+        frameRate,
         label: jayrrCameraLabel(bag) ?? jayrrDisplaySurfaceLabel(surface),
       };
     }
@@ -274,29 +304,146 @@ const withBoundName = (
   });
 };
 
+const CutoutSetting = ({
+  value,
+  onChange,
+}: {
+  value: CameraCutout;
+  onChange: (next: CameraCutout) => void;
+}) => (
+  <label className="control-label jayrr-camera-picker__cutout">
+    Cutout
+    <select
+      className="dropdown-select"
+      value={value}
+      aria-label="Cutout"
+      onChange={(event) => {
+        const next = event.target.value;
+        if (isCameraCutout(next)) {
+          onChange(next);
+        }
+      }}
+    >
+      {CAMERA_CUTOUT_OPTIONS.map((option) => (
+        <option key={option.id} value={option.id}>
+          {option.label}
+        </option>
+      ))}
+    </select>
+  </label>
+);
+
+const LinkedCutoutSetting = () => {
+  const { isAuthenticated } = useConvexAuth();
+  const cutout = useAtomValue(cameraCutoutAtom);
+  const setCutout = useSetAtom(cameraCutoutAtom);
+  const setFlag = useMutation(api.featureFlags.set);
+
+  return (
+    <CutoutSetting
+      value={cutout}
+      onChange={(next) => {
+        setCutout(next);
+        if (isAuthenticated) {
+          void setFlag({ key: CAMERA_CUTOUT_FLAG, value: next });
+        }
+      }}
+    />
+  );
+};
+
+const LocalCutoutSetting = () => {
+  const cutout = useAtomValue(cameraCutoutAtom);
+  const setCutout = useSetAtom(cameraCutoutAtom);
+  return <CutoutSetting value={cutout} onChange={setCutout} />;
+};
+
+const DesktopTune = ({
+  quality,
+  frameRate,
+  onQuality,
+  onFrameRate,
+}: {
+  quality: JayrrDisplayQuality;
+  frameRate: JayrrDisplayRate;
+  onQuality: (next: JayrrDisplayQuality) => void;
+  onFrameRate: (next: JayrrDisplayRate) => void;
+}) => (
+  <div className="jayrr-camera-picker__tune">
+    <label className="control-label">
+      Size
+      <select
+        className="dropdown-select"
+        value={quality}
+        aria-label="Desktop size"
+        onChange={(event) => {
+          const next = event.target.value;
+          if ((JAYRR_DISPLAY_QUALITIES as readonly string[]).includes(next)) {
+            onQuality(next as JayrrDisplayQuality);
+          }
+        }}
+      >
+        {JAYRR_DISPLAY_QUALITIES.map((option) => (
+          <option key={option} value={option}>
+            {jayrrDisplayQualityLabel(option)}
+          </option>
+        ))}
+      </select>
+    </label>
+    <label className="control-label">
+      Frames
+      <select
+        className="dropdown-select"
+        value={frameRate}
+        aria-label="Desktop frames"
+        onChange={(event) => {
+          const next = Number(event.target.value);
+          if (next === 30 || next === 60) {
+            onFrameRate(next);
+          }
+        }}
+      >
+        {JAYRR_DISPLAY_RATES.map((option) => (
+          <option key={option} value={option}>
+            {option} fps
+          </option>
+        ))}
+      </select>
+    </label>
+  </div>
+);
+
 const StreamFields = ({
   compact,
   source,
   sourceLabel,
   displaySurface,
+  quality,
+  frameRate,
   devices,
   disabled,
   error,
   onCameraChange,
   onDesktopChange,
   onChangeSource,
+  onQuality,
+  onFrameRate,
   onUnlock,
 }: {
   compact: boolean;
   source: string;
   sourceLabel: string | null;
   displaySurface: JayrrDisplaySurface | undefined;
+  quality: JayrrDisplayQuality;
+  frameRate: JayrrDisplayRate;
   devices: MediaDeviceInfo[];
   disabled: boolean;
   error: string | null;
   onCameraChange: (next: string) => void;
   onDesktopChange: (surface: JayrrDisplaySurface | null) => void;
   onChangeSource: () => void;
+  onQuality: (next: JayrrDisplayQuality) => void;
+  onFrameRate: (next: JayrrDisplayRate) => void;
   onUnlock: () => void;
 }) => {
   const namedDevices = devices.filter((device) => device.deviceId);
@@ -425,6 +572,21 @@ const StreamFields = ({
   return (
     <>
       {choices}
+      {desktopOn ? (
+        <DesktopTune
+          quality={quality}
+          frameRate={frameRate}
+          onQuality={onQuality}
+          onFrameRate={onFrameRate}
+        />
+      ) : null}
+      {cameraOn ? (
+        isConvexLinked ? (
+          <LinkedCutoutSetting />
+        ) : (
+          <LocalCutoutSetting />
+        )
+      ) : null}
       {error ? (
         <span className="jayrr-camera-picker__error">{error}</span>
       ) : null}
@@ -436,11 +598,17 @@ const CameraPanel = ({
   source,
   sourceLabel,
   displaySurface,
+  displayNonce,
+  quality,
+  frameRate,
   onChange,
 }: {
   source: string;
   sourceLabel: string | null;
   displaySurface: JayrrDisplaySurface | undefined;
+  displayNonce: number | undefined;
+  quality: JayrrDisplayQuality;
+  frameRate: JayrrDisplayRate;
   onChange: (next: unknown) => void;
 }) => {
   const mode = useStylesPanelMode();
@@ -487,6 +655,8 @@ const CameraPanel = ({
       onChange({
         kind: "display",
         surface,
+        quality,
+        frameRate,
         label: jayrrDisplaySurfaceLabel(surface),
       });
       return;
@@ -498,7 +668,23 @@ const CameraPanel = ({
     onChange({
       kind: "display",
       surface: displaySurface ?? "monitor",
+      quality,
+      frameRate,
       label: jayrrDisplaySurfaceLabel(displaySurface),
+    });
+  };
+
+  const keepDisplay = (
+    nextQuality: JayrrDisplayQuality,
+    nextRate: JayrrDisplayRate,
+  ) => {
+    onChange({
+      kind: "display",
+      surface: displaySurface ?? "monitor",
+      nonce: displayNonce ?? 0,
+      quality: nextQuality,
+      frameRate: nextRate,
+      label: sourceLabel || jayrrDisplaySurfaceLabel(displaySurface),
     });
   };
 
@@ -508,12 +694,20 @@ const CameraPanel = ({
       source={source}
       sourceLabel={sourceLabel}
       displaySurface={displaySurface}
+      quality={quality}
+      frameRate={frameRate}
       devices={devices}
       disabled={loading && devices.length === 0}
       error={error}
       onCameraChange={pickCamera}
       onDesktopChange={pickDesktop}
       onChangeSource={changeSource}
+      onQuality={(next) => {
+        keepDisplay(next, frameRate);
+      }}
+      onFrameRate={(next) => {
+        keepDisplay(quality, next);
+      }}
       onUnlock={() => {
         void unlock();
       }}
@@ -575,6 +769,9 @@ export const jayrrCameraAction: Action = {
         source={sourceValue(camera)}
         sourceLabel={jayrrCameraLabel(camera)}
         displaySurface={isJayrrDisplay(camera) ? camera.surface : undefined}
+        displayNonce={isJayrrDisplay(camera) ? camera.nonce : undefined}
+        quality={readDisplayQuality(camera)}
+        frameRate={readDisplayRate(camera)}
         onChange={(next) => updateData(next)}
       />
     );

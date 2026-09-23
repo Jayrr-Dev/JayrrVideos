@@ -42,20 +42,28 @@ const applyPersonMask = (
   context: CanvasRenderingContext2D,
   width: number,
   height: number,
-  mask: { width: number; height: number; getAsUint8Array: () => Uint8Array },
+  mask: {
+    width: number;
+    height: number;
+    getAsFloat32Array: () => Float32Array;
+  },
 ) => {
-  const bytes = mask.getAsUint8Array();
+  const weights = mask.getAsFloat32Array();
   const frame = context.getImageData(0, 0, width, height);
   const pixels = frame.data;
   const maskW = mask.width;
   const maskH = mask.height;
   for (let y = 0; y < height; y += 1) {
     const my = Math.min(maskH - 1, Math.floor((y * maskH) / height));
+    const row = my * maskW;
     for (let x = 0; x < width; x += 1) {
       const mx = Math.min(maskW - 1, Math.floor((x * maskW) / width));
-      const person = bytes[my * maskW + mx] ?? 0;
-      const alpha = person > 0 ? 255 : 0;
-      pixels[(y * width + x) * 4 + 3] = alpha;
+      const weight = weights[row + mx] ?? 0;
+      const unit = weight > 1 ? weight / 255 : weight;
+      pixels[(y * width + x) * 4 + 3] = Math.max(
+        0,
+        Math.min(255, Math.round(unit * 255)),
+      );
     }
   }
   context.putImageData(frame, 0, 0);
@@ -72,12 +80,12 @@ const punchChroma = (
     const r = pixels[i] ?? 0;
     const g = pixels[i + 1] ?? 0;
     const b = pixels[i + 2] ?? 0;
-    const greenLead = g - Math.max(r, b);
-    if (greenLead > 70 && g > 140) {
-      pixels[i + 3] = 0;
-    } else if (greenLead > 40 && g > 110) {
-      pixels[i + 3] = Math.min(pixels[i + 3] ?? 0, 90);
-      pixels[i + 1] = Math.min(g, Math.max(r, b));
+    const rg = Math.max(r, g);
+    const blueLead = b - rg;
+    if (blueLead > 30) {
+      const fade = Math.min(1, (blueLead - 30) / 66);
+      pixels[i + 2] = Math.round(b * (1 - fade) + rg * fade);
+      pixels[i + 3] = Math.round((pixels[i + 3] ?? 255) * (1 - fade));
     }
   }
   context.putImageData(frame, 0, 0);
@@ -94,14 +102,28 @@ void main() {
 const CHROMA_FRAG = `#version 300 es
 precision highp float;
 uniform sampler2D u_image;
+uniform sampler2D u_prev;
+uniform float u_hasPrev;
 in vec2 v_uv;
 out vec4 outColor;
+
+float blueLead(vec3 c) {
+  return c.b - max(c.r, c.g);
+}
+
 void main() {
   vec4 c = texture(u_image, v_uv);
-  float key = c.g - max(c.r, c.b);
-  float alpha = 1.0 - smoothstep(0.12, 0.42, key);
-  float spill = clamp(key * 2.4, 0.0, 1.0);
-  vec3 rgb = vec3(c.r, mix(c.g, (c.r + c.b) * 0.5, spill), c.b);
+  float lead = blueLead(c.rgb);
+  float spill = smoothstep(0.12, 0.38, lead);
+  float alpha = 1.0 - spill;
+  float keptB = mix(c.b, min(c.b, max(c.r, c.g)), spill);
+  vec3 rgb = vec3(c.r, c.g, keptB);
+  if (u_hasPrev > 0.5) {
+    float prevA = texture(u_prev, vec2(v_uv.x, 1.0 - v_uv.y)).a;
+    float mid = 1.0 - abs(alpha * 2.0 - 1.0);
+    float rate = mix(0.85, 0.4, mid);
+    alpha = mix(prevA, alpha, rate);
+  }
   outColor = vec4(rgb * alpha, alpha);
 }`;
 
@@ -159,7 +181,8 @@ const createChromaKey = (): ChromaKey | null => {
   }
   const buffer = gl.createBuffer();
   const texture = gl.createTexture();
-  if (!buffer || !texture) {
+  const prev = gl.createTexture();
+  if (!buffer || !texture || !prev) {
     return null;
   }
   gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
@@ -173,6 +196,25 @@ const createChromaKey = (): ChromaKey | null => {
   gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
   gl.useProgram(program);
   gl.uniform1i(gl.getUniformLocation(program, "u_image"), 0);
+  gl.uniform1i(gl.getUniformLocation(program, "u_prev"), 1);
+  const hasPrevLoc = gl.getUniformLocation(program, "u_hasPrev");
+  let hasPrev = false;
+  gl.bindTexture(gl.TEXTURE_2D, prev);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texImage2D(
+    gl.TEXTURE_2D,
+    0,
+    gl.RGBA,
+    1,
+    1,
+    0,
+    gl.RGBA,
+    gl.UNSIGNED_BYTE,
+    new Uint8Array([0, 0, 0, 0]),
+  );
   gl.bindTexture(gl.TEXTURE_2D, texture);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
@@ -189,12 +231,16 @@ const createChromaKey = (): ChromaKey | null => {
       if (canvas.width !== width || canvas.height !== height) {
         canvas.width = width;
         canvas.height = height;
+        hasPrev = false;
       }
       gl.viewport(0, 0, width, height);
       gl.useProgram(program);
       gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
       gl.enableVertexAttribArray(loc);
       gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+      gl.uniform1f(hasPrevLoc, hasPrev ? 1 : 0);
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, prev);
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, texture);
       gl.texImage2D(
@@ -206,9 +252,13 @@ const createChromaKey = (): ChromaKey | null => {
         source,
       );
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      gl.bindTexture(gl.TEXTURE_2D, prev);
+      gl.copyTexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 0, 0, width, height, 0);
+      hasPrev = true;
       return true;
     },
     destroy: () => {
+      gl.deleteTexture(prev);
       gl.deleteTexture(texture);
       gl.deleteBuffer(buffer);
       gl.deleteProgram(program);
@@ -268,8 +318,8 @@ const startMediaPipe = async (
         delegate: "GPU",
       },
       runningMode: "VIDEO",
-      outputCategoryMask: true,
-      outputConfidenceMasks: false,
+      outputCategoryMask: false,
+      outputConfidenceMasks: true,
     });
   } catch {
     segmenter = await visionMod.ImageSegmenter.createFromOptions(fileset, {
@@ -278,8 +328,8 @@ const startMediaPipe = async (
         delegate: "CPU",
       },
       runningMode: "VIDEO",
-      outputCategoryMask: true,
-      outputConfidenceMasks: false,
+      outputCategoryMask: false,
+      outputConfidenceMasks: true,
     });
   }
   if (cancelled()) {
@@ -312,7 +362,9 @@ const startMediaPipe = async (
         if (cancelled()) {
           return;
         }
-        const mask = result.categoryMask;
+        // Class 0 is the person. The other class is the room, which was
+        // being kept and turning the person into a white hole.
+        const mask = result.confidenceMasks?.[0];
         if (!mask) {
           return;
         }
@@ -354,9 +406,10 @@ const startSegmo = async (
   const height = video.videoHeight || 360;
   const processor = new SegmentationProcessor({
     backgroundMode: "color",
-    backgroundColor: "#00FF00",
+    backgroundColor: "#0033CC",
     quality: "high",
-    adaptive: true,
+    adaptive: false,
+    modelFps: 30,
     useWorker: true,
     outputFps: 30,
   });

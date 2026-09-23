@@ -47,12 +47,19 @@ export const JayrrCalledObjectsPanel = () => {
     <div className="layer-ui__library jayrr-library jayrr-called-panel">
       <div className="jayrr-library__header">
         <div className="jayrr-library__title">Widgets</div>
-        <Tooltip
-          label="Live widgets you drop on the canvas. Drag one on, or click to place."
-          long
-        >
-          <span className="jayrr-called-panel__info">{helpIcon}</span>
-        </Tooltip>
+        <div className="jayrr-library__header-actions">
+          <Tooltip
+            label="Live widgets you drop on the canvas. Drag one on, or click to place."
+            long
+          >
+            <span
+              className="jayrr-library__icon-button"
+              aria-label="About widgets"
+            >
+              {helpIcon}
+            </span>
+          </Tooltip>
+        </div>
         <span className="visually-hidden">
           Widgets you place on the canvas.
         </span>

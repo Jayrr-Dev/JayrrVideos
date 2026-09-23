@@ -1,5 +1,21 @@
 import { mixMicIntoStream } from "./mixMicIntoStream";
 
+import type { JayrrDisplayQuality, JayrrDisplayRate } from "./jayrrCamera";
+
+export type DisplayTune = {
+  quality?: JayrrDisplayQuality;
+  frameRate?: JayrrDisplayRate;
+};
+
+const QUALITY_SIZE: Record<
+  Exclude<JayrrDisplayQuality, "screen">,
+  { width: number; height: number }
+> = {
+  "1080": { width: 1920, height: 1080 },
+  "1440": { width: 2560, height: 1440 },
+  "2160": { width: 3840, height: 2160 },
+};
+
 const streamListeners = new Set<() => void>();
 const disposers = new WeakMap<MediaStream, () => void>();
 
@@ -43,6 +59,85 @@ const withMic = async (display: MediaStream): Promise<MediaStream> => {
   }
   mixed.stop();
   return display;
+};
+
+const limitRate = (wanted: number, max: number | undefined) => {
+  if (!max || max <= 0) {
+    return wanted;
+  }
+  return Math.min(wanted, max);
+};
+
+export const displayWantedSize = (
+  tune: DisplayTune | undefined,
+  view?: Window,
+  caps?: MediaTrackCapabilities,
+) => {
+  const quality = tune?.quality ?? "screen";
+  const frameRate = limitRate(tune?.frameRate ?? 30, caps?.frameRate?.max);
+  if (quality !== "screen") {
+    const preset = QUALITY_SIZE[quality];
+    return { width: preset.width, height: preset.height, frameRate };
+  }
+  const win = view ?? globalThis.window;
+  const dpr = win?.devicePixelRatio || 1;
+  const physicalW = win ? Math.round(win.screen.width * dpr) : 0;
+  const physicalH = win ? Math.round(win.screen.height * dpr) : 0;
+  const capW = caps?.width?.max ?? 0;
+  const capH = caps?.height?.max ?? 0;
+  return {
+    width: Math.max(physicalW, capW, 1920),
+    height: Math.max(physicalH, capH, 1080),
+    frameRate,
+  };
+};
+
+const withResize = (
+  resizeMode: "none" | "crop-and-scale",
+  video: MediaTrackConstraints,
+): MediaTrackConstraints => ({ ...video, resizeMode } as MediaTrackConstraints);
+
+/**
+ * Screen capture cannot grow past the real surface, and it must keep that
+ * surface's shape. `resizeMode: "none"` keeps every device pixel. A width
+ * cap downscales without forcing a 16:9 box the window may not have.
+ * https://www.w3.org/TR/screen-capture/#downscaling-and-frame-decimation
+ */
+const displayVideoConstraints = (
+  tune: DisplayTune | undefined,
+  caps?: MediaTrackCapabilities,
+): MediaTrackConstraints => {
+  const quality = tune?.quality ?? "screen";
+  const frameRate = limitRate(tune?.frameRate ?? 30, caps?.frameRate?.max);
+  const rate = { ideal: frameRate, max: frameRate };
+  if (quality === "screen") {
+    return withResize("none", { frameRate: rate });
+  }
+  const preset = QUALITY_SIZE[quality];
+  return withResize("crop-and-scale", {
+    width: { ideal: preset.width, max: preset.width },
+    frameRate: rate,
+  });
+};
+
+const sharpenDisplayTrack = async (stream: MediaStream, tune?: DisplayTune) => {
+  const track = stream.getVideoTracks()[0];
+  if (!track) {
+    return;
+  }
+  track.contentHint = "detail";
+  const video = displayVideoConstraints(tune, track.getCapabilities?.());
+  const size: MediaTrackConstraints = { ...video };
+  delete size.frameRate;
+  const attempts = [video, size];
+  for (const next of attempts) {
+    try {
+      await track.applyConstraints(next);
+      return;
+    } catch {
+      // The screen rejected this cap. Try without the frame rate.
+    }
+  }
 };
 
 const acquire = async (
@@ -146,6 +241,7 @@ type DisplayMediaOptions = DisplayMediaStreamOptions & {
 export const acquireJayrrDisplay = (
   elementId: string,
   surface?: DisplaySurface,
+  tune?: DisplayTune,
 ): Promise<MediaStream> => {
   if (!navigator.mediaDevices?.getDisplayMedia) {
     return Promise.reject(
@@ -153,15 +249,24 @@ export const acquireJayrrDisplay = (
     );
   }
   return acquire(displays, displayPending, elementId, () => {
+    const video = displayVideoConstraints(tune);
+    if (surface) {
+      video.displaySurface = surface;
+    }
     const options: DisplayMediaOptions = {
       audio: true,
-      video: surface ? { displaySurface: surface } : true,
+      video,
       surfaceSwitching: "include",
       systemAudio: "include",
       monitorTypeSurfaces: "include",
       selfBrowserSurface: "exclude",
     };
-    return navigator.mediaDevices.getDisplayMedia(options).then(withMic);
+    return navigator.mediaDevices
+      .getDisplayMedia(options)
+      .then(async (stream) => {
+        await sharpenDisplayTrack(stream, tune);
+        return withMic(stream);
+      });
   });
 };
 
@@ -205,6 +310,17 @@ export const releaseJayrrTabAudio = (
 
 export const peekJayrrDisplayStream = (elementId: string): MediaStream | null =>
   displays.get(elementId)?.stream ?? null;
+
+export const tuneJayrrDisplay = async (
+  elementId: string,
+  tune: DisplayTune,
+) => {
+  const stream = displays.get(elementId)?.stream;
+  if (!stream) {
+    return;
+  }
+  await sharpenDisplayTrack(stream, tune);
+};
 
 export const listJayrrDisplayStreams = (): ReadonlyArray<{
   id: string;

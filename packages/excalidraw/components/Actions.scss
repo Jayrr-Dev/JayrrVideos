@@ -110,6 +110,11 @@
 
     --default-button-size: 2rem;
 
+    .dropdown-select {
+      width: 100%;
+      min-width: 7rem;
+    }
+
     .compact-action-button {
       width: var(--mobile-action-button-size);
       height: var(--mobile-action-button-size);

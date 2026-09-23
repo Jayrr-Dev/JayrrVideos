@@ -925,10 +925,10 @@ export const JayrrEditorPanel = () => {
             {projectName}
           </button>
         )}
-        <div className="jayrr-editor-panel__header-actions">
+        <div className="jayrr-library__header-actions">
           <button
             type="button"
-            className="jayrr-editor-panel__export"
+            className="jayrr-library__icon-button jayrr-editor-panel__export"
             disabled={!canQuery || clips.length === 0 || saveBusy || exportBusy}
             aria-label="Export video"
             title="Export video"
@@ -938,7 +938,7 @@ export const JayrrEditorPanel = () => {
           </button>
           <button
             type="button"
-            className="jayrr-editor-panel__save"
+            className="jayrr-library__icon-button jayrr-editor-panel__save"
             disabled={!canQuery || clips.length === 0 || saveBusy || exportBusy}
             aria-label="Save project"
             title="Save project"
@@ -1469,7 +1469,7 @@ const EditorSettingsPopover = ({
       <Popover.Trigger asChild>
         <button
           type="button"
-          className="jayrr-editor-panel__settings"
+          className="jayrr-library__icon-button"
           aria-label="Video editor settings"
           aria-expanded={open}
         >

@@ -1,21 +1,25 @@
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { Component, useEffect, useRef, useState } from "react";
 
-import { Button, useExcalidrawAPI } from "@excalidraw/excalidraw";
+import { useExcalidrawAPI } from "@excalidraw/excalidraw";
 import DropdownMenu from "@excalidraw/excalidraw/components/dropdownMenu/DropdownMenu";
 import {
+  DeviceFloppyIcon,
   DotsHorizontalIcon,
+  FilePlusIcon,
+  FolderPlusIcon,
   TrashIcon,
   chevronLeftIcon,
 } from "@excalidraw/excalidraw/components/icons";
 
-import { useAtom } from "../../app-jotai";
+import { appJotaiStore, useAtom } from "../../app-jotai";
 import { api, convexClient, isConvexLinked } from "../../convexClient";
 import {
   activeSceneIdAtom,
   applySceneJsonToCanvas,
   buildScenePreviewDataUrl,
   nextSceneName,
+  openBlankCanvas,
   openSceneFolderIdAtom,
   persistOpenSceneFolderId,
   serializeCurrentCanvas,
@@ -25,11 +29,32 @@ import {
 import { JayrrConfirmDialog } from "./JayrrConfirmDialog";
 import "./JayrrLibraryMenu.scss";
 
-import type { ReactNode, RefObject } from "react";
+import type { DragEvent, ReactNode, RefObject } from "react";
 
 import type { Id } from "../../../convex/_generated/dataModel";
 
 const SCENE_AUTOSAVE_DELAY_MS = 1000;
+const JAYRR_SCENE_DRAG = "application/x-jayrr-scene";
+
+let draggingSceneId: Id<"scenes"> | null = null;
+
+const readDraggedSceneId = (dataTransfer: DataTransfer) => {
+  const fromTransfer = dataTransfer.getData(JAYRR_SCENE_DRAG);
+  if (fromTransfer) {
+    return fromTransfer as Id<"scenes">;
+  }
+  return draggingSceneId;
+};
+
+const acceptSceneDrop = (event: DragEvent) => {
+  const types = Array.from(event.dataTransfer.types);
+  if (!draggingSceneId && !types.includes(JAYRR_SCENE_DRAG)) {
+    return false;
+  }
+  event.preventDefault();
+  event.dataTransfer.dropEffect = "move";
+  return true;
+};
 
 type MenuTarget =
   | { kind: "scene"; id: Id<"scenes"> }
@@ -139,10 +164,8 @@ const JayrrSceneMenuConnected = () => {
   const renameFolder = useMutation(api.sceneFolders.rename);
   const removeFolder = useMutation(api.sceneFolders.remove);
 
-  const activeSceneIdRef = useRef(activeSceneId);
   const excalidrawAPIRef = useRef(excalidrawAPI);
   const updateSceneRef = useRef(updateScene);
-  activeSceneIdRef.current = activeSceneId;
   excalidrawAPIRef.current = excalidrawAPI;
   updateSceneRef.current = updateScene;
 
@@ -251,7 +274,7 @@ const JayrrSceneMenuConnected = () => {
       if (skipAutosaveRef.current) {
         return;
       }
-      const sceneId = activeSceneIdRef.current;
+      const sceneId = appJotaiStore.get(activeSceneIdAtom);
       if (!sceneId) {
         return;
       }
@@ -269,7 +292,7 @@ const JayrrSceneMenuConnected = () => {
 
   useEffect(() => {
     const flush = () => {
-      const sceneId = activeSceneIdRef.current;
+      const sceneId = appJotaiStore.get(activeSceneIdAtom);
       if (!sceneId || skipAutosaveRef.current) {
         return;
       }
@@ -320,30 +343,76 @@ const JayrrSceneMenuConnected = () => {
     }
   };
 
-  const onSaveCanvas = async () => {
+  const persistCurrentCanvas = async () => {
+    if (activeSceneId) {
+      await enqueuePersist(activeSceneId);
+      return activeSceneId;
+    }
+    if (!excalidrawAPI) {
+      return null;
+    }
+    if (!excalidrawAPI.getSceneElements().length) {
+      return null;
+    }
+    const name = nextSceneName(scenes?.map((scene) => scene.name) ?? []);
+    const sceneJson = serializeCurrentCanvas(excalidrawAPI);
+    const sceneId = await createScene({
+      name,
+      sceneJson,
+      previewDataUrl: await buildScenePreviewDataUrl(sceneJson),
+      folderId: openFolderId ?? undefined,
+    });
+    rememberSaved(sceneId, sceneJson);
+    setActiveSceneId(sceneId);
+    setDraftName(name);
+    setRenaming({ kind: "scene", id: sceneId });
+    return sceneId;
+  };
+
+  const onSaveScene = async () => {
     if (!excalidrawAPI || busy) {
       return;
     }
     setBusy(true);
     clearPendingAutosave();
+    skipAutosaveRef.current = true;
     try {
-      const sceneJson = serializeCurrentCanvas(excalidrawAPI);
-      const sceneId = await createScene({
-        name: nextSceneName(scenes?.map((scene) => scene.name) ?? []),
-        sceneJson,
-        previewDataUrl: await buildScenePreviewDataUrl(sceneJson),
-        folderId: openFolderId ?? undefined,
-      });
-      rememberSaved(sceneId, sceneJson);
-      setDraftName(
-        scenes?.find((scene) => scene._id === sceneId)?.name ?? "Scene",
-      );
-      setRenaming({ kind: "scene", id: sceneId });
-      setActiveSceneId(sceneId);
-      toast("Canvas saved as a scene");
+      const sceneId = await persistCurrentCanvas();
+      if (!sceneId) {
+        toast("Nothing to save");
+        return;
+      }
+      toast("Scene saved");
     } catch (error) {
       toast(error instanceof Error ? error.message : "Could not save scene");
     } finally {
+      skipAutosaveRef.current = false;
+      setBusy(false);
+    }
+  };
+
+  const onNewScene = async () => {
+    if (!excalidrawAPI || busy) {
+      return;
+    }
+    setBusy(true);
+    clearPendingAutosave();
+    skipAutosaveRef.current = true;
+    try {
+      if (activeSceneId || excalidrawAPI.getSceneElements().length > 0) {
+        await persistCurrentCanvas();
+      }
+      sceneBoundRef.current = false;
+      lastSavedIdRef.current = null;
+      lastSavedJsonRef.current = null;
+      openBlankCanvas(excalidrawAPI);
+      toast("New scene");
+    } catch (error) {
+      toast(
+        error instanceof Error ? error.message : "Could not start a new scene",
+      );
+    } finally {
+      skipAutosaveRef.current = false;
       setBusy(false);
     }
   };
@@ -505,8 +574,33 @@ const JayrrSceneMenuConnected = () => {
           <button
             type="button"
             className="jayrr-library__icon-button"
-            aria-label="Back to scenes"
+            aria-label="Back to scenes. Drop a scene here to move it out of this folder."
             onClick={() => setOpenFolderIdAtom(null)}
+            onDragOver={(event) => {
+              if (busy) {
+                return;
+              }
+              acceptSceneDrop(event);
+              event.currentTarget.classList.add(
+                "jayrr-library__icon-button--drop",
+              );
+            }}
+            onDragLeave={(event) => {
+              event.currentTarget.classList.remove(
+                "jayrr-library__icon-button--drop",
+              );
+            }}
+            onDrop={(event) => {
+              event.preventDefault();
+              event.currentTarget.classList.remove(
+                "jayrr-library__icon-button--drop",
+              );
+              const sceneId = readDraggedSceneId(event.dataTransfer);
+              if (!sceneId || busy) {
+                return;
+              }
+              void onMoveScene(sceneId, null);
+            }}
           >
             {chevronLeftIcon}
           </button>
@@ -540,6 +634,18 @@ const JayrrSceneMenuConnected = () => {
               {openFolder.name}
             </button>
           )}
+          <SceneHeaderActions
+            busy={busy}
+            onCreateFolder={() => {
+              void onCreateFolder();
+            }}
+            onNewScene={() => {
+              void onNewScene();
+            }}
+            onSaveScene={() => {
+              void onSaveScene();
+            }}
+          />
         </div>
         <div className="jayrr-library__body">
           {scenes.length === 0 ? (
@@ -572,17 +678,6 @@ const JayrrSceneMenuConnected = () => {
             />
           )}
         </div>
-        <div className="jayrr-library__footer">
-          <Button
-            className="jayrr-library__create"
-            disabled={busy}
-            onSelect={() => {
-              void onSaveCanvas();
-            }}
-          >
-            Save canvas as scene
-          </Button>
-        </div>
         {pendingDelete ? (
           <DeleteConfirm
             pendingDelete={pendingDelete}
@@ -607,6 +702,18 @@ const JayrrSceneMenuConnected = () => {
     <div className="layer-ui__library jayrr-library">
       <div className="jayrr-library__header">
         <div className="jayrr-library__title">Scenes</div>
+        <SceneHeaderActions
+          busy={busy}
+          onCreateFolder={() => {
+            void onCreateFolder();
+          }}
+          onNewScene={() => {
+            void onNewScene();
+          }}
+          onSaveScene={() => {
+            void onSaveScene();
+          }}
+        />
       </div>
       <div className="jayrr-library__body">
         {!hasContent ? (
@@ -617,98 +724,28 @@ const JayrrSceneMenuConnected = () => {
             <div className="library-menu-items__no-items__hint">
               Create a folder, or save the current canvas.
             </div>
-            <Button
-              className="jayrr-library__create"
-              disabled={busy}
-              onSelect={() => {
-                void onCreateFolder();
-              }}
-            >
-              Create folder
-            </Button>
           </div>
         ) : (
           <ul className="jayrr-scene-grid">
             {folders.map((folder) => (
-              <li key={folder._id} className="jayrr-scene-card">
-                {isRenaming({ kind: "folder", id: folder._id }) ? (
-                  <input
-                    ref={renameInputRef}
-                    className="jayrr-scene-card__name-input"
-                    value={draftName}
-                    onChange={(event) => setDraftName(event.target.value)}
-                    onBlur={() => {
-                      void commitRename();
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        event.preventDefault();
-                        void commitRename();
-                      }
-                      if (event.key === "Escape") {
-                        setRenaming(null);
-                      }
-                    }}
-                  />
-                ) : (
-                  <span className="jayrr-scene-card__name">{folder.name}</span>
-                )}
-                <button
-                  type="button"
-                  className="jayrr-scene-card__preview"
-                  aria-label={`Open ${folder.name}`}
-                  disabled={busy}
-                  onClick={() => openFolderById(folder._id)}
-                >
-                  <FolderCardThumbs
-                    folderId={folder._id}
-                    sceneCount={folder.sceneCount}
-                  />
-                </button>
-                <DropdownMenu
-                  open={isMenuOpen({ kind: "folder", id: folder._id })}
-                >
-                  <DropdownMenu.Trigger
-                    className="jayrr-scene-card__menu"
-                    aria-label={`${folder.name} menu`}
-                    onToggle={() => {
-                      setOpenMenu((current) =>
-                        current?.kind === "folder" && current.id === folder._id
-                          ? null
-                          : { kind: "folder", id: folder._id },
-                      );
-                    }}
-                  >
-                    {DotsHorizontalIcon}
-                  </DropdownMenu.Trigger>
-                  <DropdownMenu.Content
-                    onClickOutside={() => setOpenMenu(null)}
-                    onSelect={() => setOpenMenu(null)}
-                  >
-                    <DropdownMenu.Item
-                      icon={EditGlyph}
-                      onSelect={() => {
-                        setDraftName(folder.name);
-                        setRenaming({ kind: "folder", id: folder._id });
-                      }}
-                    >
-                      Rename
-                    </DropdownMenu.Item>
-                    <DropdownMenu.Item
-                      icon={TrashIcon}
-                      onSelect={() => {
-                        setPendingDelete({
-                          kind: "folder",
-                          id: folder._id,
-                          name: folder.name,
-                        });
-                      }}
-                    >
-                      Delete
-                    </DropdownMenu.Item>
-                  </DropdownMenu.Content>
-                </DropdownMenu>
-              </li>
+              <FolderCard
+                key={folder._id}
+                folder={folder}
+                busy={busy}
+                renameInputRef={renameInputRef}
+                draftName={draftName}
+                setDraftName={setDraftName}
+                renaming={isRenaming({ kind: "folder", id: folder._id })}
+                menuOpen={isMenuOpen({ kind: "folder", id: folder._id })}
+                setOpenMenu={setOpenMenu}
+                setRenaming={setRenaming}
+                setPendingDelete={setPendingDelete}
+                commitRename={commitRename}
+                onOpen={() => openFolderById(folder._id)}
+                onDropScene={(sceneId) => {
+                  void onMoveScene(sceneId, folder._id);
+                }}
+              />
             ))}
             {scenes.map((scene) => (
               <SceneCard
@@ -735,33 +772,12 @@ const JayrrSceneMenuConnected = () => {
                 onMove={(folderId) => {
                   void onMoveScene(scene._id, folderId);
                 }}
+                onDragScene={() => setOpenMenu(null)}
               />
             ))}
           </ul>
         )}
       </div>
-      {hasContent && (
-        <div className="jayrr-library__footer jayrr-library__footer--stack">
-          <Button
-            className="jayrr-library__create"
-            disabled={busy}
-            onSelect={() => {
-              void onCreateFolder();
-            }}
-          >
-            Create folder
-          </Button>
-          <Button
-            className="jayrr-library__create"
-            disabled={busy}
-            onSelect={() => {
-              void onSaveCanvas();
-            }}
-          >
-            Save canvas as scene
-          </Button>
-        </div>
-      )}
       {pendingDelete ? (
         <DeleteConfirm
           pendingDelete={pendingDelete}
@@ -780,6 +796,53 @@ const JayrrSceneMenuConnected = () => {
   );
 };
 
+const SceneHeaderActions = ({
+  busy,
+  onCreateFolder,
+  onNewScene,
+  onSaveScene,
+}: {
+  busy: boolean;
+  onCreateFolder: () => void;
+  onNewScene: () => void;
+  onSaveScene: () => void;
+}) => {
+  return (
+    <div className="jayrr-library__header-actions">
+      <button
+        type="button"
+        className="jayrr-library__icon-button"
+        aria-label="Create folder"
+        title="Create folder"
+        disabled={busy}
+        onClick={onCreateFolder}
+      >
+        {FolderPlusIcon}
+      </button>
+      <button
+        type="button"
+        className="jayrr-library__icon-button"
+        aria-label="New scene"
+        title="New scene"
+        disabled={busy}
+        onClick={onNewScene}
+      >
+        {FilePlusIcon}
+      </button>
+      <button
+        type="button"
+        className="jayrr-library__icon-button"
+        aria-label="Save scene"
+        title="Save scene"
+        disabled={busy}
+        onClick={onSaveScene}
+      >
+        {DeviceFloppyIcon}
+      </button>
+    </div>
+  );
+};
+
 type SceneRow = {
   _id: Id<"scenes">;
   folderId: Id<"sceneFolders"> | null;
@@ -790,6 +853,7 @@ type SceneRow = {
 type FolderRow = {
   _id: Id<"sceneFolders">;
   name: string;
+  sceneCount: number;
 };
 
 const SceneGrid = ({
@@ -850,6 +914,7 @@ const SceneGrid = ({
         onLoad={() => onLoadScene(scene._id)}
         onUpdate={() => onUpdateScene(scene._id)}
         onMove={(folderId) => onMoveScene(scene._id, folderId)}
+        onDragScene={() => setOpenMenu(null)}
       />
     ))}
   </ul>
@@ -872,6 +937,7 @@ const SceneCard = ({
   onLoad,
   onUpdate,
   onMove,
+  onDragScene,
 }: {
   scene: SceneRow;
   active: boolean;
@@ -889,6 +955,7 @@ const SceneCard = ({
   onLoad: () => void;
   onUpdate: () => void;
   onMove: (folderId: Id<"sceneFolders"> | null) => void;
+  onDragScene: () => void;
 }) => {
   const otherFolders = folders.filter(
     (folder) => folder._id !== scene.folderId,
@@ -929,7 +996,9 @@ const SceneCard = ({
         previewDataUrl={scene.previewDataUrl}
         sceneId={scene._id}
         busy={busy}
+        draggable={!renaming && !busy}
         onLoad={onLoad}
+        onDragScene={onDragScene}
       />
       <DropdownMenu open={menuOpen}>
         <DropdownMenu.Trigger
@@ -982,6 +1051,151 @@ const SceneCard = ({
                 kind: "scene",
                 id: scene._id,
                 name: scene.name,
+              });
+            }}
+          >
+            Delete
+          </DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu>
+    </li>
+  );
+};
+
+const FolderCard = ({
+  folder,
+  busy,
+  renameInputRef,
+  draftName,
+  setDraftName,
+  renaming,
+  menuOpen,
+  setOpenMenu,
+  setRenaming,
+  setPendingDelete,
+  commitRename,
+  onOpen,
+  onDropScene,
+}: {
+  folder: FolderRow;
+  busy: boolean;
+  renameInputRef: RefObject<HTMLInputElement | null>;
+  draftName: string;
+  setDraftName: (value: string) => void;
+  renaming: boolean;
+  menuOpen: boolean;
+  setOpenMenu: (value: MenuTarget | null) => void;
+  setRenaming: (value: MenuTarget | null) => void;
+  setPendingDelete: (value: PendingDelete | null) => void;
+  commitRename: () => void;
+  onOpen: () => void;
+  onDropScene: (sceneId: Id<"scenes">) => void;
+}) => {
+  const [isOver, setIsOver] = useState(false);
+  const skipClickRef = useRef(false);
+
+  return (
+    <li
+      className={
+        isOver ? "jayrr-scene-card jayrr-scene-card--drop" : "jayrr-scene-card"
+      }
+      onDragOver={(event) => {
+        if (busy) {
+          return;
+        }
+        if (!acceptSceneDrop(event)) {
+          return;
+        }
+        setIsOver(true);
+      }}
+      onDragLeave={(event) => {
+        if (event.currentTarget.contains(event.relatedTarget as Node | null)) {
+          return;
+        }
+        setIsOver(false);
+      }}
+      onDrop={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        setIsOver(false);
+        skipClickRef.current = true;
+        const sceneId = readDraggedSceneId(event.dataTransfer);
+        if (!sceneId || busy) {
+          return;
+        }
+        onDropScene(sceneId);
+      }}
+    >
+      {renaming ? (
+        <input
+          ref={renameInputRef}
+          className="jayrr-scene-card__name-input"
+          value={draftName}
+          onChange={(event) => setDraftName(event.target.value)}
+          onBlur={() => {
+            void commitRename();
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              void commitRename();
+            }
+            if (event.key === "Escape") {
+              setRenaming(null);
+            }
+          }}
+        />
+      ) : (
+        <span className="jayrr-scene-card__name">{folder.name}</span>
+      )}
+      <button
+        type="button"
+        className="jayrr-scene-card__preview"
+        aria-label={`Open ${folder.name}. Drop a scene here to move it in.`}
+        disabled={busy}
+        onClick={() => {
+          if (skipClickRef.current) {
+            skipClickRef.current = false;
+            return;
+          }
+          onOpen();
+        }}
+      >
+        <FolderCardThumbs
+          folderId={folder._id}
+          sceneCount={folder.sceneCount}
+        />
+      </button>
+      <DropdownMenu open={menuOpen}>
+        <DropdownMenu.Trigger
+          className="jayrr-scene-card__menu"
+          aria-label={`${folder.name} menu`}
+          onToggle={() => {
+            setOpenMenu(menuOpen ? null : { kind: "folder", id: folder._id });
+          }}
+        >
+          {DotsHorizontalIcon}
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Content
+          onClickOutside={() => setOpenMenu(null)}
+          onSelect={() => setOpenMenu(null)}
+        >
+          <DropdownMenu.Item
+            icon={EditGlyph}
+            onSelect={() => {
+              setDraftName(folder.name);
+              setRenaming({ kind: "folder", id: folder._id });
+            }}
+          >
+            Rename
+          </DropdownMenu.Item>
+          <DropdownMenu.Item
+            icon={TrashIcon}
+            onSelect={() => {
+              setPendingDelete({
+                kind: "folder",
+                id: folder._id,
+                name: folder.name,
               });
             }}
           >
@@ -1057,15 +1271,20 @@ const ScenePreviewButton = ({
   previewDataUrl,
   sceneId,
   busy,
+  draggable,
   onLoad,
+  onDragScene,
 }: {
   name: string;
   previewDataUrl?: string;
   sceneId: Id<"scenes">;
   busy: boolean;
+  draggable: boolean;
   onLoad: () => void;
+  onDragScene: () => void;
 }) => {
   const [fallbackPreview, setFallbackPreview] = useState<string | undefined>();
+  const draggedRef = useRef(false);
 
   useEffect(() => {
     const client = convexClient;
@@ -1105,10 +1324,29 @@ const ScenePreviewButton = ({
       type="button"
       className="jayrr-scene-card__preview"
       disabled={busy}
-      onClick={onLoad}
+      draggable={draggable}
+      onDragStart={(event) => {
+        draggedRef.current = true;
+        draggingSceneId = sceneId;
+        event.dataTransfer.setData(JAYRR_SCENE_DRAG, sceneId);
+        event.dataTransfer.effectAllowed = "move";
+        onDragScene();
+      }}
+      onDragEnd={() => {
+        draggingSceneId = null;
+        window.setTimeout(() => {
+          draggedRef.current = false;
+        }, 0);
+      }}
+      onClick={() => {
+        if (draggedRef.current) {
+          return;
+        }
+        onLoad();
+      }}
     >
       {src ? (
-        <img alt={name} src={src} />
+        <img alt={name} src={src} draggable={false} />
       ) : (
         <span className="jayrr-scene-card__empty">Empty</span>
       )}

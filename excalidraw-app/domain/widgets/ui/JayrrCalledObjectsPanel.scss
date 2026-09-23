@@ -3,16 +3,6 @@
     padding-bottom: 0;
   }
 
-  .jayrr-called-panel__info {
-    display: inline-flex;
-    color: var(--color-gray-70);
-
-    svg {
-      width: 1rem;
-      height: 1rem;
-    }
-  }
-
   .jayrr-called-panel__preview {
     flex-direction: column;
     gap: 0.55rem;

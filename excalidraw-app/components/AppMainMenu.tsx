@@ -27,7 +27,7 @@ import {
   googleDriveConnectedAtom,
   isGoogleDriveConfigured,
 } from "../data/connectGoogleDrive";
-import { saveCanvasAsScene } from "../data/jayrrScenes";
+import { openBlankCanvas, saveCanvasAsScene } from "../data/jayrrScenes";
 import { JayrrFeatureFlags } from "../domain/flags/JayrrFeatureFlags";
 import { JAYRR_PRESENT_TAB } from "../present/buildPresentDeck";
 
@@ -124,6 +124,7 @@ export const AppMainMenu: React.FC<{
             }
             void saveCanvasAsScene(excalidrawAPI, name)
               .then(() => {
+                openBlankCanvas(excalidrawAPI);
                 props.onToast(`Saved "${name.trim()}" as a scene`);
                 excalidrawAPI.updateScene({
                   appState: {

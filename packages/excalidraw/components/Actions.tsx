@@ -37,6 +37,7 @@ import Stack from "./Stack";
 import { Tooltip } from "./Tooltip";
 import {
   adjustmentsIcon,
+  cropIcon,
   DotsHorizontalIcon,
   elbowArrowIcon,
   pencilIcon,
@@ -224,6 +225,11 @@ export const SelectedShapeActions = ({
       )}
       {renderAction("jayrrCamera")}
       {renderAction("jayrrFrame")}
+      <ImageCropActions
+        appState={appState}
+        renderAction={renderAction}
+        predicates={predicates}
+      />
       {predicates.fill && renderAction("changeFillStyle")}
 
       {predicates.strokeWidth && renderAction("changeStrokeWidth")}
@@ -271,7 +277,6 @@ export const SelectedShapeActions = ({
             {renderAction("group")}
             {renderAction("ungroup")}
             {predicates.link && renderAction("hyperlink")}
-            {predicates.cropEditor && renderAction("cropEditor")}
             {predicates.lineEditor && renderAction("toggleLinearEditor")}
           </div>
         </fieldset>
@@ -632,7 +637,6 @@ const CombinedExtraActions = ({
                   {renderAction("group")}
                   {renderAction("ungroup")}
                   {predicates.linkSingleOnly && renderAction("hyperlink")}
-                  {predicates.cropEditor && renderAction("cropEditor")}
                   {showDuplicate && renderAction("duplicateSelection")}
                   {showDelete && renderAction("deleteSelectedElements")}
                   {renderAction("toggleElementLock")}
@@ -641,6 +645,90 @@ const CombinedExtraActions = ({
             </div>
           </PropertiesPopover>
         )}
+      </Popover.Root>
+    </div>
+  );
+};
+
+const ImageCropActions = ({
+  appState,
+  renderAction,
+  predicates,
+  compact = false,
+  setAppState,
+  container,
+}: {
+  appState: UIAppState;
+  renderAction: ActionManager["renderAction"];
+  predicates: ShapeActionPredicates;
+  compact?: boolean;
+  setAppState?: React.Component<any, AppState>["setState"];
+  container?: HTMLDivElement | null;
+}) => {
+  if (!predicates.cropEditor) {
+    return null;
+  }
+
+  const cropAction = renderAction("cropEditor");
+  const aspectRatioAction = appState.croppingElementId
+    ? renderAction("changeCropAspectRatio")
+    : null;
+
+  if (!compact || !setAppState) {
+    return (
+      <>
+        {cropAction}
+        {aspectRatioAction}
+      </>
+    );
+  }
+
+  const isOpen = appState.openPopup === "compactImageCrop";
+  const isCropping = Boolean(appState.croppingElementId);
+
+  return (
+    <div className="compact-action-item">
+      <Popover.Root
+        open={isOpen}
+        onOpenChange={(open) => {
+          if (open) {
+            setAppState({ openPopup: "compactImageCrop" });
+          } else {
+            setAppState({ openPopup: null });
+          }
+        }}
+      >
+        <Popover.Trigger asChild>
+          <button
+            type="button"
+            className={clsx("compact-action-button properties-trigger", {
+              active: isOpen || isCropping,
+            })}
+            title={t("labels.imageTransform")}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              setAppState({
+                openPopup: isOpen ? null : "compactImageCrop",
+              });
+            }}
+          >
+            {cropIcon}
+          </button>
+        </Popover.Trigger>
+        {isOpen ? (
+          <PropertiesPopover
+            className={PROPERTIES_CLASSES}
+            container={container ?? null}
+            style={{ maxWidth: "13rem" }}
+            onClose={() => {}}
+          >
+            <div className="selected-shape-actions">
+              {cropAction}
+              {aspectRatioAction}
+            </div>
+          </PropertiesPopover>
+        ) : null}
       </Popover.Root>
     </div>
   );
@@ -711,6 +799,14 @@ export const CompactShapeActions = ({
       )}
       {renderAction("jayrrCamera")}
       {renderAction("jayrrFrame")}
+      <ImageCropActions
+        appState={appState}
+        renderAction={renderAction}
+        predicates={predicates}
+        compact
+        setAppState={setAppState}
+        container={container}
+      />
 
       {/* Freedraw pressure: standalone button cycling the variability mode */}
       {predicates.freedrawMode && (
@@ -871,6 +967,14 @@ export const MobileShapeActions = ({
         )}
         {renderAction("jayrrCamera")}
         {renderAction("jayrrFrame")}
+        <ImageCropActions
+          appState={appState}
+          renderAction={renderAction}
+          predicates={predicates}
+          compact
+          setAppState={setAppState}
+          container={container}
+        />
         <CombinedShapeProperties
           appState={appState}
           renderAction={renderAction}

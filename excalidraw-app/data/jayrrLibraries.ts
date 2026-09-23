@@ -8,10 +8,10 @@ import { api, convexClient } from "../convexClient";
 import type { Id } from "../../convex/_generated/dataModel";
 
 export const openLibraryIdAtom = atom<Id<"libraries"> | null>(
-  readStoredLibraryId(),
+  readStoredOpenLibraryId(),
 );
 
-function readStoredLibraryId(): Id<"libraries"> | null {
+export function readStoredOpenLibraryId(): Id<"libraries"> | null {
   try {
     const stored = localStorage.getItem(
       STORAGE_KEYS.LOCAL_STORAGE_OPEN_LIBRARY_ID,

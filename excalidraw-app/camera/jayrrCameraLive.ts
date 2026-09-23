@@ -80,6 +80,8 @@ const drawFitted = (
     : Math.max(width / sourceW, height / sourceH);
   const drawW = sourceW * scale;
   const drawH = sourceH * scale;
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
   context.drawImage(
     source,
     (width - drawW) / 2,
