@@ -1,6 +1,11 @@
+import clsx from "clsx";
 import { useCallback, useEffect, useRef } from "react";
 
-import { CloseIcon } from "./icons";
+import { copyTextToSystemClipboard } from "../clipboard";
+import { useCopyStatus } from "../hooks/useCopiedIndicator";
+import { t } from "../i18n";
+
+import { CloseIcon, copyIcon, tablerCheckIcon } from "./icons";
 import { IconButton } from "./IconButton";
 
 import "./Toast.scss";
@@ -20,6 +25,16 @@ const ProgressBar = ({ progress }: { progress: number }) => (
   </div>
 );
 
+const nodeText = (value: ReactNode, node: HTMLElement | null) => {
+  if (typeof value === "string" || typeof value === "number") {
+    return String(value);
+  }
+  return node?.innerText?.trim() ?? "";
+};
+
+const isErrorMessage = (text: string) =>
+  /error|failed|could not|convex|uncaught/i.test(text);
+
 const ToastComponent = ({
   message,
   onClose,
@@ -35,6 +50,8 @@ const ToastComponent = ({
   style?: CSSProperties;
 }) => {
   const timerRef = useRef<number>(0);
+  const messageRef = useRef<HTMLDivElement>(null);
+  const { onCopy, copyStatus } = useCopyStatus();
   const shouldAutoClose = duration !== Infinity;
   const scheduleTimeout = useCallback(() => {
     if (!shouldAutoClose) {
@@ -55,15 +72,42 @@ const ToastComponent = ({
     ? () => clearTimeout(timerRef?.current)
     : undefined;
   const onMouseLeave = shouldAutoClose ? scheduleTimeout : undefined;
+
+  const handleCopy = async () => {
+    const text = nodeText(message, messageRef.current);
+    if (!text) {
+      return;
+    }
+    await copyTextToSystemClipboard(text);
+    onCopy();
+  };
+
+  const canCopy = isErrorMessage(nodeText(message, null));
+
   return (
     <div
-      className="Toast"
+      className={clsx("Toast", canCopy && "Toast--interactive")}
       role="status"
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       style={style}
     >
-      <div className="Toast__message">{message}</div>
+      <div ref={messageRef} className="Toast__message">
+        {message}
+      </div>
+      {canCopy && (
+        <button
+          type="button"
+          className="Toast__copy"
+          onClick={() => {
+            void handleCopy();
+          }}
+          aria-label={t("labels.copy")}
+        >
+          {copyStatus === "success" ? tablerCheckIcon : copyIcon}
+          {t("labels.copy")}
+        </button>
+      )}
       {closable && (
         <IconButton
           icon={CloseIcon}

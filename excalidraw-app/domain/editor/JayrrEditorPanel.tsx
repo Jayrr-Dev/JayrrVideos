@@ -1,6 +1,7 @@
 import {
   CODES,
   DEFAULT_SIDEBAR,
+  LIBRARY_SIDEBAR_TAB,
   isDarwin,
   KEYS,
   matchKey,
@@ -34,7 +35,6 @@ import { FilledButton, Island, Tooltip } from "../../components/ui/editor";
 import { JayrrSoundLibraryDialog } from "../../components/ui/JayrrSoundLibraryDialog";
 import { api } from "../../convexClient";
 import { docsViewAtom, persistDocsView } from "../../present/docsView";
-import { JAYRR_RECORDINGS_TAB } from "../../present/JayrrPresentRecordingsPanel";
 import { uploadPresentRecording } from "../../present/uploadPresentRecording";
 
 import "../../components/ui/JayrrLibraryMenu.scss";
@@ -919,8 +919,8 @@ export const JayrrEditorPanel = () => {
           <button
             type="button"
             className="jayrr-library__title"
-            title="Rename project"
-            onClick={startRenameProject}
+            title="Double-click to rename"
+            onDoubleClick={startRenameProject}
           >
             {projectName}
           </button>
@@ -1307,7 +1307,7 @@ export const JayrrEditorPanel = () => {
                 appState: {
                   openSidebar: {
                     name: DEFAULT_SIDEBAR.name,
-                    tab: JAYRR_RECORDINGS_TAB,
+                    tab: LIBRARY_SIDEBAR_TAB,
                   },
                 },
               });
@@ -1360,7 +1360,7 @@ export const JayrrEditorPanel = () => {
                 appState: {
                   openSidebar: {
                     name: DEFAULT_SIDEBAR.name,
-                    tab: JAYRR_RECORDINGS_TAB,
+                    tab: LIBRARY_SIDEBAR_TAB,
                   },
                 },
               });

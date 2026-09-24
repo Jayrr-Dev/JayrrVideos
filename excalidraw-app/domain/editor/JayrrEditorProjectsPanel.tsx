@@ -1,8 +1,9 @@
-import { Button, useExcalidrawAPI } from "@excalidraw/excalidraw";
+import { useExcalidrawAPI } from "@excalidraw/excalidraw";
 import DropdownMenu from "@excalidraw/excalidraw/components/dropdownMenu/DropdownMenu";
 import {
   chevronLeftIcon,
   DotsHorizontalIcon,
+  FolderPlusIcon,
   TrashIcon,
 } from "@excalidraw/excalidraw/components/icons";
 import { useMutation, useQuery } from "convex/react";
@@ -16,6 +17,7 @@ import {
 
 import { useAtom } from "../../app-jotai";
 import { JayrrConfirmDialog } from "../../components/ui";
+import { LibrariesPane } from "../../components/ui/librariesChrome";
 import { api as convexApi, isConvexLinked } from "../../convexClient";
 import {
   formatRecordingClock,
@@ -319,39 +321,36 @@ const FolderCard = ({
   );
 };
 
-export const JayrrEditorProjectsPanel = ({
-  toolbar,
-}: {
-  toolbar?: ReactNode;
-}) => {
+export const JayrrEditorProjectsPanel = () => {
   if (!isConvexLinked) {
     return (
-      <ProjectsShell toolbar={toolbar} title="Docs">
+      <ProjectsShell>
         <p className="jayrr-present__empty">Sign in to store projects here.</p>
       </ProjectsShell>
     );
   }
 
-  return <JayrrEditorProjectsAuthed toolbar={toolbar} />;
+  return <JayrrEditorProjectsAuthed />;
 };
 
 const ProjectsShell = ({
+  actions,
   title,
-  toolbar,
   onBack,
-  footer,
   children,
 }: {
-  title: ReactNode;
-  toolbar?: ReactNode;
+  actions?: ReactNode;
+  title?: ReactNode;
   onBack?: () => void;
-  footer?: ReactNode;
   children: ReactNode;
 }) => {
   return (
-    <div className="layer-ui__library jayrr-library jayrr-present jayrr-present--recordings">
-      <div className="jayrr-library__header">
-        {onBack ? (
+    <LibrariesPane
+      className="jayrr-present jayrr-present--recordings"
+      actions={actions}
+      title={title}
+      back={
+        onBack ? (
           <button
             type="button"
             className="jayrr-library__icon-button"
@@ -360,27 +359,19 @@ const ProjectsShell = ({
           >
             {chevronLeftIcon}
           </button>
-        ) : null}
-        {typeof title === "string" ? (
-          <h2 className="jayrr-library__title">{title}</h2>
-        ) : (
-          title
-        )}
-        {toolbar ? (
-          <div className="jayrr-library__header-actions">{toolbar}</div>
-        ) : null}
-        <span className="jayrr-present__sr">
-          Saved editor projects in folders. Double-click a project card to load
-          it into the video editor.
-        </span>
-      </div>
+        ) : undefined
+      }
+    >
+      <span className="jayrr-present__sr">
+        Saved editor projects in folders. Double-click a project card to load it
+        into the video editor.
+      </span>
       <div className="jayrr-present__recordings-body">{children}</div>
-      {footer}
-    </div>
+    </LibrariesPane>
   );
 };
 
-const JayrrEditorProjectsAuthed = ({ toolbar }: { toolbar?: ReactNode }) => {
+const JayrrEditorProjectsAuthed = () => {
   const api = useExcalidrawAPI();
   const { loadProject } = useJayrrEditorSession();
   const [openFolderId, setOpenFolderId] = useAtom(
@@ -493,6 +484,20 @@ const JayrrEditorProjectsAuthed = ({ toolbar }: { toolbar?: ReactNode }) => {
     }
   };
 
+  const folderAction = (
+    <button
+      type="button"
+      className="jayrr-library__icon-button"
+      aria-label="Create folder"
+      title="Create folder"
+      onClick={() => {
+        void onCreateFolder();
+      }}
+    >
+      {FolderPlusIcon}
+    </button>
+  );
+
   const onOpenProject = async (row: ProjectRow) => {
     try {
       await loadProject(row._id);
@@ -557,7 +562,7 @@ const JayrrEditorProjectsAuthed = ({ toolbar }: { toolbar?: ReactNode }) => {
   const deleteProjectDialog = pendingDeleteProject ? (
     <JayrrConfirmDialog
       title={`Delete "${pendingDeleteProject.name}"?`}
-      info="Removes this project from Docs. This cannot be undone."
+      info="Removes this project from Libraries. This cannot be undone."
       busy={deleting}
       onCancel={() => {
         if (!deleting) {
@@ -600,7 +605,7 @@ const JayrrEditorProjectsAuthed = ({ toolbar }: { toolbar?: ReactNode }) => {
 
     return (
       <ProjectsShell
-        toolbar={toolbar}
+        actions={folderAction}
         onBack={() => setOpenFolderId(null)}
         title={
           renamingFolderId === openFolder._id ? (
@@ -626,7 +631,8 @@ const JayrrEditorProjectsAuthed = ({ toolbar }: { toolbar?: ReactNode }) => {
             <button
               type="button"
               className="jayrr-library__title"
-              onClick={() => {
+              title="Double-click to rename"
+              onDoubleClick={() => {
                 setDraftName(openFolder.name);
                 setRenamingFolderId(openFolder._id);
               }}
@@ -655,14 +661,6 @@ const JayrrEditorProjectsAuthed = ({ toolbar }: { toolbar?: ReactNode }) => {
         <p className="jayrr-present__empty">
           No projects yet. Create a folder, or save from the video editor.
         </p>
-        <Button
-          className="jayrr-present__create-folder"
-          onSelect={() => {
-            void onCreateFolder();
-          }}
-        >
-          Create folder
-        </Button>
       </div>
     );
   } else {
@@ -714,30 +712,13 @@ const JayrrEditorProjectsAuthed = ({ toolbar }: { toolbar?: ReactNode }) => {
   }
 
   return (
-    <ProjectsShell
-      toolbar={toolbar}
-      title="Docs"
-      footer={
-        folderList.length > 0 || unfiled.length > 0 ? (
-          <div className="jayrr-present__recordings-footer">
-            <Button
-              className="jayrr-present__create-folder"
-              onSelect={() => {
-                void onCreateFolder();
-              }}
-            >
-              Create folder
-            </Button>
-          </div>
-        ) : null
-      }
-    >
+    <ProjectsShell actions={folderAction}>
       {body}
       {deleteProjectDialog}
       {pendingDeleteFolder ? (
         <JayrrConfirmDialog
           title={`Delete "${pendingDeleteFolder.name}"?`}
-          info="Removes the folder. Projects inside move back to Docs."
+          info="Removes the folder. Projects inside move back to the list."
           busy={deleting}
           onCancel={() => {
             if (!deleting) {

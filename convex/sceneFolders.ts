@@ -7,10 +7,12 @@ import type { Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 
 const MAX_NAME_LENGTH = 80;
+const HEX_COLOR = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
 
 const folderDoc = v.object({
   _id: v.id("sceneFolders"),
   name: v.string(),
+  fillColor: v.optional(v.string()),
   sceneCount: v.number(),
   updatedAt: v.number(),
 });
@@ -24,6 +26,17 @@ const normalizeName = (name: string) => {
     throw new Error(`Name must be ${MAX_NAME_LENGTH} characters or less`);
   }
   return trimmed;
+};
+
+const normalizeFillColor = (value: string | null) => {
+  if (value === null) {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  if (!HEX_COLOR.test(trimmed)) {
+    throw new Error("Fill color must be a hex value like #ffe8cc");
+  }
+  return trimmed.toLowerCase();
 };
 
 const getOwnedFolder = async (
@@ -51,6 +64,7 @@ export const list = query({
       .map((row) => ({
         _id: row._id,
         name: row.name,
+        fillColor: row.fillColor,
         sceneCount: row.sceneCount,
         updatedAt: row.updatedAt,
       }))
@@ -72,6 +86,7 @@ export const get = query({
     return {
       _id: folder._id,
       name: folder.name,
+      fillColor: folder.fillColor,
       sceneCount: folder.sceneCount,
       updatedAt: folder.updatedAt,
     };
@@ -107,6 +122,23 @@ export const rename = mutation({
     const folder = await getOwnedFolder(ctx, args.folderId, user._id);
     await ctx.db.patch(folder._id, {
       name: normalizeName(args.name),
+      updatedAt: Date.now(),
+    });
+    return folder._id;
+  },
+});
+
+export const setFillColor = mutation({
+  args: {
+    folderId: v.id("sceneFolders"),
+    fillColor: v.union(v.string(), v.null()),
+  },
+  returns: v.id("sceneFolders"),
+  handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
+    const folder = await getOwnedFolder(ctx, args.folderId, user._id);
+    await ctx.db.patch(folder._id, {
+      fillColor: normalizeFillColor(args.fillColor),
       updatedAt: Date.now(),
     });
     return folder._id;

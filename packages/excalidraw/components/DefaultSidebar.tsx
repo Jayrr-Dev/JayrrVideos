@@ -81,12 +81,15 @@ export const DefaultSidebar = Object.assign(
       className,
       onDock,
       docked,
+      hideSceneTab = false,
       ...rest
     }: Merge<
       MarkOptional<Omit<SidebarProps, "name">, "children">,
       {
         /** pass `false` to disable docking */
         onDock?: SidebarProps["onDock"] | false;
+        /** Jayrr hides the stock scene tab. Scene lives under Libraries. */
+        hideSceneTab?: boolean;
       }
     >) => {
       const appState = useUIAppState();
@@ -142,17 +145,30 @@ export const DefaultSidebar = Object.assign(
           <Sidebar.Tabs>
             <Sidebar.Header>
               <Sidebar.TabTriggers>
+                {hideSceneTab ? (
+                  <Sidebar.TabTrigger
+                    tab={LIBRARY_SIDEBAR_TAB}
+                    title="Libraries"
+                    aria-label="Libraries"
+                  >
+                    {LibraryIcon}
+                  </Sidebar.TabTrigger>
+                ) : null}
                 <DefaultSidebarTabTriggersTunnel.Out />
-                <Sidebar.TabTrigger tab={LIBRARY_SIDEBAR_TAB}>
-                  {LibraryIcon}
-                </Sidebar.TabTrigger>
-                <Sidebar.TabTrigger
-                  tab={SCENE_SIDEBAR_TAB}
-                  title={t("toolBar.scene")}
-                  aria-label={t("toolBar.scene")}
-                >
-                  {SceneIcon}
-                </Sidebar.TabTrigger>
+                {hideSceneTab ? null : (
+                  <Sidebar.TabTrigger tab={LIBRARY_SIDEBAR_TAB}>
+                    {LibraryIcon}
+                  </Sidebar.TabTrigger>
+                )}
+                {hideSceneTab ? null : (
+                  <Sidebar.TabTrigger
+                    tab={SCENE_SIDEBAR_TAB}
+                    title={t("toolBar.scene")}
+                    aria-label={t("toolBar.scene")}
+                  >
+                    {SceneIcon}
+                  </Sidebar.TabTrigger>
+                )}
                 <DefaultSidebarTrailingTabTriggersTunnel.Out />
               </Sidebar.TabTriggers>
             </Sidebar.Header>

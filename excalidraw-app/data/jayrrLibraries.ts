@@ -7,9 +7,7 @@ import { api, convexClient } from "../convexClient";
 
 import type { Id } from "../../convex/_generated/dataModel";
 
-export const openLibraryIdAtom = atom<Id<"libraries"> | null>(
-  readStoredOpenLibraryId(),
-);
+export const openLibraryIdAtom = atom<Id<"libraries"> | null>(null);
 
 export function readStoredOpenLibraryId(): Id<"libraries"> | null {
   try {
@@ -49,17 +47,17 @@ export const addSelectionToOpenLibrary = async (
     throw new Error("Select something on the canvas first.");
   }
 
-  let libraryId = appJotaiStore.get(openLibraryIdAtom);
+  let libraryId =
+    appJotaiStore.get(openLibraryIdAtom) ?? readStoredOpenLibraryId();
   if (!libraryId) {
     const listed = await convexClient.query(api.libraries.list, {});
     if (listed[0]) {
       libraryId = listed[0]._id;
     } else {
       libraryId = await convexClient.mutation(api.libraries.create, {
-        name: "Library 1",
+        name: "Part 1",
       });
     }
-    appJotaiStore.set(openLibraryIdAtom, libraryId);
   }
 
   await convexClient.mutation(api.libraries.addAsset, {

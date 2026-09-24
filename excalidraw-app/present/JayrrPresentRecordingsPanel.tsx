@@ -1,8 +1,9 @@
-import { Button, useExcalidrawAPI } from "@excalidraw/excalidraw";
+import { useExcalidrawAPI } from "@excalidraw/excalidraw";
 import DropdownMenu from "@excalidraw/excalidraw/components/dropdownMenu/DropdownMenu";
 import {
   chevronLeftIcon,
   DotsHorizontalIcon,
+  FolderPlusIcon,
   TrashIcon,
 } from "@excalidraw/excalidraw/components/icons";
 import { useAction, useMutation, useQuery } from "convex/react";
@@ -16,6 +17,7 @@ import {
 
 import { useAtom } from "../app-jotai";
 import { JayrrConfirmDialog } from "../components/ui";
+import { LibrariesPane } from "../components/ui/librariesChrome";
 import { api as convexApi, isConvexLinked } from "../convexClient";
 import {
   formatRecordingClock,
@@ -482,14 +484,12 @@ const FolderCard = ({
 
 export const JayrrPresentRecordingsPanel = ({
   uploading,
-  toolbar,
 }: {
   uploading: boolean;
-  toolbar?: ReactNode;
 }) => {
   if (!isConvexLinked) {
     return (
-      <RecordingsShell uploading={uploading} toolbar={toolbar} title="Docs">
+      <RecordingsShell uploading={uploading}>
         <p className="jayrr-present__empty">
           Sign in to store recordings here.
         </p>
@@ -497,30 +497,29 @@ export const JayrrPresentRecordingsPanel = ({
     );
   }
 
-  return (
-    <JayrrPresentRecordingsAuthed uploading={uploading} toolbar={toolbar} />
-  );
+  return <JayrrPresentRecordingsAuthed uploading={uploading} />;
 };
 
 const RecordingsShell = ({
   uploading,
+  actions,
   title,
-  toolbar,
   onBack,
-  footer,
   children,
 }: {
   uploading: boolean;
-  title: ReactNode;
-  toolbar?: ReactNode;
+  actions?: ReactNode;
+  title?: ReactNode;
   onBack?: () => void;
-  footer?: ReactNode;
   children: ReactNode;
 }) => {
   return (
-    <div className="layer-ui__library jayrr-library jayrr-present jayrr-present--recordings">
-      <div className="jayrr-library__header">
-        {onBack ? (
+    <LibrariesPane
+      className="jayrr-present jayrr-present--recordings"
+      actions={actions}
+      title={title}
+      back={
+        onBack ? (
           <button
             type="button"
             className="jayrr-library__icon-button"
@@ -529,37 +528,27 @@ const RecordingsShell = ({
           >
             {chevronLeftIcon}
           </button>
-        ) : null}
-        {typeof title === "string" ? (
-          <h2 className="jayrr-library__title">{title}</h2>
-        ) : (
-          title
-        )}
-        {toolbar ? (
-          <div className="jayrr-library__header-actions">{toolbar}</div>
-        ) : null}
-        <span className="jayrr-present__sr">
-          Saved slideshow recordings in folders. Drag a clip onto the canvas.
-          Rename, move, or delete from the menu.
-        </span>
-      </div>
+        ) : undefined
+      }
+    >
+      <span className="jayrr-present__sr">
+        Saved slideshow recordings in folders. Drag a clip onto the canvas.
+        Rename, move, or delete from the menu.
+      </span>
       {uploading ? (
         <p className="jayrr-present__status" aria-live="polite">
           Saving recording…
         </p>
       ) : null}
       <div className="jayrr-present__recordings-body">{children}</div>
-      {footer}
-    </div>
+    </LibrariesPane>
   );
 };
 
 const JayrrPresentRecordingsAuthed = ({
   uploading,
-  toolbar,
 }: {
   uploading: boolean;
-  toolbar?: ReactNode;
 }) => {
   const api = useExcalidrawAPI();
   const [openFolderId, setOpenFolderId] = useAtom(openRecordingFolderIdAtom);
@@ -670,6 +659,20 @@ const JayrrPresentRecordingsAuthed = ({
     }
   };
 
+  const folderAction = (
+    <button
+      type="button"
+      className="jayrr-library__icon-button"
+      aria-label="Create folder"
+      title="Create folder"
+      onClick={() => {
+        void onCreateFolder();
+      }}
+    >
+      {FolderPlusIcon}
+    </button>
+  );
+
   const renderRecordingList = (rows: RecordingRow[]) => (
     <ul className="jayrr-present__recordings-list">
       {rows.map((row) => (
@@ -748,7 +751,7 @@ const JayrrPresentRecordingsAuthed = ({
     return (
       <RecordingsShell
         uploading={uploading}
-        toolbar={toolbar}
+        actions={folderAction}
         onBack={() => setOpenFolderId(null)}
         title={
           renamingFolderId === openFolder._id ? (
@@ -774,7 +777,8 @@ const JayrrPresentRecordingsAuthed = ({
             <button
               type="button"
               className="jayrr-library__title"
-              onClick={() => {
+              title="Double-click to rename"
+              onDoubleClick={() => {
                 setDraftName(openFolder.name);
                 setRenamingFolderId(openFolder._id);
               }}
@@ -832,14 +836,6 @@ const JayrrPresentRecordingsAuthed = ({
         <p className="jayrr-present__empty">
           No recordings yet. Create a folder, or use Record on the Present tab.
         </p>
-        <Button
-          className="jayrr-present__create-folder"
-          onSelect={() => {
-            void onCreateFolder();
-          }}
-        >
-          Create folder
-        </Button>
       </div>
     );
   } else {
@@ -891,25 +887,7 @@ const JayrrPresentRecordingsAuthed = ({
   }
 
   return (
-    <RecordingsShell
-      uploading={uploading}
-      toolbar={toolbar}
-      title="Docs"
-      footer={
-        folderList.length > 0 || unfiled.length > 0 ? (
-          <div className="jayrr-present__recordings-footer">
-            <Button
-              className="jayrr-present__create-folder"
-              onSelect={() => {
-                void onCreateFolder();
-              }}
-            >
-              Create folder
-            </Button>
-          </div>
-        ) : null
-      }
-    >
+    <RecordingsShell uploading={uploading} actions={folderAction}>
       {body}
       {previewDialog}
       {pendingDeleteRecording ? (
@@ -944,7 +922,7 @@ const JayrrPresentRecordingsAuthed = ({
       {pendingDeleteFolder ? (
         <JayrrConfirmDialog
           title={`Delete "${pendingDeleteFolder.name}"?`}
-          info="Removes the folder. Recordings inside move back to Docs."
+          info="Removes the folder. Recordings inside move back to the list."
           busy={deleting}
           onCancel={() => {
             if (!deleting) {
@@ -986,7 +964,7 @@ const DeleteRecordingDialog = ({
   return (
     <JayrrConfirmDialog
       title="Delete recording"
-      info="Removes this clip from Docs. This cannot be undone."
+      info="Removes this clip from Libraries. This cannot be undone."
       busy={busy}
       onCancel={onCancel}
       onConfirm={onConfirm}

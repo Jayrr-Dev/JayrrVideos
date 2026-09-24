@@ -6,8 +6,16 @@ import { Field, Input } from "./Field";
 
 import "./JayrrAuthPage.scss";
 
+const ACCESS_EMAIL = "jayrrdev@gmail.com";
+const ACCESS_MAILTO = `mailto:${ACCESS_EMAIL}?subject=${encodeURIComponent(
+  "Jayrr beta access",
+)}`;
+
 const signInErrorMessage = (caught: unknown) => {
   const raw = caught instanceof Error ? caught.message : "";
+  if (raw.includes("InviteOnly")) {
+    return `Closed beta. Email ${ACCESS_EMAIL} for access.`;
+  }
   if (raw.includes("InvalidSecret")) {
     return "Wrong password.";
   }
@@ -25,7 +33,6 @@ const signInErrorMessage = (caught: unknown) => {
 
 export const JayrrAuthPage = () => {
   const { signIn } = useAuthActions();
-  const [flow, setFlow] = useState<"signIn" | "signUp">("signIn");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -39,7 +46,7 @@ export const JayrrAuthPage = () => {
             return;
           }
           const formData = new FormData(event.currentTarget);
-          formData.set("flow", flow);
+          formData.set("flow", "signIn");
           setBusy(true);
           setError(null);
           void signIn("password", formData)
@@ -51,12 +58,14 @@ export const JayrrAuthPage = () => {
             });
         }}
       >
-        <h1 className="jayrr-auth__title">Jayrr</h1>
+        <div className="jayrr-auth__heading">
+          <h1 className="jayrr-auth__title">Jayrr</h1>
+          <p className="jayrr-auth__beta">Closed beta</p>
+        </div>
         <Field label="Username">
           <Input
             autoComplete="username"
             autoFocus
-            defaultValue="Jayrr"
             name="username"
             required
             type="text"
@@ -64,9 +73,7 @@ export const JayrrAuthPage = () => {
         </Field>
         <Field label="Password">
           <Input
-            autoComplete={
-              flow === "signIn" ? "current-password" : "new-password"
-            }
+            autoComplete="current-password"
             minLength={8}
             name="password"
             required
@@ -75,18 +82,11 @@ export const JayrrAuthPage = () => {
         </Field>
         {error ? <p className="jayrr-auth__error">{error}</p> : null}
         <Button busy={busy} fullWidth type="submit">
-          {flow === "signIn" ? "Sign in" : "Create account"}
+          Sign in
         </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          onClick={() => {
-            setError(null);
-            setFlow(flow === "signIn" ? "signUp" : "signIn");
-          }}
-        >
-          {flow === "signIn" ? "Create an account" : "Have an account? Sign in"}
-        </Button>
+        <a className="jayrr-auth__access" href={ACCESS_MAILTO}>
+          Need access? Email {ACCESS_EMAIL}
+        </a>
       </form>
     </div>
   );

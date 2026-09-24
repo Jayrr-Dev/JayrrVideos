@@ -5,6 +5,9 @@ import type { DataModel } from "./_generated/dataModel";
 
 const UsernamePassword = Password<DataModel>({
   profile(params) {
+    if (String(params.flow ?? "") === "signUp") {
+      throw new Error("InviteOnly");
+    }
     const username = String(params.username ?? params.email ?? "").trim();
     if (!username) {
       throw new Error("Username is required");

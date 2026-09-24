@@ -30,7 +30,6 @@ import { STORAGE_KEYS } from "../../app_constants";
 import { api, isConvexLinked } from "../../convexClient";
 import {
   openLibraryIdAtom,
-  readStoredOpenLibraryId,
   serializeFilesForElements,
 } from "../../data/jayrrLibraries";
 
@@ -38,6 +37,7 @@ import "../../../packages/excalidraw/components/LibraryMenuItems.scss";
 import "../../../packages/excalidraw/components/LibraryUnit.scss";
 
 import { JayrrConfirmDialog } from "./JayrrConfirmDialog";
+import { LibrariesPane } from "./librariesChrome";
 import "./JayrrLibraryMenu.scss";
 
 import type { ReactNode } from "react";
@@ -67,8 +67,7 @@ class LibraryMenuErrorBoundary extends Component<
 
   static getDerivedStateFromError(error: unknown) {
     return {
-      message:
-        error instanceof Error ? error.message : "Libraries failed to load",
+      message: error instanceof Error ? error.message : "Parts failed to load",
     };
   }
 
@@ -78,7 +77,7 @@ class LibraryMenuErrorBoundary extends Component<
         <div className="layer-ui__library jayrr-library">
           <div className="library-menu-items__no-items">
             <div className="library-menu-items__no-items__label">
-              Libraries unavailable
+              Parts unavailable
             </div>
             <div className="library-menu-items__no-items__hint">
               {this.state.message}
@@ -97,7 +96,7 @@ export const JayrrLibraryMenu = () => {
       <div className="layer-ui__library jayrr-library">
         <div className="library-menu-items__no-items">
           <div className="library-menu-items__no-items__label">
-            Libraries need Convex
+            Parts need Convex
           </div>
           <div className="library-menu-items__no-items__hint">
             Add VITE_CONVEX_URL, then restart the app.
@@ -159,13 +158,6 @@ const JayrrLibraryMenuConnected = () => {
   }, [openLibraryId]);
 
   useEffect(() => {
-    const stored = readStoredOpenLibraryId();
-    if (stored) {
-      setOpenLibraryId(stored);
-    }
-  }, [setOpenLibraryId]);
-
-  useEffect(() => {
     if (!openLibraryId || openLibrary === undefined) {
       return;
     }
@@ -204,15 +196,15 @@ const JayrrLibraryMenuConnected = () => {
     try {
       const nextIndex = (libraries?.length ?? 0) + 1;
       const libraryId = await createLibrary({
-        name: `Library ${nextIndex}`,
+        name: `Part ${nextIndex}`,
       });
-      openLibraryById(libraryId);
+      persistOpenLibraryId(libraryId);
       setRenamingId(libraryId);
-      setDraftName(`Library ${nextIndex}`);
+      setDraftName(`Part ${nextIndex}`);
     } catch (error) {
       excalidrawAPI?.setToast({
         message:
-          error instanceof Error ? error.message : "Could not create library",
+          error instanceof Error ? error.message : "Could not create part",
         closable: true,
       });
     }
@@ -229,7 +221,7 @@ const JayrrLibraryMenuConnected = () => {
     } catch (error) {
       excalidrawAPI?.setToast({
         message:
-          error instanceof Error ? error.message : "Could not delete library",
+          error instanceof Error ? error.message : "Could not delete part",
         closable: true,
       });
     } finally {
@@ -259,7 +251,7 @@ const JayrrLibraryMenuConnected = () => {
   const onAddPending = async () => {
     if (!openLibraryId) {
       excalidrawAPI?.setToast({
-        message: "Open a library first.",
+        message: "Open a part first.",
         closable: true,
       });
       return;
@@ -276,7 +268,7 @@ const JayrrLibraryMenuConnected = () => {
           excalidrawAPI?.getFiles() ?? {},
         ),
       });
-      excalidrawAPI?.setToast({ message: "Added to library", closable: true });
+      excalidrawAPI?.setToast({ message: "Added to part", closable: true });
     } catch (error) {
       excalidrawAPI?.setToast({
         message: error instanceof Error ? error.message : "Could not add asset",
@@ -313,45 +305,42 @@ const JayrrLibraryMenuConnected = () => {
     });
   };
 
+  const backToParts = (
+    <button
+      type="button"
+      className="jayrr-library__icon-button"
+      aria-label="Back to parts"
+      onClick={() => setOpenLibraryId(null)}
+    >
+      {chevronLeftIcon}
+    </button>
+  );
+
   if (libraries === undefined) {
     return (
-      <div className="layer-ui__library jayrr-library">
-        <div className="layer-ui__library-message">Loading libraries…</div>
-      </div>
+      <LibrariesPane fallbackTitle="Parts">
+        <div className="layer-ui__library-message">Loading parts…</div>
+      </LibrariesPane>
     );
   }
 
   if (openLibraryId) {
     if (!openLibrary) {
       return (
-        <div className="layer-ui__library jayrr-library">
-          <div className="jayrr-library__header">
-            <button
-              type="button"
-              className="jayrr-library__icon-button"
-              aria-label="Back to libraries"
-              onClick={() => setOpenLibraryId(null)}
-            >
-              {chevronLeftIcon}
-            </button>
-            <div className="jayrr-library__title">Loading library…</div>
-          </div>
-        </div>
+        <LibrariesPane
+          fallbackTitle="Parts"
+          back={backToParts}
+          title={<div className="jayrr-library__title">Loading part…</div>}
+        />
       );
     }
 
     return (
-      <div className="layer-ui__library jayrr-library">
-        <div className="jayrr-library__header">
-          <button
-            type="button"
-            className="jayrr-library__icon-button"
-            aria-label="Back to libraries"
-            onClick={() => setOpenLibraryId(null)}
-          >
-            {chevronLeftIcon}
-          </button>
-          {renamingId === openLibrary._id ? (
+      <LibrariesPane
+        fallbackTitle="Parts"
+        back={backToParts}
+        title={
+          renamingId === openLibrary._id ? (
             <input
               ref={renameInputRef}
               className="jayrr-library__rename-input"
@@ -373,16 +362,17 @@ const JayrrLibraryMenuConnected = () => {
             <button
               type="button"
               className="jayrr-library__title"
-              onClick={() => {
+              title="Double-click to rename"
+              onDoubleClick={() => {
                 setDraftName(openLibrary.name);
                 setRenamingId(openLibrary._id);
               }}
             >
               {openLibrary.name}
             </button>
-          )}
-        </div>
-
+          )
+        }
+      >
         <div className="jayrr-library__body">
           {assets === undefined && (
             <div className="library-menu-items__no-items__hint">
@@ -427,36 +417,35 @@ const JayrrLibraryMenuConnected = () => {
             </div>
           )}
         </div>
-      </div>
+      </LibrariesPane>
     );
   }
 
   return (
-    <div className="layer-ui__library jayrr-library">
-      <div className="jayrr-library__header">
-        <div className="jayrr-library__title">Libraries</div>
-        <div className="jayrr-library__header-actions">
-          <button
-            type="button"
-            className="jayrr-library__icon-button"
-            aria-label="Create library"
-            title="Create library"
-            onClick={() => {
-              void onCreateLibrary();
-            }}
-          >
-            {PlusIcon}
-          </button>
-        </div>
-      </div>
+    <LibrariesPane
+      fallbackTitle="Parts"
+      actions={
+        <button
+          type="button"
+          className="jayrr-library__icon-button"
+          aria-label="Create part"
+          title="Create part"
+          onClick={() => {
+            void onCreateLibrary();
+          }}
+        >
+          {PlusIcon}
+        </button>
+      }
+    >
       <div className="jayrr-library__body">
         {libraries.length === 0 && (
           <div className="library-menu-items__no-items">
             <div className="library-menu-items__no-items__label">
-              No libraries yet
+              No parts yet
             </div>
             <div className="library-menu-items__no-items__hint">
-              Create a library, then drop canvas selections into it.
+              Create a part, then drop canvas selections into it.
             </div>
           </div>
         )}
@@ -549,7 +538,7 @@ const JayrrLibraryMenuConnected = () => {
       {pendingDelete ? (
         <JayrrConfirmDialog
           title={`Delete "${pendingDelete.name}"?`}
-          info="This permanently removes the library and its assets. You cannot undo it."
+          info="This permanently removes the part and its assets. You cannot undo it."
           busy={deleting}
           onCancel={() => {
             if (!deleting) {
@@ -561,7 +550,7 @@ const JayrrLibraryMenuConnected = () => {
           }}
         />
       ) : null}
-    </div>
+    </LibrariesPane>
   );
 };
 

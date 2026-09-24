@@ -27,6 +27,7 @@ import {
 } from "../../data/jayrrScenes";
 
 import { JayrrConfirmDialog } from "./JayrrConfirmDialog";
+import { LibrariesPane } from "./librariesChrome";
 import "./JayrrLibraryMenu.scss";
 
 import type { DragEvent, ReactNode, RefObject } from "react";
@@ -35,6 +36,26 @@ import type { Id } from "../../../convex/_generated/dataModel";
 
 const SCENE_AUTOSAVE_DELAY_MS = 1000;
 const JAYRR_SCENE_DRAG = "application/x-jayrr-scene";
+const DEFAULT_FOLDER_FILL = "var(--island-bg-color)";
+const FOLDER_FILL_SWATCHES = [
+  "#fff3bf",
+  "#d0ebff",
+  "#d3f9d8",
+  "#ffe0e0",
+  "#e5dbff",
+  "#ffe8cc",
+] as const;
+
+const hex6 = (value: string) => {
+  if (/^#[0-9a-fA-F]{6}$/.test(value)) {
+    return value.toLowerCase();
+  }
+  if (/^#[0-9a-fA-F]{3}$/.test(value)) {
+    const raw = value.slice(1);
+    return `#${raw[0]}${raw[0]}${raw[1]}${raw[1]}${raw[2]}${raw[2]}`.toLowerCase();
+  }
+  return "#ffffff";
+};
 
 let draggingSceneId: Id<"scenes"> | null = null;
 
@@ -162,6 +183,7 @@ const JayrrSceneMenuConnected = () => {
   const removeScene = useMutation(api.scenes.remove);
   const createFolder = useMutation(api.sceneFolders.create);
   const renameFolder = useMutation(api.sceneFolders.rename);
+  const setFolderFillColor = useMutation(api.sceneFolders.setFillColor);
   const removeFolder = useMutation(api.sceneFolders.remove);
 
   const excalidrawAPIRef = useRef(excalidrawAPI);
@@ -495,6 +517,13 @@ const JayrrSceneMenuConnected = () => {
     }
   };
 
+  const requestDelete = (target: PendingDelete) => {
+    setOpenMenu(null);
+    window.setTimeout(() => {
+      setPendingDelete(target);
+    }, 0);
+  };
+
   const onConfirmDelete = async () => {
     if (!pendingDelete || busy) {
       return;
@@ -553,24 +582,54 @@ const JayrrSceneMenuConnected = () => {
     }
   };
 
+  const onSetFolderFill = async (
+    folderId: Id<"sceneFolders">,
+    fillColor: string | null,
+  ) => {
+    try {
+      await setFolderFillColor({ folderId, fillColor });
+    } catch (error) {
+      toast(
+        error instanceof Error ? error.message : "Could not set fill color",
+      );
+    }
+  };
+
   const isMenuOpen = (target: MenuTarget) =>
     openMenu?.kind === target.kind && openMenu.id === target.id;
 
   const isRenaming = (target: MenuTarget) =>
     renaming?.kind === target.kind && renaming.id === target.id;
 
+  const headerActions = (
+    <SceneHeaderActions
+      busy={busy}
+      onCreateFolder={() => {
+        void onCreateFolder();
+      }}
+      onNewScene={() => {
+        void onNewScene();
+      }}
+      onSaveScene={() => {
+        void onSaveScene();
+      }}
+    />
+  );
+
   if (folders === undefined || scenes === undefined) {
     return (
-      <div className="layer-ui__library jayrr-library">
+      <LibrariesPane fallbackTitle="Scenes">
         <div className="layer-ui__library-message">Loading scenes…</div>
-      </div>
+      </LibrariesPane>
     );
   }
 
   if (openFolderId && openFolder) {
     return (
-      <div className="layer-ui__library jayrr-library">
-        <div className="jayrr-library__header">
+      <LibrariesPane
+        fallbackTitle="Scenes"
+        actions={headerActions}
+        back={
           <button
             type="button"
             className="jayrr-library__icon-button"
@@ -604,7 +663,9 @@ const JayrrSceneMenuConnected = () => {
           >
             {chevronLeftIcon}
           </button>
-          {isRenaming({ kind: "folder", id: openFolder._id }) ? (
+        }
+        title={
+          isRenaming({ kind: "folder", id: openFolder._id }) ? (
             <input
               ref={renameInputRef}
               className="jayrr-library__rename-input"
@@ -626,27 +687,17 @@ const JayrrSceneMenuConnected = () => {
             <button
               type="button"
               className="jayrr-library__title"
-              onClick={() => {
+              title="Double-click to rename"
+              onDoubleClick={() => {
                 setDraftName(openFolder.name);
                 setRenaming({ kind: "folder", id: openFolder._id });
               }}
             >
               {openFolder.name}
             </button>
-          )}
-          <SceneHeaderActions
-            busy={busy}
-            onCreateFolder={() => {
-              void onCreateFolder();
-            }}
-            onNewScene={() => {
-              void onNewScene();
-            }}
-            onSaveScene={() => {
-              void onSaveScene();
-            }}
-          />
-        </div>
+          )
+        }
+      >
         <div className="jayrr-library__body">
           {scenes.length === 0 ? (
             <div className="library-menu-items__no-items">
@@ -670,7 +721,7 @@ const JayrrSceneMenuConnected = () => {
               isMenuOpen={isMenuOpen}
               setOpenMenu={setOpenMenu}
               setRenaming={setRenaming}
-              setPendingDelete={setPendingDelete}
+              setPendingDelete={requestDelete}
               commitRename={commitRename}
               onLoadScene={onLoadScene}
               onUpdateScene={onUpdateScene}
@@ -692,29 +743,14 @@ const JayrrSceneMenuConnected = () => {
             }}
           />
         ) : null}
-      </div>
+      </LibrariesPane>
     );
   }
 
   const hasContent = folders.length > 0 || scenes.length > 0;
 
   return (
-    <div className="layer-ui__library jayrr-library">
-      <div className="jayrr-library__header">
-        <div className="jayrr-library__title">Scenes</div>
-        <SceneHeaderActions
-          busy={busy}
-          onCreateFolder={() => {
-            void onCreateFolder();
-          }}
-          onNewScene={() => {
-            void onNewScene();
-          }}
-          onSaveScene={() => {
-            void onSaveScene();
-          }}
-        />
-      </div>
+    <LibrariesPane fallbackTitle="Scenes" actions={headerActions}>
       <div className="jayrr-library__body">
         {!hasContent ? (
           <div className="library-menu-items__no-items">
@@ -739,9 +775,12 @@ const JayrrSceneMenuConnected = () => {
                 menuOpen={isMenuOpen({ kind: "folder", id: folder._id })}
                 setOpenMenu={setOpenMenu}
                 setRenaming={setRenaming}
-                setPendingDelete={setPendingDelete}
+                setPendingDelete={requestDelete}
                 commitRename={commitRename}
                 onOpen={() => openFolderById(folder._id)}
+                onSetFill={(fillColor) => {
+                  void onSetFolderFill(folder._id, fillColor);
+                }}
                 onDropScene={(sceneId) => {
                   void onMoveScene(sceneId, folder._id);
                 }}
@@ -761,7 +800,7 @@ const JayrrSceneMenuConnected = () => {
                 menuOpen={isMenuOpen({ kind: "scene", id: scene._id })}
                 setOpenMenu={setOpenMenu}
                 setRenaming={setRenaming}
-                setPendingDelete={setPendingDelete}
+                setPendingDelete={requestDelete}
                 commitRename={commitRename}
                 onLoad={() => {
                   void onLoadScene(scene._id);
@@ -792,7 +831,7 @@ const JayrrSceneMenuConnected = () => {
           }}
         />
       ) : null}
-    </div>
+    </LibrariesPane>
   );
 };
 
@@ -808,7 +847,7 @@ const SceneHeaderActions = ({
   onSaveScene: () => void;
 }) => {
   return (
-    <div className="jayrr-library__header-actions">
+    <>
       <button
         type="button"
         className="jayrr-library__icon-button"
@@ -839,7 +878,7 @@ const SceneHeaderActions = ({
       >
         {DeviceFloppyIcon}
       </button>
-    </div>
+    </>
   );
 };
 
@@ -853,6 +892,7 @@ type SceneRow = {
 type FolderRow = {
   _id: Id<"sceneFolders">;
   name: string;
+  fillColor?: string;
   sceneCount: number;
 };
 
@@ -885,7 +925,7 @@ const SceneGrid = ({
   isMenuOpen: (target: MenuTarget) => boolean;
   setOpenMenu: (value: MenuTarget | null) => void;
   setRenaming: (value: MenuTarget | null) => void;
-  setPendingDelete: (value: PendingDelete | null) => void;
+  setPendingDelete: (value: PendingDelete) => void;
   commitRename: () => void;
   onLoadScene: (sceneId: Id<"scenes">) => void;
   onUpdateScene: (sceneId: Id<"scenes">) => void;
@@ -950,7 +990,7 @@ const SceneCard = ({
   menuOpen: boolean;
   setOpenMenu: (value: MenuTarget | null) => void;
   setRenaming: (value: MenuTarget | null) => void;
-  setPendingDelete: (value: PendingDelete | null) => void;
+  setPendingDelete: (value: PendingDelete) => void;
   commitRename: () => void;
   onLoad: () => void;
   onUpdate: () => void;
@@ -1075,6 +1115,7 @@ const FolderCard = ({
   setPendingDelete,
   commitRename,
   onOpen,
+  onSetFill,
   onDropScene,
 }: {
   folder: FolderRow;
@@ -1086,9 +1127,10 @@ const FolderCard = ({
   menuOpen: boolean;
   setOpenMenu: (value: MenuTarget | null) => void;
   setRenaming: (value: MenuTarget | null) => void;
-  setPendingDelete: (value: PendingDelete | null) => void;
+  setPendingDelete: (value: PendingDelete) => void;
   commitRename: () => void;
   onOpen: () => void;
+  onSetFill: (fillColor: string | null) => void;
   onDropScene: (sceneId: Id<"scenes">) => void;
 }) => {
   const [isOver, setIsOver] = useState(false);
@@ -1163,7 +1205,7 @@ const FolderCard = ({
           onOpen();
         }}
       >
-        <FolderCardShape />
+        <FolderCardShape fill={folder.fillColor} />
       </button>
       <DropdownMenu open={menuOpen}>
         <DropdownMenu.Trigger
@@ -1188,6 +1230,13 @@ const FolderCard = ({
           >
             Rename
           </DropdownMenu.Item>
+          <DropdownMenu.ItemCustom>
+            <FolderFillPicker
+              fillColor={folder.fillColor}
+              disabled={busy}
+              onChange={onSetFill}
+            />
+          </DropdownMenu.ItemCustom>
           <DropdownMenu.Item
             icon={TrashIcon}
             onSelect={() => {
@@ -1206,7 +1255,7 @@ const FolderCard = ({
   );
 };
 
-const FolderCardShape = () => (
+const FolderCardShape = ({ fill }: { fill?: string }) => (
   <svg
     className="jayrr-folder-card__shape"
     viewBox="0 0 200 156"
@@ -1215,14 +1264,69 @@ const FolderCardShape = () => (
   >
     <path
       d="M26 34h48c6 0 9 2 12 6l8 11c2 3 5 5 9 5h69c10 0 14 4 14 14v62c0 10-4 14-14 14H26c-10 0-14-4-14-14V48c0-10 4-14 14-14z"
-      fill="var(--island-bg-color)"
+      fill={fill ?? DEFAULT_FOLDER_FILL}
       stroke="currentColor"
-      strokeWidth="8"
+      strokeWidth="3"
       strokeLinejoin="round"
       strokeLinecap="round"
     />
   </svg>
 );
+
+const FolderFillPicker = ({
+  fillColor,
+  disabled,
+  onChange,
+}: {
+  fillColor?: string;
+  disabled: boolean;
+  onChange: (value: string | null) => void;
+}) => {
+  const selected = fillColor ? fillColor.toLowerCase() : null;
+  const customValue = fillColor ? hex6(fillColor) : "#ffffff";
+  return (
+    <div className="jayrr-folder-fill">
+      <span className="jayrr-folder-fill__label">Fill color</span>
+      <div className="jayrr-folder-fill__swatches">
+        <button
+          type="button"
+          className={
+            selected
+              ? "jayrr-folder-fill__swatch jayrr-folder-fill__swatch--default"
+              : "jayrr-folder-fill__swatch jayrr-folder-fill__swatch--default is-selected"
+          }
+          aria-label="Default fill"
+          disabled={disabled}
+          onClick={() => onChange(null)}
+        />
+        {FOLDER_FILL_SWATCHES.map((color) => (
+          <button
+            key={color}
+            type="button"
+            className={
+              selected === color
+                ? "jayrr-folder-fill__swatch is-selected"
+                : "jayrr-folder-fill__swatch"
+            }
+            style={{ background: color }}
+            aria-label={`Fill ${color}`}
+            disabled={disabled}
+            onClick={() => onChange(color)}
+          />
+        ))}
+        <label className="jayrr-folder-fill__custom">
+          <input
+            type="color"
+            value={customValue}
+            disabled={disabled}
+            aria-label="Custom fill color"
+            onChange={(event) => onChange(event.target.value)}
+          />
+        </label>
+      </div>
+    </div>
+  );
+};
 
 const DeleteConfirm = ({
   pendingDelete,

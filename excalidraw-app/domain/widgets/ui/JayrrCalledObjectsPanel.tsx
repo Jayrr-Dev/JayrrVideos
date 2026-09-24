@@ -65,7 +65,7 @@ export const JayrrCalledObjectsPanel = () => {
         </span>
       </div>
       <div className="jayrr-library__body">
-        <ul className="jayrr-scene-grid">
+        <ul className="jayrr-scene-grid" style={{ paddingTop: "2px" }}>
           {CALLED_OBJECTS.map((object) => (
             <li
               key={object.kind}

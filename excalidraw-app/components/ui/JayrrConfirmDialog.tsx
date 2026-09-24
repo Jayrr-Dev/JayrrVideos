@@ -30,6 +30,8 @@ export const JayrrConfirmDialog = ({
     <Dialog
       className="jayrr-confirm"
       size={420}
+      autofocus={false}
+      closeOnClickOutside={false}
       onCloseRequest={() => {
         if (!busy) {
           onCancel();

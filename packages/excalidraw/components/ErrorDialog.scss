@@ -1,0 +1,28 @@
+.excalidraw {
+  .ErrorDialog__title {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .ErrorDialog__copy {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    margin: 0;
+    padding: 0.15rem 0.45rem;
+    border: 1px solid var(--default-border-color);
+    border-radius: 0.4rem;
+    background: transparent;
+    color: var(--text-primary-color);
+    font: inherit;
+    font-size: 0.75rem;
+    line-height: 1.2;
+    cursor: pointer;
+
+    svg {
+      width: 0.9rem;
+      height: 0.9rem;
+    }
+  }
+}

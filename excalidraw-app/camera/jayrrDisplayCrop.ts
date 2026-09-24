@@ -37,7 +37,10 @@ export const containRect = (
   boxW: number,
   boxH: number,
 ) => {
-  const scale = Math.min(boxW / Math.max(sourceW, 1), boxH / Math.max(sourceH, 1));
+  const scale = Math.min(
+    boxW / Math.max(sourceW, 1),
+    boxH / Math.max(sourceH, 1),
+  );
   const width = sourceW * scale;
   const height = sourceH * scale;
   return {

@@ -1,17 +1,30 @@
-import { DEFAULT_SIDEBAR } from "@excalidraw/common";
+import {
+  DEFAULT_SIDEBAR,
+  LIBRARY_SIDEBAR_TAB,
+  SCENE_SIDEBAR_TAB,
+} from "@excalidraw/common";
 import { isNonDeletedElement } from "@excalidraw/element";
 import {
   DefaultSidebar,
   Sidebar,
   useExcalidrawAPI,
 } from "@excalidraw/excalidraw";
-import { useExcalidrawContainer } from "@excalidraw/excalidraw/components/App";
+import {
+  useExcalidrawContainer,
+  useExcalidrawAppState,
+} from "@excalidraw/excalidraw/components/App";
 import {
   EmbedIcon,
   aiIcon,
   presentationIcon,
 } from "@excalidraw/excalidraw/components/icons";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 
 import type { NonDeletedExcalidrawElement } from "@excalidraw/element/types";
@@ -41,16 +54,16 @@ import {
 import { JayrrCameraHost } from "../camera/JayrrCameraHost";
 import { JayrrFrameHost } from "../frame/JayrrFrameHost";
 
-import { JayrrDocsPanel } from "./JayrrDocsPanel";
 import { JayrrPresentCursor } from "./JayrrPresentCursor";
 import { JayrrPresentHud, JayrrPresentPanel } from "./JayrrPresentPanel";
-import {
-  JAYRR_RECORDINGS_TAB,
-  recordingsTabIcon,
-} from "./JayrrPresentRecordingsPanel";
+import { JAYRR_RECORDINGS_TAB } from "./JayrrPresentRecordingsPanel";
 import { JayrrPresentTranslationOverlay } from "./JayrrPresentTranslationOverlay";
 import { JAYRR_PRESENT_TAB } from "./buildPresentDeck";
-import { docsViewAtom, persistDocsView } from "./docsView";
+import {
+  docsViewAtom,
+  persistDocsView,
+  recordingsUploadingAtom,
+} from "./docsView";
 import {
   JAYRR_RECORDING_DRAG,
   insertPresentRecordingAt,
@@ -75,6 +88,7 @@ export const JayrrPresentHost = ({
   onPresentingChange?: (presenting: boolean) => void;
 }) => {
   const api = useExcalidrawAPI();
+  const appState = useExcalidrawAppState();
   const { container } = useExcalidrawContainer();
   const [elements, setElements] = useState<
     readonly NonDeletedExcalidrawElement[]
@@ -85,7 +99,68 @@ export const JayrrPresentHost = ({
   const [recording, setRecording] = useState(false);
   const [recordingPaused, setRecordingPaused] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const openSidebarTab = appState.openSidebar?.tab;
+
+  useEffect(() => {
+    appJotaiStore.set(recordingsUploadingAtom, uploading);
+  }, [uploading]);
+
+  useLayoutEffect(() => {
+    if (openSidebarTab === SCENE_SIDEBAR_TAB) {
+      persistDocsView("scene");
+      appJotaiStore.set(docsViewAtom, "scene");
+      api?.updateScene({
+        appState: {
+          openSidebar: {
+            name: DEFAULT_SIDEBAR.name,
+            tab: LIBRARY_SIDEBAR_TAB,
+          },
+        },
+      });
+      return;
+    }
+    if (openSidebarTab === JAYRR_RECORDINGS_TAB) {
+      persistDocsView("record");
+      appJotaiStore.set(docsViewAtom, "record");
+      api?.updateScene({
+        appState: {
+          openSidebar: {
+            name: DEFAULT_SIDEBAR.name,
+            tab: LIBRARY_SIDEBAR_TAB,
+          },
+        },
+      });
+    }
+  }, [api, openSidebarTab]);
   const finishingRef = useRef(false);
+  const pinnedLibrariesRef = useRef(false);
+
+  useLayoutEffect(() => {
+    if (!api || pinnedLibrariesRef.current) {
+      return;
+    }
+    pinnedLibrariesRef.current = true;
+    const state = api.getAppState();
+    const sidebarOpen = state.openSidebar?.name === DEFAULT_SIDEBAR.name;
+    const openTab = state.openSidebar?.tab;
+    if (sidebarOpen && openTab === JAYRR_PRESENT_TAB) {
+      api.updateScene({
+        appState: {
+          defaultSidebarTabPreference: LIBRARY_SIDEBAR_TAB,
+          openSidebar: {
+            name: DEFAULT_SIDEBAR.name,
+            tab: LIBRARY_SIDEBAR_TAB,
+          },
+        },
+      });
+      return;
+    }
+    api.updateScene({
+      appState: {
+        defaultSidebarTabPreference: LIBRARY_SIDEBAR_TAB,
+      },
+    });
+  }, [api]);
   const recordingRef = useRef(false);
   const startedAtRef = useRef(0);
   const pausedAtRef = useRef(0);
@@ -163,7 +238,7 @@ export const JayrrPresentHost = ({
         appState: {
           openSidebar: {
             name: DEFAULT_SIDEBAR.name,
-            tab: JAYRR_RECORDINGS_TAB,
+            tab: LIBRARY_SIDEBAR_TAB,
           },
         },
       });
@@ -346,7 +421,7 @@ export const JayrrPresentHost = ({
         <>
           <JayrrEditorSession>
             <JayrrPresentTranslationOverlay deck={deck} />
-            <DefaultSidebar docked onDock={false}>
+            <DefaultSidebar docked onDock={false} hideSceneTab>
               <DefaultSidebar.TabTriggers>
                 <Sidebar.TabTrigger
                   tab={JAYRR_PRESENT_TAB}
@@ -354,13 +429,6 @@ export const JayrrPresentHost = ({
                   aria-label="Present"
                 >
                   {presentationIcon}
-                </Sidebar.TabTrigger>
-                <Sidebar.TabTrigger
-                  tab={JAYRR_RECORDINGS_TAB}
-                  title="Docs"
-                  aria-label="Docs"
-                >
-                  {recordingsTabIcon}
                 </Sidebar.TabTrigger>
                 <Sidebar.TabTrigger
                   tab={JAYRR_EDITOR_TAB}
@@ -408,11 +476,6 @@ export const JayrrPresentHost = ({
                     startRecordPresent={startRecordPresent}
                     stopPresent={stopPresent}
                   />
-                </TopErrorBoundary>
-              </Sidebar.Tab>
-              <Sidebar.Tab tab={JAYRR_RECORDINGS_TAB}>
-                <TopErrorBoundary compact>
-                  <JayrrDocsPanel uploading={uploading} />
                 </TopErrorBoundary>
               </Sidebar.Tab>
               <Sidebar.Tab tab={JAYRR_AI_TAB}>
