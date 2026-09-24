@@ -12,13 +12,13 @@ import React, { useState } from "react";
 
 import {
   DEFAULT_SIDEBAR,
+  LIBRARY_SIDEBAR_TAB,
   isDevEnv,
-  SCENE_SIDEBAR_TAB,
 } from "@excalidraw/common";
 
 import type { Theme } from "@excalidraw/element/types";
 
-import { useAtomValue } from "../app-jotai";
+import { appJotaiStore, useAtomValue } from "../app-jotai";
 import { LanguageList } from "../app-language/LanguageList";
 import { isConvexLinked } from "../convexClient";
 import {
@@ -30,6 +30,7 @@ import {
 import { openBlankCanvas, saveCanvasAsScene } from "../data/jayrrScenes";
 import { JayrrFeatureFlags } from "../domain/flags/JayrrFeatureFlags";
 import { JAYRR_PRESENT_TAB } from "../present/buildPresentDeck";
+import { docsViewAtom, persistDocsView } from "../present/docsView";
 
 import { saveDebugState } from "./DebugCanvas";
 import { JayrrSoundLibraryDialog } from "./ui";
@@ -126,11 +127,13 @@ export const AppMainMenu: React.FC<{
               .then(() => {
                 openBlankCanvas(excalidrawAPI);
                 props.onToast(`Saved "${name.trim()}" as a scene`);
+                persistDocsView("scene");
+                appJotaiStore.set(docsViewAtom, "scene");
                 excalidrawAPI.updateScene({
                   appState: {
                     openSidebar: {
                       name: DEFAULT_SIDEBAR.name,
-                      tab: SCENE_SIDEBAR_TAB,
+                      tab: LIBRARY_SIDEBAR_TAB,
                     },
                   },
                 });
@@ -151,6 +154,12 @@ export const AppMainMenu: React.FC<{
         <MainMenu.DefaultItems.SaveAsImage />
         <MainMenu.DefaultItems.CommandPalette className="highlighted" />
         <MainMenu.DefaultItems.SearchMenu />
+        {props.isCollabEnabled ? (
+          <MainMenu.DefaultItems.LiveCollaborationTrigger
+            isCollaborating={props.isCollaborating}
+            onSelect={props.onCollabDialogOpen}
+          />
+        ) : null}
         <MainMenu.Item
           icon={presentationIcon}
           onSelect={() => {

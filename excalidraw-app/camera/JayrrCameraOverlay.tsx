@@ -7,6 +7,12 @@ import { createPortal } from "react-dom";
 import type { NonDeletedExcalidrawElement } from "@excalidraw/element/types";
 
 import { useAtomValue } from "../app-jotai";
+import {
+  peekJayrrPhoneStream,
+  releaseJayrrPhoneSelf,
+  retainJayrrPhoneSelf,
+  subscribeJayrrPhone,
+} from "../collab/jayrrCollabVideoSession";
 import { cameraCutoutAtom } from "../domain/flags/cameraCutoutFlag";
 import {
   getTranscribeEnabled,
@@ -17,6 +23,8 @@ import {
 import {
   canLinkJayrrCamera,
   isJayrrDisplay,
+  isJayrrPhone,
+  JAYRR_PHONE_SELF,
   readDisplayQuality,
   readDisplayRate,
   readJayrrCamera,
@@ -65,7 +73,9 @@ const CameraVideo = ({
   const cutoutRef = useRef<HTMLCanvasElement | null>(null);
   const cutout = useAtomValue(cameraCutoutAtom);
   const display = isJayrrDisplay(camera);
-  const cameraId = display ? null : camera.deviceId;
+  const phone = isJayrrPhone(camera);
+  const phoneUserId = phone ? camera.userId : null;
+  const cameraId = display || phone ? null : camera.deviceId;
   const nonce = display ? camera.nonce ?? 0 : 0;
   const surface = display ? camera.surface : undefined;
   const quality = readDisplayQuality(display ? camera : null);
@@ -86,6 +96,9 @@ const CameraVideo = ({
   useEffect(() => {
     const video = videoRef.current;
     if (!video) {
+      return;
+    }
+    if (phone) {
       return;
     }
     let cancelled = false;
@@ -138,7 +151,49 @@ const CameraVideo = ({
         releaseJayrrCamera(cameraId, held);
       }
     };
-  }, [cameraId, display, elementId, nonce, surface]);
+  }, [cameraId, display, elementId, nonce, phone, surface]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !phone || !phoneUserId) {
+      return;
+    }
+    if (phoneUserId === JAYRR_PHONE_SELF) {
+      retainJayrrPhoneSelf();
+    }
+    let cancelled = false;
+    const attach = () => {
+      if (cancelled) {
+        return;
+      }
+      const stream = peekJayrrPhoneStream(phoneUserId);
+      if (!stream) {
+        video.srcObject = null;
+        setJayrrCameraVideo(elementId, null);
+        setStreamReady(false);
+        return;
+      }
+      if (video.srcObject !== stream) {
+        video.srcObject = stream;
+        video.dataset.jayrrMirror = phoneUserId === JAYRR_PHONE_SELF ? "1" : "";
+        setJayrrCameraVideo(elementId, video);
+        setStreamReady(true);
+        void video.play().catch(() => undefined);
+      }
+    };
+    attach();
+    const stopListen = subscribeJayrrPhone(attach);
+    return () => {
+      cancelled = true;
+      stopListen();
+      if (phoneUserId === JAYRR_PHONE_SELF) {
+        releaseJayrrPhoneSelf();
+      }
+      setJayrrCameraVideo(elementId, null);
+      setStreamReady(false);
+      video.srcObject = null;
+    };
+  }, [elementId, phone, phoneUserId]);
 
   useEffect(() => {
     if (!display || !streamReady) {
@@ -193,19 +248,19 @@ const CameraVideo = ({
       }
       cancelAnimationFrame(callback);
     };
-  }, [api, cameraId, display, elementId, nonce, surface]);
+  }, [api, cameraId, display, elementId, nonce, phone, phoneUserId, surface]);
 
   useEffect(() => {
     const video = videoRef.current;
     const canvas = cutoutRef.current;
-    if (!video || !canvas || display || cutout === "off") {
+    if (!video || !canvas || display || phone || cutout === "off") {
       return;
     }
     if (!streamReady) {
       return;
     }
     return startJayrrCameraCutout(elementId, video, canvas, cutout);
-  }, [cutout, display, elementId, streamReady]);
+  }, [cutout, display, elementId, phone, streamReady]);
 
   return (
     <>
@@ -213,7 +268,7 @@ const CameraVideo = ({
         ref={videoRef}
         className="jayrr-camera-window__video"
         autoPlay
-        muted
+        muted={!phone || phoneUserId === JAYRR_PHONE_SELF}
         playsInline
       />
       <canvas ref={cutoutRef} className="jayrr-camera-window__cutout" />

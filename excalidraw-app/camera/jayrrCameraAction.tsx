@@ -8,7 +8,7 @@ import { getDropdownMenuItemClassName } from "@excalidraw/excalidraw/components/
 import { getSelectedElements } from "@excalidraw/excalidraw/scene";
 import { useConvexAuth, useMutation } from "convex/react";
 import { Popover } from "radix-ui";
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode, useEffect } from "react";
 
 import type {
   ExcalidrawElement,
@@ -17,6 +17,12 @@ import type {
 import type { Action } from "@excalidraw/excalidraw/actions/types";
 
 import { useAtomValue, useSetAtom } from "../app-jotai";
+import { isCollaboratingAtom } from "../collab/Collab";
+import {
+  getJayrrPhoneError,
+  listJayrrPhonePeople,
+  subscribeJayrrPhone,
+} from "../collab/jayrrCollabVideoSession";
 import { IconButton, Island, RadioButton } from "../components/ui";
 import { api, isConvexLinked } from "../convexClient";
 import {
@@ -32,17 +38,21 @@ import {
   JAYRR_DISPLAY_RATES,
   JAYRR_DISPLAY_SOURCE,
   JAYRR_DISPLAY_SURFACES,
+  JAYRR_PHONE_SELF,
   canLinkJayrrCamera,
   isFullDisplayCrop,
   isJayrrDisplay,
+  isJayrrPhone,
   jayrrCameraLabel,
   jayrrDisplayQualityLabel,
   jayrrDisplaySurfaceLabel,
+  jayrrPhoneSource,
   parseDisplayCrop,
   readDisplayCrop,
   readDisplayQuality,
   readDisplayRate,
   readJayrrCamera,
+  readPhoneSource,
   writeJayrrCamera,
   type JayrrCamera,
   type JayrrDisplayCrop,
@@ -76,6 +86,24 @@ const cameraIcon = (
       fill="none"
       stroke="currentColor"
       strokeWidth="1.5"
+    />
+  </svg>
+);
+
+const phoneIcon = (
+  <svg
+    aria-hidden="true"
+    focusable="false"
+    width="20"
+    height="20"
+    viewBox="0 0 20 20"
+  >
+    <path
+      d="M6.2 3.6c.5-.5 1.3-.5 1.7.1l1.3 1.9c.4.5.3 1.3-.2 1.7l-.9.7c.8 1.6 2.1 2.9 3.7 3.7l.7-.9c.4-.5 1.2-.6 1.7-.2l1.9 1.3c.6.4.6 1.2.1 1.7l-1.1 1.1c-.5.5-1.3.7-2 .5-2.4-.6-4.6-2-6.3-3.7-1.7-1.7-3.1-3.9-3.7-6.3-.2-.7 0-1.5.5-2Z"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinejoin="round"
     />
   </svg>
 );
@@ -227,6 +255,9 @@ const sourceValue = (camera: JayrrCamera | null) => {
   if (isJayrrDisplay(camera)) {
     return JAYRR_DISPLAY_SOURCE;
   }
+  if (isJayrrPhone(camera)) {
+    return jayrrPhoneSource(camera.userId);
+  }
   return camera.deviceId;
 };
 
@@ -270,6 +301,13 @@ const cameraFromValue = (
         label: jayrrCameraLabel(bag) ?? jayrrDisplaySurfaceLabel(surface),
       };
     }
+    if (bag.kind === "phone" && typeof bag.userId === "string" && bag.userId) {
+      return {
+        kind: "phone",
+        userId: bag.userId,
+        label: bag.label,
+      };
+    }
     if ("deviceId" in bag && typeof bag.deviceId === "string" && bag.deviceId) {
       return {
         kind: "camera",
@@ -283,6 +321,14 @@ const cameraFromValue = (
   }
   if (value === JAYRR_DISPLAY_SOURCE) {
     return { kind: "display", nonce: Date.now(), label: "Screen" };
+  }
+  const phoneUserId = readPhoneSource(value);
+  if (phoneUserId) {
+    return {
+      kind: "phone",
+      userId: phoneUserId,
+      label: phoneUserId === JAYRR_PHONE_SELF ? "You" : undefined,
+    };
   }
   const device = devices.find((item) => item.deviceId === value);
   return {
@@ -486,6 +532,11 @@ const StreamFields = ({
   onToggleCrop,
   onResetCrop,
   onUnlock,
+  phoneSource,
+  collaborating,
+  people,
+  phoneError,
+  onPhoneChange,
 }: {
   compact: boolean;
   source: string;
@@ -506,11 +557,18 @@ const StreamFields = ({
   onToggleCrop: () => void;
   onResetCrop: () => void;
   onUnlock: () => void;
+  phoneSource: string;
+  collaborating: boolean;
+  people: Array<{ userId: string; label: string }>;
+  phoneError: string | null;
+  onPhoneChange: (userId: string) => void;
 }) => {
   const namedDevices = devices.filter((device) => device.deviceId);
-  const cameraSource = source === JAYRR_DISPLAY_SOURCE ? "" : source;
+  const cameraSource =
+    source === JAYRR_DISPLAY_SOURCE || phoneSource ? "" : source;
   const desktopOn = source === JAYRR_DISPLAY_SOURCE;
   const cameraOn = Boolean(cameraSource);
+  const phoneOn = Boolean(phoneSource);
   const linkedMissing = Boolean(
     cameraSource &&
       !namedDevices.some((device) => device.deviceId === cameraSource),
@@ -614,6 +672,53 @@ const StreamFields = ({
       )}
     </StreamChoice>
   );
+  const phoneChoice = (
+    <StreamChoice
+      title="Phone"
+      icon={phoneIcon}
+      active={phoneOn}
+      compact={compact}
+      disabled={false}
+    >
+      {(close) => (
+        <>
+          {phoneError ? (
+            <span className="jayrr-camera-picker__error">{phoneError}</span>
+          ) : null}
+          {!collaborating ? (
+            <span className="jayrr-camera-picker__error">
+              Start live collaboration first
+            </span>
+          ) : null}
+          <MenuItem
+            selected={!phoneOn}
+            onSelect={() => {
+              if (phoneOn) {
+                onPhoneChange("");
+              }
+              close();
+            }}
+          >
+            Off
+          </MenuItem>
+          {collaborating
+            ? people.map((person) => (
+                <MenuItem
+                  key={person.userId}
+                  selected={phoneSource === person.userId}
+                  onSelect={() => {
+                    onPhoneChange(person.userId);
+                    close();
+                  }}
+                >
+                  {person.label}
+                </MenuItem>
+              ))
+            : null}
+        </>
+      )}
+    </StreamChoice>
+  );
   const cropChoice = (
     <IconButton
       type="button"
@@ -628,6 +733,7 @@ const StreamFields = ({
     <>
       <div className="compact-action-item">{cameraChoice}</div>
       <div className="compact-action-item">{desktopChoice}</div>
+      <div className="compact-action-item">{phoneChoice}</div>
       {desktopOn ? (
         <div className="compact-action-item">{cropChoice}</div>
       ) : null}
@@ -636,6 +742,7 @@ const StreamFields = ({
     <div className="buttonList">
       {cameraChoice}
       {desktopChoice}
+      {phoneChoice}
     </div>
   );
 
@@ -697,11 +804,25 @@ const CameraPanel = ({
   const compact = mode !== "full";
   const cropElementId = useAtomValue(desktopCropElementIdAtom);
   const setCropElementId = useSetAtom(desktopCropElementIdAtom);
+  const collaborating = useAtomValue(isCollaboratingAtom);
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [phoneTick, setPhoneTick] = useState(0);
   const cropActive = cropElementId === elementId;
   const hasCrop = !isFullDisplayCrop(crop);
+  const phoneSource = readPhoneSource(source) ?? "";
+  const people = listJayrrPhonePeople();
+  const phoneError = getJayrrPhoneError();
+  void phoneTick;
+
+  useEffect(
+    () =>
+      subscribeJayrrPhone(() => {
+        setPhoneTick((value) => value + 1);
+      }),
+    [],
+  );
 
   const unlock = async () => {
     setLoading(true);
@@ -719,10 +840,6 @@ const CameraPanel = ({
     }
   };
 
-  useEffect(() => {
-    void unlock();
-  }, []);
-
   const pickCamera = (next: string) => {
     setCropElementId(null);
     if (!next) {
@@ -734,6 +851,20 @@ const CameraPanel = ({
       kind: "camera",
       deviceId: next,
       label: device?.label || sourceLabel || undefined,
+    });
+  };
+
+  const pickPhone = (userId: string) => {
+    setCropElementId(null);
+    if (!userId) {
+      onChange({ off: true });
+      return;
+    }
+    const person = people.find((item) => item.userId === userId);
+    onChange({
+      kind: "phone",
+      userId,
+      label: person?.label || sourceLabel || undefined,
     });
   };
 
@@ -810,6 +941,11 @@ const CameraPanel = ({
       onUnlock={() => {
         void unlock();
       }}
+      phoneSource={phoneSource}
+      collaborating={collaborating}
+      people={people}
+      phoneError={phoneError}
+      onPhoneChange={pickPhone}
     />
   );
 

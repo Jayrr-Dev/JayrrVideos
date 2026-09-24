@@ -30,6 +30,11 @@ export const AppWelcomeScreen: React.FC<{
         </WelcomeScreen.Center.Heading>
         <WelcomeScreen.Center.Menu>
           <WelcomeScreen.Center.MenuItemLoadScene />
+          {props.isCollabEnabled ? (
+            <WelcomeScreen.Center.MenuItemLiveCollaborationTrigger
+              onSelect={props.onCollabDialogOpen}
+            />
+          ) : null}
         </WelcomeScreen.Center.Menu>
       </WelcomeScreen.Center>
     </WelcomeScreen>

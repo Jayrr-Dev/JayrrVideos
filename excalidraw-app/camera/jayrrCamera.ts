@@ -37,10 +37,22 @@ export const FULL_DISPLAY_CROP: JayrrDisplayCrop = {
 
 export const MIN_DISPLAY_CROP = 0.04;
 
+export const JAYRR_PHONE_SELF = "self";
+
+export const jayrrPhoneSource = (userId: string) => `phone:${userId}`;
+
+export const readPhoneSource = (value: string) =>
+  value.startsWith("phone:") ? value.slice("phone:".length) : null;
+
 export type JayrrCamera =
   | {
       kind?: "camera";
       deviceId: string;
+      label?: string;
+    }
+  | {
+      kind: "phone";
+      userId: string;
       label?: string;
     }
   | {
@@ -89,9 +101,7 @@ const isDisplaySurface = (value: unknown): value is JayrrDisplaySurface =>
 
 const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
 
-export const clampDisplayCrop = (
-  crop: JayrrDisplayCrop,
-): JayrrDisplayCrop => {
+export const clampDisplayCrop = (crop: JayrrDisplayCrop): JayrrDisplayCrop => {
   const width = Math.min(1, Math.max(MIN_DISPLAY_CROP, crop.width));
   const height = Math.min(1, Math.max(MIN_DISPLAY_CROP, crop.height));
   const x = clamp01(Math.min(crop.x, 1 - width));
@@ -104,7 +114,9 @@ export const clampDisplayCrop = (
   };
 };
 
-export const parseDisplayCrop = (value: unknown): JayrrDisplayCrop | undefined => {
+export const parseDisplayCrop = (
+  value: unknown,
+): JayrrDisplayCrop | undefined => {
   if (!value || typeof value !== "object") {
     return undefined;
   }
@@ -123,7 +135,9 @@ export const parseDisplayCrop = (value: unknown): JayrrDisplayCrop | undefined =
     return undefined;
   }
   if (
-    ![bag.x, bag.y, bag.width, bag.height].every((item) => Number.isFinite(item))
+    ![bag.x, bag.y, bag.width, bag.height].every((item) =>
+      Number.isFinite(item),
+    )
   ) {
     return undefined;
   }
@@ -154,6 +168,11 @@ export const jayrrCameraLabel = (camera: JayrrCamera | null) => {
   if (camera.kind === "display") {
     return camera.label || jayrrDisplaySurfaceLabel(camera.surface);
   }
+  if (camera.kind === "phone") {
+    return (
+      camera.label || (camera.userId === JAYRR_PHONE_SELF ? "You" : "Phone")
+    );
+  }
   return camera.label || null;
 };
 
@@ -172,6 +191,7 @@ export const readJayrrCamera = (
   const bag = data as {
     kind?: unknown;
     deviceId?: unknown;
+    userId?: unknown;
     nonce?: unknown;
     label?: unknown;
     surface?: unknown;
@@ -180,6 +200,13 @@ export const readJayrrCamera = (
     crop?: unknown;
   };
   const label = typeof bag.label === "string" ? bag.label : undefined;
+  if (bag.kind === "phone") {
+    const userId = typeof bag.userId === "string" ? bag.userId : "";
+    if (!userId) {
+      return null;
+    }
+    return { kind: "phone", userId, label };
+  }
   if (bag.kind === "display") {
     return {
       kind: "display",
@@ -219,6 +246,11 @@ export const isJayrrDisplay = (
   camera: JayrrCamera | null,
 ): camera is Extract<JayrrCamera, { kind: "display" }> =>
   camera?.kind === "display";
+
+export const isJayrrPhone = (
+  camera: JayrrCamera | null,
+): camera is Extract<JayrrCamera, { kind: "phone" }> =>
+  camera?.kind === "phone";
 
 export const readDisplayQuality = (
   camera: JayrrCamera | null,

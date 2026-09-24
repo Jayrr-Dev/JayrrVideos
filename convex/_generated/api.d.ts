@@ -19,6 +19,7 @@ import type * as canvasAi_prompt from "../canvasAi/prompt.js";
 import type * as canvasAi_schemas from "../canvasAi/schemas.js";
 import type * as canvasAi_skeletons from "../canvasAi/skeletons.js";
 import type * as canvasAi_topicSummary from "../canvasAi/topicSummary.js";
+import type * as collabVideo from "../collabVideo.js";
 import type * as editorAi_chatHttp from "../editorAi/chatHttp.js";
 import type * as editorAi_chatNode from "../editorAi/chatNode.js";
 import type * as editorAi_createTools from "../editorAi/createTools.js";
@@ -67,6 +68,7 @@ declare const fullApi: ApiFromModules<{
   "canvasAi/schemas": typeof canvasAi_schemas;
   "canvasAi/skeletons": typeof canvasAi_skeletons;
   "canvasAi/topicSummary": typeof canvasAi_topicSummary;
+  collabVideo: typeof collabVideo;
   "editorAi/chatHttp": typeof editorAi_chatHttp;
   "editorAi/chatNode": typeof editorAi_chatNode;
   "editorAi/createTools": typeof editorAi_createTools;

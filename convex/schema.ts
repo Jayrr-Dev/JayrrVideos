@@ -9,6 +9,7 @@ export default defineSchema({
     ownerKey: v.string(),
     userId: v.optional(v.id("users")),
     name: v.string(),
+    fillColor: v.optional(v.string()),
     sceneCount: v.number(),
     updatedAt: v.number(),
   })
@@ -121,6 +122,23 @@ export default defineSchema({
     value: v.string(),
     updatedAt: v.number(),
   }).index("by_user_and_key", ["userId", "key"]),
+
+  collabVideoPubs: defineTable({
+    roomId: v.string(),
+    userId: v.id("users"),
+    clientId: v.string(),
+    displayName: v.string(),
+    sessionId: v.string(),
+    tracks: v.array(
+      v.object({
+        kind: v.union(v.literal("audio"), v.literal("video")),
+        trackName: v.string(),
+      }),
+    ),
+    updatedAt: v.number(),
+  })
+    .index("by_room", ["roomId"])
+    .index("by_room_and_client", ["roomId", "clientId"]),
 
   presentRecordings: defineTable({
     userId: v.id("users"),

@@ -15,6 +15,7 @@ import {
   CaptureUpdateAction,
   Excalidraw,
   ExcalidrawAPIProvider,
+  LiveCollaborationTrigger,
   TTDDialogTrigger,
   reconcileElements,
   useExcalidrawAPI,
@@ -87,11 +88,14 @@ import Collab, {
   isOfflineAtom,
   userToFollowAtom,
 } from "./collab/Collab";
+import CollabError, { collabErrorIndicatorAtom } from "./collab/CollabError";
+import { JayrrCollabVideo } from "./collab/JayrrCollabVideo";
 import { AppFooter } from "./components/AppFooter";
 import { AppMainMenu } from "./components/AppMainMenu";
 import { AppWelcomeScreen } from "./components/AppWelcomeScreen";
 import { TopErrorBoundary } from "./components/TopErrorBoundary";
-import { JayrrLibraryMenu, JayrrSceneMenu } from "./components/ui";
+import { JayrrSceneMenu } from "./components/ui";
+import { JayrrLibrariesPanel } from "./components/ui/JayrrLibrariesPanel";
 import CustomStats from "./CustomStats";
 import { JayrrPresentHost } from "./present/JayrrPresentHost";
 
@@ -436,6 +440,7 @@ const ExcalidrawWrapper = () => {
   const [isCollaborating] = useAtomWithInitialValue(isCollaboratingAtom, () => {
     return isCollaborationLink(window.location.href);
   });
+  const collabError = useAtomValue(collabErrorIndicatorAtom);
   const userToFollow = useAtomValue(userToFollowAtom);
 
   const viewportStatusFrame = useMemo(
@@ -1033,10 +1038,23 @@ const ExcalidrawWrapper = () => {
         theme={editorTheme}
         onThemeChange={setAppTheme}
         imageOptions={imageOptions}
-        renderLibraryMenu={() => <JayrrLibraryMenu />}
+        renderLibraryMenu={() => <JayrrLibrariesPanel />}
         renderSceneMenu={() => <JayrrSceneMenu />}
         onAddToLibrary={addSelectionToOpenLibrary}
-        renderTopRightUI={() => null}
+        renderTopRightUI={() => {
+          if (isCollabDisabled) {
+            return null;
+          }
+          return (
+            <div className="excalidraw-ui-top-right">
+              <CollabError collabError={collabError} />
+              <LiveCollaborationTrigger
+                isCollaborating={isCollaborating}
+                onSelect={onCollabDialogOpen}
+              />
+            </div>
+          );
+        }}
         onLinkOpen={(element, event) => {
           if (element.link && isElementLink(element.link)) {
             event.preventDefault();
@@ -1098,6 +1116,7 @@ const ExcalidrawWrapper = () => {
         {excalidrawAPI && !isCollabDisabled && (
           <Collab excalidrawAPI={excalidrawAPI} />
         )}
+        <JayrrCollabVideo isCollaborating={isCollaborating} />
 
         <ShareDialog
           collabAPI={collabAPI}
