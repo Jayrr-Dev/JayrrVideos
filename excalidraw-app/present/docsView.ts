@@ -1,12 +1,24 @@
 import { atom } from "../app-jotai";
 import { STORAGE_KEYS } from "../app_constants";
 
-export type DocsView = "record" | "project";
+export type LibrariesView = "record" | "project" | "scene" | "parts";
 
-const readStoredDocsView = (): DocsView => {
+export type DocsView = LibrariesView;
+
+const LIBRARY_VIEWS: readonly LibrariesView[] = [
+  "record",
+  "project",
+  "scene",
+  "parts",
+];
+
+const isLibrariesView = (value: string | null): value is LibrariesView =>
+  LIBRARY_VIEWS.some((view) => view === value);
+
+const readStoredLibrariesView = (): LibrariesView => {
   try {
     const stored = localStorage.getItem(STORAGE_KEYS.LOCAL_STORAGE_DOCS_VIEW);
-    if (stored === "project" || stored === "record") {
+    if (isLibrariesView(stored)) {
       return stored;
     }
   } catch {
@@ -15,12 +27,18 @@ const readStoredDocsView = (): DocsView => {
   return "record";
 };
 
-export const docsViewAtom = atom<DocsView>(readStoredDocsView());
+export const librariesViewAtom = atom<LibrariesView>(readStoredLibrariesView());
 
-export const persistDocsView = (view: DocsView) => {
+export const docsViewAtom = librariesViewAtom;
+
+export const recordingsUploadingAtom = atom(false);
+
+export const persistLibrariesView = (view: LibrariesView) => {
   try {
     localStorage.setItem(STORAGE_KEYS.LOCAL_STORAGE_DOCS_VIEW, view);
   } catch {
     // ignore quota / private mode
   }
 };
+
+export const persistDocsView = persistLibrariesView;

@@ -186,16 +186,81 @@
   .jayrr-scene-card--folder .jayrr-scene-card__name-input {
     top: 54%;
     left: 14%;
-    max-width: calc(72% - 1.5rem);
+    max-width: 72%;
   }
 
   .jayrr-scene-card--folder .jayrr-scene-card__name-input {
-    width: calc(72% - 1.5rem);
+    width: 72%;
   }
 
   .jayrr-scene-card--folder .jayrr-scene-card__menu.dropdown-menu-button {
-    top: calc(54% - 0.2rem);
-    right: 10%;
+    top: 19%;
+    left: 14%;
+    right: auto;
+  }
+
+  .jayrr-folder-fill {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    padding: 0.15rem 0.15rem 0.25rem;
+    min-width: 10.5rem;
+  }
+
+  .jayrr-folder-fill__label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-primary-color);
+  }
+
+  .jayrr-folder-fill__swatches {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.3rem;
+  }
+
+  .jayrr-folder-fill__swatch {
+    width: 1.15rem;
+    height: 1.15rem;
+    padding: 0;
+    border: 1px solid var(--sidebar-border-color);
+    border-radius: 999px;
+    background: var(--island-bg-color);
+    cursor: pointer;
+  }
+
+  .jayrr-folder-fill__swatch--default {
+    background: repeating-conic-gradient(
+        var(--color-surface-mid) 0% 25%,
+        var(--island-bg-color) 0% 50%
+      )
+      50% / 0.5rem 0.5rem;
+  }
+
+  .jayrr-folder-fill__swatch.is-selected,
+  .jayrr-folder-fill__custom:focus-within {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 1px;
+  }
+
+  .jayrr-folder-fill__custom {
+    display: inline-flex;
+    width: 1.15rem;
+    height: 1.15rem;
+    border-radius: 999px;
+    overflow: hidden;
+    border: 1px solid var(--sidebar-border-color);
+  }
+
+  .jayrr-folder-fill__custom input {
+    width: 1.6rem;
+    height: 1.6rem;
+    margin: -0.22rem;
+    padding: 0;
+    border: none;
+    background: none;
+    cursor: pointer;
   }
 
   .jayrr-scene-card__menu.dropdown-menu-button {
@@ -260,6 +325,56 @@
       object-fit: cover;
       display: block;
     }
+  }
+
+  .jayrr-libraries__back {
+    display: contents;
+  }
+
+  .jayrr-libraries__title-slot {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+  }
+
+  .jayrr-libraries__title-slot > .jayrr-library__title,
+  .jayrr-libraries__title-slot > .jayrr-library__rename-input,
+  .jayrr-libraries__title-slot > .jayrr-present__folder-rename {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .jayrr-libraries__views {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    padding: 0 0.75rem 0.65rem;
+  }
+
+  .jayrr-libraries__view-btn {
+    border: 1px solid var(--default-border-color);
+    background: var(--color-surface-low);
+    color: var(--text-primary-color);
+    border-radius: var(--border-radius-md);
+    font-size: 0.75rem;
+    padding: 0.28rem 0.65rem;
+    cursor: pointer;
+  }
+
+  .jayrr-libraries__view-btn.is-active {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+    background: var(--color-surface-mid);
+  }
+
+  .jayrr-libraries__content,
+  .jayrr-libraries__pane {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
   }
 
   .jayrr-library__header-actions {
