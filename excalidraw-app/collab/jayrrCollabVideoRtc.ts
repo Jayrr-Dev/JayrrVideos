@@ -48,7 +48,7 @@ export const createSfuPeerConnection = () =>
     ],
   });
 
-const ICE_WAIT_MS = 2500;
+const ICE_WAIT_MS = 5000;
 
 export const waitForIce = async (peer: RTCPeerConnection) => {
   if (peer.iceGatheringState === "complete") {
@@ -87,6 +87,41 @@ export const requiredMid = (transceiver: RTCRtpTransceiver) => {
   }
   return transceiver.mid;
 };
+
+export const waitForOutgoingPackets = (
+  peer: RTCPeerConnection,
+  timeoutMs = 4000,
+) =>
+  new Promise<void>((resolve) => {
+    const started = Date.now();
+    const tick = async () => {
+      try {
+        const stats = await peer.getStats();
+        for (const report of stats.values()) {
+          if (
+            report.type === "outbound-rtp" &&
+            "bytesSent" in report &&
+            typeof report.bytesSent === "number" &&
+            report.bytesSent > 0
+          ) {
+            resolve();
+            return;
+          }
+        }
+      } catch {
+        resolve();
+        return;
+      }
+      if (Date.now() - started >= timeoutMs) {
+        resolve();
+        return;
+      }
+      window.setTimeout(() => {
+        void tick();
+      }, 200);
+    };
+    void tick();
+  });
 
 export const waitForConnected = (peer: RTCPeerConnection, timeoutMs = 12_000) =>
   new Promise<void>((resolve, reject) => {

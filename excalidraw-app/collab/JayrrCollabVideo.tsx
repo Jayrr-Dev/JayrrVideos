@@ -12,6 +12,7 @@ import {
   requiredMid,
   waitForConnected,
   waitForIce,
+  waitForOutgoingPackets,
 } from "./jayrrCollabVideoRtc";
 import {
   clearJayrrPhoneRemotes,
@@ -66,7 +67,6 @@ export const JayrrCollabVideo = ({
       ? { roomId }
       : "skip",
   );
-  const createSession = useAction(api.collabVideo.createSession);
   const publishTracks = useAction(api.collabVideo.publishTracks);
   const recordPublication = useMutation(api.collabVideo.recordPublication);
   const subscribeTracks = useAction(api.collabVideo.subscribeTracks);
@@ -200,12 +200,10 @@ export const JayrrCollabVideo = ({
       try {
         let consumer = consumerRef.current;
         let sessionId = consumerSessionRef.current;
-        if (!consumer || !sessionId) {
+        if (!consumer) {
           consumer = createSfuPeerConnection();
           consumer.addEventListener("track", attachRemoteTrack);
           consumerRef.current = consumer;
-          sessionId = (await createSession()).sessionId;
-          consumerSessionRef.current = sessionId;
         }
         const stillPending = pending.filter(
           (track) => !subscribedRef.current.has(track.key),
@@ -214,21 +212,32 @@ export const JayrrCollabVideo = ({
           return;
         }
         const result = await subscribeTracks({
-          sessionId,
+          ...(sessionId ? { sessionId } : {}),
           tracks: stillPending.map((track) => ({
             sessionId: track.sessionId,
             trackName: track.trackName,
           })),
         });
+        consumerSessionRef.current = result.sessionId;
+        sessionId = result.sessionId;
+        const failed: string[] = [];
         result.tracks.forEach((track, index) => {
           const requested = stillPending[index];
-          if (track.mid && requested) {
+          if (!requested) {
+            return;
+          }
+          if (track.errorCode || track.errorDescription) {
+            failed.push(track.errorDescription || track.errorCode || "");
+            return;
+          }
+          if (track.mid) {
             midMapRef.current.set(track.mid, {
               userId: requested.userId,
               displayName: requested.displayName,
               key: requested.key,
             });
           }
+          subscribedRef.current.add(requested.key);
         });
         if (
           result.requiresImmediateRenegotiation &&
@@ -246,8 +255,16 @@ export const JayrrCollabVideo = ({
           });
           await waitForConnected(consumer);
         }
-        for (const track of stillPending) {
-          subscribedRef.current.add(track.key);
+        if (failed.length > 0) {
+          if (
+            failed.length === stillPending.length &&
+            !result.sessionDescription
+          ) {
+            consumerSessionRef.current = null;
+          }
+          window.setTimeout(() => {
+            setRetry((value) => value + 1);
+          }, 2000);
         }
       } catch (caught) {
         consumerRef.current?.close();
@@ -257,12 +274,11 @@ export const JayrrCollabVideo = ({
         setJayrrPhoneError(trackError(caught));
         window.setTimeout(() => {
           setRetry((value) => value + 1);
-        }, 1200);
+        }, 2000);
       }
     });
   }, [
     attachRemoteTrack,
-    createSession,
     isCollaborating,
     publications,
     renegotiate,
@@ -292,7 +308,6 @@ export const JayrrCollabVideo = ({
       }
       const producer = createSfuPeerConnection();
       producerRef.current = producer;
-      const sessionId = (await createSession()).sessionId;
       const offerTracks = stream.getTracks().map((track) => {
         const transceiver = producer.addTransceiver(track, {
           direction: "sendonly",
@@ -306,9 +321,9 @@ export const JayrrCollabVideo = ({
       });
       const offer = await producer.createOffer();
       await producer.setLocalDescription(offer);
+      await waitForIce(producer);
       const result = await publishTracks({
         roomId,
-        sessionId,
         sessionDescription: localDescription(producer),
         tracks: offerTracks.map((track) => ({
           kind: track.kind,
@@ -323,10 +338,11 @@ export const JayrrCollabVideo = ({
         asPeerDescription(result.sessionDescription),
       );
       await waitForConnected(producer);
+      await waitForOutgoingPackets(producer);
       await recordPublication({
         roomId,
         clientId: getJayrrPhoneClientId(),
-        sessionId,
+        sessionId: result.sessionId,
         tracks: offerTracks.map((track) => ({
           kind: track.kind,
           trackName: track.trackName,
@@ -341,13 +357,7 @@ export const JayrrCollabVideo = ({
     } finally {
       shareLockRef.current = false;
     }
-  }, [
-    createSession,
-    publishTracks,
-    recordPublication,
-    roomId,
-    teardownProducer,
-  ]);
+  }, [publishTracks, recordPublication, roomId, teardownProducer]);
 
   const stop = useCallback(async () => {
     teardownProducer();

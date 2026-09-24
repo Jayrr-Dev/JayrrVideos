@@ -30,6 +30,7 @@ export default defineConfig(({ mode }) => {
   return {
     server: {
       port: Number(envVars.VITE_APP_PORT || 3000),
+      host: "127.0.0.1",
       // open the browser
       open: true,
     },

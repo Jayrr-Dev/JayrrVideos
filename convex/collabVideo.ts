@@ -160,6 +160,11 @@ const sfuRequest = async (
   return object;
 };
 
+const createSfuSession = async () => {
+  const payload = await sfuRequest("/sessions/new", "POST");
+  return requireSessionId(asString(payload.sessionId));
+};
+
 const parseTrackResults = (value: unknown) => {
   if (!Array.isArray(value)) {
     return [];
@@ -294,8 +299,7 @@ export const createSession = action({
     if (!userId) {
       throw new Error("Not authenticated");
     }
-    const payload = await sfuRequest("/sessions/new", "POST");
-    const sessionId = requireSessionId(asString(payload.sessionId));
+    const sessionId = await createSfuSession();
     return { sessionId };
   },
 });
@@ -303,7 +307,6 @@ export const createSession = action({
 export const publishTracks = action({
   args: {
     roomId: v.string(),
-    sessionId: v.string(),
     sessionDescription: sdpDescription,
     tracks: v.array(
       v.object({
@@ -320,10 +323,10 @@ export const publishTracks = action({
       throw new Error("Not authenticated");
     }
     requireRoomId(args.roomId);
-    const sessionId = requireSessionId(args.sessionId);
     if (args.tracks.length === 0) {
       throw new Error("No camera tracks to publish");
     }
+    const sessionId = await createSfuSession();
     const payload = await sfuRequest(
       `/sessions/${encodeURIComponent(sessionId)}/tracks/new`,
       "POST",
@@ -354,7 +357,7 @@ export const publishTracks = action({
 
 export const subscribeTracks = action({
   args: {
-    sessionId: v.string(),
+    sessionId: v.optional(v.string()),
     tracks: v.array(
       v.object({
         sessionId: v.string(),
@@ -368,14 +371,19 @@ export const subscribeTracks = action({
     if (!userId) {
       throw new Error("Not authenticated");
     }
-    const sessionId = requireSessionId(args.sessionId);
     if (args.tracks.length === 0) {
+      if (!args.sessionId) {
+        throw new Error("Invalid Realtime session");
+      }
       return {
-        sessionId,
+        sessionId: requireSessionId(args.sessionId),
         requiresImmediateRenegotiation: false,
         tracks: [],
       };
     }
+    const sessionId = args.sessionId
+      ? requireSessionId(args.sessionId)
+      : await createSfuSession();
     const payload = await sfuRequest(
       `/sessions/${encodeURIComponent(sessionId)}/tracks/new`,
       "POST",
@@ -388,11 +396,10 @@ export const subscribeTracks = action({
       },
     );
     const tracks = parseTrackResults(payload.tracks);
-    assertTracksOk(tracks, "subscribe");
     return {
       sessionId,
       requiresImmediateRenegotiation:
-        payload.requiresImmediateRenegotiation !== false,
+        payload.requiresImmediateRenegotiation === true,
       sessionDescription: readSdp(payload.sessionDescription) ?? undefined,
       tracks,
     };
