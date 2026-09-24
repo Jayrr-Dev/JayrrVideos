@@ -97,6 +97,12 @@ import { readCalledObjectKind } from "../domain/widgets/model";
 import { readPdfFileId } from "../domain/widgets/objects/pdfConfig";
 
 import { collabErrorIndicatorAtom } from "./CollabError";
+import {
+  clampRoomGuestLimit,
+  guestLimitToMaxParticipants,
+  roomGuestLimitAtom,
+  ROOM_GUEST_LIMIT_MIN,
+} from "./jayrrRoomGuestLimit";
 import Portal from "./Portal";
 
 import type {
@@ -133,6 +139,7 @@ export interface CollabAPI {
   getUsername: CollabInstance["getUsername"];
   getActiveRoomLink: CollabInstance["getActiveRoomLink"];
   setCollabError: CollabInstance["setErrorDialog"];
+  setRoomGuestLimit: CollabInstance["setRoomGuestLimit"];
   setUserToFollow: CollabInstance["setUserToFollow"];
 }
 
@@ -253,6 +260,7 @@ class Collab extends PureComponent<CollabProps, CollabState> {
       getUsername: this.getUsername,
       getActiveRoomLink: this.getActiveRoomLink,
       setCollabError: this.setErrorDialog,
+      setRoomGuestLimit: this.setRoomGuestLimit,
       setUserToFollow: this.setUserToFollow,
     };
 
@@ -556,9 +564,25 @@ class Collab extends PureComponent<CollabProps, CollabState> {
         }),
         roomId,
         roomKey,
+        existingRoomLinkData
+          ? undefined
+          : {
+              maxParticipants: guestLimitToMaxParticipants(
+                appJotaiStore.get(roomGuestLimitAtom),
+              ),
+            },
       );
 
       this.portal.socket.once("connect_error", fallbackInitializationHandler);
+      this.portal.socket.once("room-full", (payload: { max?: number }) => {
+        const max =
+          typeof payload?.max === "number"
+            ? payload.max
+            : guestLimitToMaxParticipants(
+                appJotaiStore.get(roomGuestLimitAtom),
+              );
+        this.rejectRoomFull(max);
+      });
     } catch (error: any) {
       console.error(error);
       this.setErrorDialog(error.message);
@@ -1041,6 +1065,29 @@ class Collab extends PureComponent<CollabProps, CollabState> {
     }
 
     appJotaiStore.set(userToFollowAtom, userToFollow);
+  };
+
+  private rejectRoomFull = (maxParticipants: number) => {
+    window.clearTimeout(this.socketInitializationTimer);
+    if (this.portal.socket && this.fallbackInitializationHandler) {
+      this.portal.socket.off(
+        "connect_error",
+        this.fallbackInitializationHandler,
+      );
+    }
+    this.destroySocketClient();
+    const guests = Math.max(ROOM_GUEST_LIMIT_MIN, maxParticipants - 1);
+    this.setErrorDialog(`This room is full. Max guests is ${guests}.`);
+  };
+
+  setRoomGuestLimit = (guestLimit: number) => {
+    const clamped = clampRoomGuestLimit(guestLimit);
+    appJotaiStore.set(roomGuestLimitAtom, clamped);
+    if (this.portal.socket && this.portal.roomId) {
+      this.portal.socket.emit("set-room-max", this.portal.roomId, {
+        maxParticipants: guestLimitToMaxParticipants(clamped),
+      });
+    }
   };
 
   setUsername = (username: string) => {

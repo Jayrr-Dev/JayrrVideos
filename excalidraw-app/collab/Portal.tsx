@@ -34,7 +34,12 @@ class Portal {
     this.collab = collab;
   }
 
-  open(socket: Socket, id: string, key: string) {
+  open(
+    socket: Socket,
+    id: string,
+    key: string,
+    options?: { maxParticipants?: number },
+  ) {
     this.socket = socket;
     this.roomId = id;
     this.roomKey = key;
@@ -42,7 +47,13 @@ class Portal {
     // Initialize socket listeners
     this.socket.on("init-room", () => {
       if (this.socket) {
-        this.socket.emit("join-room", this.roomId);
+        if (options?.maxParticipants != null) {
+          this.socket.emit("join-room", this.roomId, {
+            maxParticipants: options.maxParticipants,
+          });
+        } else {
+          this.socket.emit("join-room", this.roomId);
+        }
         trackEvent("share", "room joined");
       }
     });

@@ -4,6 +4,7 @@ import { copyTextToSystemClipboard } from "@excalidraw/excalidraw/clipboard";
 import { TextField } from "@excalidraw/excalidraw/components/TextField";
 import {
   copyIcon,
+  helpIcon,
   LinkIcon,
   playerPlayIcon,
   playerStopFilledIcon,
@@ -16,10 +17,16 @@ import { useCopyStatus } from "@excalidraw/excalidraw/hooks/useCopiedIndicator";
 import { useI18n } from "@excalidraw/excalidraw/i18n";
 import { useEffect, useRef, useState } from "react";
 
-import { Dialog, FilledButton } from "../components/ui";
+import { Dialog, FilledButton, Tooltip } from "../components/ui";
 
 import { atom, useAtom, useAtomValue } from "../app-jotai";
 import { activeRoomLinkAtom } from "../collab/Collab";
+import {
+  parseRoomGuestLimit,
+  ROOM_GUEST_LIMIT_MAX,
+  ROOM_GUEST_LIMIT_MIN,
+  roomGuestLimitAtom,
+} from "../collab/jayrrRoomGuestLimit";
 
 import { QRCode } from "./QRCode";
 import "./ShareDialog.scss";
@@ -45,6 +52,63 @@ const getShareIcon = () => {
   }
 
   return share;
+};
+
+const GUEST_LIMIT_INFO =
+  "How many people can join this room link without signing in. You are not counted.";
+
+const GuestLimitField = ({
+  onCommit,
+}: {
+  onCommit?: (guestLimit: number) => void;
+}) => {
+  const [guestLimit, setGuestLimit] = useAtom(roomGuestLimitAtom);
+  const [draft, setDraft] = useState(String(guestLimit));
+
+  const commit = (raw: string) => {
+    const next = parseRoomGuestLimit(raw);
+    setGuestLimit(next);
+    setDraft(String(next));
+    onCommit?.(next);
+  };
+
+  return (
+    <div
+      className="ShareDialog__guestLimit"
+      onBlur={(event) => {
+        if (event.currentTarget.contains(event.relatedTarget as Node)) {
+          return;
+        }
+        commit(draft);
+      }}
+    >
+      <div className="ShareDialog__guestLimit__label">
+        Max guests
+        <Tooltip label={GUEST_LIMIT_INFO} long>
+          <span
+            className="ShareDialog__guestLimit__info"
+            aria-label="More info"
+          >
+            {helpIcon}
+          </span>
+        </Tooltip>
+      </div>
+      <TextField
+        value={draft}
+        fullWidth
+        onChange={setDraft}
+        onKeyDown={(event) => {
+          if (event.key === KEYS.ENTER) {
+            commit(draft);
+          }
+        }}
+      />
+      <p id="jayrr-guest-limit-description" className="visually-hidden">
+        {GUEST_LIMIT_INFO} Allowed range {ROOM_GUEST_LIMIT_MIN} to{" "}
+        {ROOM_GUEST_LIMIT_MAX}.
+      </p>
+    </div>
+  );
 };
 
 export type ShareDialogProps = {
@@ -114,6 +178,7 @@ const ActiveRoomDialog = ({
         onChange={collabAPI.setUsername}
         onKeyDown={(event) => event.key === KEYS.ENTER && handleClose()}
       />
+      <GuestLimitField onCommit={collabAPI.setRoomGuestLimit} />
       <div className="ShareDialog__active__linkRow">
         <TextField
           ref={ref}
@@ -193,6 +258,8 @@ const ShareDialogPicker = (props: ShareDialogProps) => {
         <div style={{ marginBottom: "1em" }}>{t("roomDialog.desc_intro")}</div>
         {t("roomDialog.desc_privacy")}
       </div>
+
+      <GuestLimitField />
 
       <div className="ShareDialog__picker__button">
         <FilledButton

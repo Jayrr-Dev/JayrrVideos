@@ -9,6 +9,7 @@ import ExcalidrawApp from "./App";
 import { JayrrAuthenticatedApp } from "./components/JayrrAuthenticatedApp";
 import { JayrrAuthPage } from "./components/ui";
 import { JayrrConvexProvider, convexClient } from "./convexClient";
+import { isCollaborationLink } from "./data";
 
 import "./components/ui/JayrrAuthPage.scss";
 
@@ -18,6 +19,9 @@ const JayrrRoot = () => {
     return <div className="jayrr-auth">Loading…</div>;
   }
   if (!isAuthenticated) {
+    if (isCollaborationLink(window.location.href)) {
+      return <ExcalidrawApp />;
+    }
     return <JayrrAuthPage />;
   }
   return <JayrrAuthenticatedApp />;
