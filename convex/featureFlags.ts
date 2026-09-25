@@ -5,7 +5,7 @@ import { mutation, query } from "./_generated/server";
 import { getCurrentUser } from "./lib/auth";
 
 const FLAG_VALUES: Record<string, readonly string[]> = {
-  cameraCutout: ["off", "mediapipe", "segmo"],
+  cameraCutout: ["off", "mediapipe", "modnet", "segmo"],
   sttProvider: ["inworld", "deepgram"],
 };
 

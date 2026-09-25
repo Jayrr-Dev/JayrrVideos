@@ -388,6 +388,185 @@ const startMediaPipe = async (
   };
 };
 
+const MODNET_MODEL = "Xenova/modnet";
+const MODNET_EDGE = 512;
+
+type ModnetImage = {
+  width: number;
+  height: number;
+  channels: number;
+  data: Uint8Array | Uint8ClampedArray;
+};
+
+type ModnetRemover = (
+  image: HTMLCanvasElement,
+) => Promise<ModnetImage | null>;
+
+let modnetLoad: Promise<ModnetRemover | null> | null = null;
+let modnetQueue: Promise<unknown> = Promise.resolve();
+
+const asModnetImage = (value: unknown): ModnetImage | null => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  if (
+    !("data" in value) ||
+    !("width" in value) ||
+    !("height" in value) ||
+    !("channels" in value)
+  ) {
+    return null;
+  }
+  const image = value as ModnetImage;
+  if (
+    typeof image.width !== "number" ||
+    typeof image.height !== "number" ||
+    typeof image.channels !== "number"
+  ) {
+    return null;
+  }
+  return image;
+};
+
+const loadModnet = () => {
+  if (modnetLoad) {
+    return modnetLoad;
+  }
+  modnetLoad = (async () => {
+    if (!("gpu" in navigator) || !navigator.gpu) {
+      return null;
+    }
+    const { env, pipeline } = await import("@huggingface/transformers");
+    env.allowLocalModels = false;
+    const wasm = env.backends.onnx.wasm;
+    if (wasm) {
+      wasm.proxy = false;
+    }
+    const remover = await pipeline("background-removal", MODNET_MODEL, {
+      device: "webgpu",
+    });
+    return async (image: HTMLCanvasElement) => {
+      const result = await remover(image);
+      if (Array.isArray(result)) {
+        return asModnetImage(result[0]);
+      }
+      return asModnetImage(result);
+    };
+  })().catch(() => {
+    modnetLoad = null;
+    return null;
+  });
+  return modnetLoad;
+};
+
+const runModnet = <T>(job: () => Promise<T>) => {
+  const run = modnetQueue.then(job, job);
+  modnetQueue = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+};
+
+const applyByteMask = (
+  context: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  mask: Uint8Array | Uint8ClampedArray,
+  maskW: number,
+  maskH: number,
+  channels: number,
+) => {
+  const frame = context.getImageData(0, 0, width, height);
+  const pixels = frame.data;
+  const stride = Math.max(1, channels);
+  for (let y = 0; y < height; y += 1) {
+    const my = Math.min(maskH - 1, Math.floor((y * maskH) / height));
+    const row = my * maskW;
+    for (let x = 0; x < width; x += 1) {
+      const mx = Math.min(maskW - 1, Math.floor((x * maskW) / width));
+      const alpha = mask[(row + mx) * stride + (stride > 1 ? stride - 1 : 0)];
+      pixels[(y * width + x) * 4 + 3] = alpha ?? 0;
+    }
+  }
+  context.putImageData(frame, 0, 0);
+};
+
+const startModnet = async (
+  elementId: string,
+  video: HTMLVideoElement,
+  canvas: HTMLCanvasElement,
+  cancelled: () => boolean,
+): Promise<StopCutout> => {
+  const runtime = await loadModnet();
+  if (!runtime || cancelled()) {
+    return () => undefined;
+  }
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  const scratch = document.createElement("canvas");
+  const scratchContext = scratch.getContext("2d", { willReadFrequently: true });
+  if (!context || !scratchContext) {
+    return () => undefined;
+  }
+
+  let busy = false;
+  let published = false;
+  let mask: Uint8Array | Uint8ClampedArray | null = null;
+  let maskW = 0;
+  let maskH = 0;
+  let maskChannels = 1;
+
+  const stopLoop = loopVideo(video, cancelled, () => {
+    const width = video.videoWidth;
+    const height = video.videoHeight;
+    if (width < 2 || height < 2) {
+      return;
+    }
+    if (canvas.width !== width || canvas.height !== height) {
+      canvas.width = width;
+      canvas.height = height;
+    }
+    context.clearRect(0, 0, width, height);
+    context.drawImage(video, 0, 0, width, height);
+    if (mask) {
+      applyByteMask(context, width, height, mask, maskW, maskH, maskChannels);
+      if (!published) {
+        published = true;
+        setJayrrCameraCutout(elementId, canvas);
+      }
+    }
+    if (busy) {
+      return;
+    }
+    busy = true;
+    const edge = Math.max(width, height);
+    const scale = Math.min(1, MODNET_EDGE / edge);
+    const sampleW = Math.max(2, Math.round(width * scale));
+    const sampleH = Math.max(2, Math.round(height * scale));
+    if (scratch.width !== sampleW || scratch.height !== sampleH) {
+      scratch.width = sampleW;
+      scratch.height = sampleH;
+    }
+    scratchContext.drawImage(video, 0, 0, sampleW, sampleH);
+    void runModnet(() => runtime(scratch))
+      .then((matte) => {
+        if (!matte || cancelled()) {
+          return;
+        }
+        mask = matte.data;
+        maskW = matte.width;
+        maskH = matte.height;
+        maskChannels = matte.channels;
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        busy = false;
+      });
+  });
+
+  return stopLoop;
+};
+
 const startSegmo = async (
   elementId: string,
   video: HTMLVideoElement,
@@ -485,6 +664,9 @@ export const startJayrrCameraCutout = (
       }
       if (engine === "mediapipe") {
         return startMediaPipe(elementId, video, canvas, () => cancelled);
+      }
+      if (engine === "modnet") {
+        return startModnet(elementId, video, canvas, () => cancelled);
       }
       return startSegmo(elementId, video, canvas, () => cancelled);
     })

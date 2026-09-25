@@ -355,7 +355,11 @@ export default defineConfig(({ mode }) => {
         "marked",
         "dompurify",
       ],
-      exclude: ["@mediapipe/tasks-vision", "segmo"],
+      exclude: [
+        "@huggingface/transformers",
+        "@mediapipe/tasks-vision",
+        "segmo",
+      ],
     },
   };
 });

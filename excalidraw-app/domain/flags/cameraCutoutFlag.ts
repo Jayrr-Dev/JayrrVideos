@@ -5,6 +5,7 @@ export const CAMERA_CUTOUT_FLAG = "cameraCutout";
 export const CAMERA_CUTOUT_OPTIONS = [
   { id: "off", label: "Off" },
   { id: "mediapipe", label: "MediaPipe" },
+  { id: "modnet", label: "MODNet" },
   { id: "segmo", label: "Segmo" },
 ] as const;
 
