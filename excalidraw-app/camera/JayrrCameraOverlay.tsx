@@ -8,10 +8,11 @@ import type { NonDeletedExcalidrawElement } from "@excalidraw/element/types";
 
 import { useAtomValue } from "../app-jotai";
 import {
-  peekJayrrPhoneIncoming,
+  getJayrrPhoneClientId,
   peekJayrrPhoneStream,
   releaseJayrrPhoneSelf,
   retainJayrrPhoneSelf,
+  setJayrrPhoneLocal,
   subscribeJayrrPhone,
 } from "../collab/jayrrCollabVideoSession";
 import { cameraCutoutAtom } from "../domain/flags/cameraCutoutFlag";
@@ -26,6 +27,7 @@ import {
   isJayrrDisplay,
   isJayrrPhone,
   JAYRR_PHONE_SELF,
+  jayrrStreamOwnerId,
   readDisplayQuality,
   readDisplayRate,
   readJayrrCamera,
@@ -76,7 +78,12 @@ const CameraVideo = ({
   const display = isJayrrDisplay(camera);
   const phone = isJayrrPhone(camera);
   const phoneUserId = phone ? camera.userId : null;
-  const cameraId = display || phone ? null : camera.deviceId;
+  const streamOwnerId = jayrrStreamOwnerId(camera);
+  const myClientId = getJayrrPhoneClientId();
+  const foreignStream = streamOwnerId != null && streamOwnerId !== myClientId;
+  const ownPhone =
+    phone && (phoneUserId === myClientId || phoneUserId === JAYRR_PHONE_SELF);
+  const cameraId = display || phone || foreignStream ? null : camera.deviceId;
   const nonce = display ? camera.nonce ?? 0 : 0;
   const surface = display ? camera.surface : undefined;
   const quality = readDisplayQuality(display ? camera : null);
@@ -99,7 +106,7 @@ const CameraVideo = ({
     if (!video) {
       return;
     }
-    if (phone) {
+    if (phone || foreignStream) {
       return;
     }
     let cancelled = false;
@@ -135,6 +142,10 @@ const CameraVideo = ({
         }
         setJayrrCameraVideo(elementId, video);
         setStreamReady(true);
+        if (streamOwnerId === myClientId) {
+          setJayrrPhoneLocal(stream);
+          retainJayrrPhoneSelf();
+        }
         return video.play().catch(() => undefined);
       })
       .catch(() => undefined);
@@ -143,6 +154,9 @@ const CameraVideo = ({
       setJayrrCameraVideo(elementId, null);
       setStreamReady(false);
       video.srcObject = null;
+      if (streamOwnerId === myClientId) {
+        releaseJayrrPhoneSelf();
+      }
       if (!held) {
         return;
       }
@@ -152,23 +166,39 @@ const CameraVideo = ({
         releaseJayrrCamera(cameraId, held);
       }
     };
-  }, [cameraId, display, elementId, nonce, phone, surface]);
+  }, [
+    cameraId,
+    display,
+    elementId,
+    foreignStream,
+    myClientId,
+    nonce,
+    phone,
+    streamOwnerId,
+    surface,
+  ]);
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || !phone || !phoneUserId) {
+    const remoteUserId = foreignStream
+      ? streamOwnerId
+      : phoneUserId && !ownPhone
+      ? phoneUserId
+      : null;
+    if (!video || (!ownPhone && !remoteUserId)) {
       return;
     }
-    retainJayrrPhoneSelf();
+    if (ownPhone) {
+      retainJayrrPhoneSelf();
+    }
     let cancelled = false;
     const attach = () => {
       if (cancelled) {
         return;
       }
-      const stream =
-        phoneUserId === JAYRR_PHONE_SELF
-          ? peekJayrrPhoneIncoming()
-          : peekJayrrPhoneStream(phoneUserId);
+      const stream = ownPhone
+        ? peekJayrrPhoneStream(JAYRR_PHONE_SELF)
+        : peekJayrrPhoneStream(remoteUserId ?? "");
       if (!stream) {
         video.srcObject = null;
         setJayrrCameraVideo(elementId, null);
@@ -188,12 +218,14 @@ const CameraVideo = ({
     return () => {
       cancelled = true;
       stopListen();
-      releaseJayrrPhoneSelf();
+      if (ownPhone) {
+        releaseJayrrPhoneSelf();
+      }
       setJayrrCameraVideo(elementId, null);
       setStreamReady(false);
       video.srcObject = null;
     };
-  }, [elementId, phone, phoneUserId]);
+  }, [elementId, foreignStream, ownPhone, phoneUserId, streamOwnerId]);
 
   useEffect(() => {
     if (!display || !streamReady) {

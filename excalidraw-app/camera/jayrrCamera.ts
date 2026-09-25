@@ -59,6 +59,8 @@ export type JayrrCamera =
       kind?: "camera";
       deviceId: string;
       label?: string;
+      /** Collaboration client that is streaming into this box. */
+      ownerId?: string;
     }
   | {
       kind: "phone";
@@ -223,6 +225,7 @@ export const readJayrrCamera = (
     kind?: unknown;
     deviceId?: unknown;
     userId?: unknown;
+    ownerId?: unknown;
     nonce?: unknown;
     label?: unknown;
     surface?: unknown;
@@ -255,7 +258,25 @@ export const readJayrrCamera = (
   if (typeof deviceId !== "string" || !deviceId) {
     return null;
   }
-  return { kind: "camera", deviceId, label };
+  const ownerId = typeof bag.ownerId === "string" ? bag.ownerId : undefined;
+  return { kind: "camera", deviceId, label, ownerId };
+};
+
+/** Account that is streaming into this box, when the box is tied to one. */
+export const jayrrStreamOwnerId = (camera: JayrrCamera | null) => {
+  if (!camera) {
+    return null;
+  }
+  if (camera.kind === "phone") {
+    if (!camera.userId || camera.userId === JAYRR_PHONE_SELF) {
+      return null;
+    }
+    return camera.userId;
+  }
+  if (camera.kind === "display") {
+    return null;
+  }
+  return camera.ownerId || null;
 };
 
 export const writeJayrrCamera = (

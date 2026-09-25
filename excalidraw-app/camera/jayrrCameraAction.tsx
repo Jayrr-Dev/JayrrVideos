@@ -19,6 +19,7 @@ import type { Action } from "@excalidraw/excalidraw/actions/types";
 import { useAtomValue, useSetAtom } from "../app-jotai";
 import { isCollaboratingAtom } from "../collab/Collab";
 import {
+  getJayrrPhoneClientId,
   getJayrrPhoneError,
   listJayrrPhonePeople,
   subscribeJayrrPhone,
@@ -313,10 +314,12 @@ const cameraFromValue = (
       };
     }
     if (bag.kind === "phone" && typeof bag.userId === "string" && bag.userId) {
+      const userId =
+        bag.userId === JAYRR_PHONE_SELF ? getJayrrPhoneClientId() : bag.userId;
       return {
         kind: "phone",
-        userId: bag.userId,
-        label: bag.label,
+        userId,
+        label: userId === getJayrrPhoneClientId() ? "On" : bag.label,
       };
     }
     if ("deviceId" in bag && typeof bag.deviceId === "string" && bag.deviceId) {
@@ -324,6 +327,7 @@ const cameraFromValue = (
         kind: "camera",
         deviceId: bag.deviceId,
         label: bag.label,
+        ownerId: getJayrrPhoneClientId(),
       };
     }
   }
@@ -335,10 +339,12 @@ const cameraFromValue = (
   }
   const phoneUserId = readPhoneSource(value);
   if (phoneUserId) {
+    const userId =
+      phoneUserId === JAYRR_PHONE_SELF ? getJayrrPhoneClientId() : phoneUserId;
     return {
       kind: "phone",
-      userId: phoneUserId,
-      label: phoneUserId === JAYRR_PHONE_SELF ? "Call" : undefined,
+      userId,
+      label: userId === getJayrrPhoneClientId() ? "On" : undefined,
     };
   }
   const device = devices.find((item) => item.deviceId === value);
@@ -346,6 +352,7 @@ const cameraFromValue = (
     kind: "camera",
     deviceId: value,
     label: device?.label || undefined,
+    ownerId: getJayrrPhoneClientId(),
   };
 };
 

@@ -18,6 +18,7 @@ import {
   clearJayrrPhoneRemotes,
   getJayrrPhoneClientId,
   getJayrrPhoneSelfWanted,
+  peekJayrrPhoneStream,
   setJayrrPhoneError,
   setJayrrPhoneLocal,
   setJayrrPhonePeople,
@@ -46,6 +47,7 @@ export const JayrrCollabVideo = ({
   const [sharing, setSharing] = useState(false);
   const [wanted, setWanted] = useState(getJayrrPhoneSelfWanted);
   const [retry, setRetry] = useState(0);
+  const [shareAttempt, setShareAttempt] = useState(0);
   const producerRef = useRef<RTCPeerConnection | null>(null);
   const consumerRef = useRef<RTCPeerConnection | null>(null);
   const consumerSessionRef = useRef<string | null>(null);
@@ -56,9 +58,12 @@ export const JayrrCollabVideo = ({
   const localStreamRef = useRef<MediaStream | null>(null);
   const sharingRef = useRef(sharing);
   const shareLockRef = useRef(false);
+  const ownsTracksRef = useRef(false);
+  const wantedRef = useRef(wanted);
   const roomIdRef = useRef(roomId);
   roomIdRef.current = roomId;
   sharingRef.current = sharing;
+  wantedRef.current = wanted;
   const viewer = useQuery(api.users.viewer);
   const publications = useQuery(
     api.collabVideo.listRoom,
@@ -92,9 +97,12 @@ export const JayrrCollabVideo = ({
   const teardownProducer = useCallback(() => {
     producerRef.current?.close();
     producerRef.current = null;
-    localStreamRef.current?.getTracks().forEach((track) => track.stop());
+    if (ownsTracksRef.current) {
+      localStreamRef.current?.getTracks().forEach((track) => track.stop());
+      setJayrrPhoneLocal(null);
+    }
+    ownsTracksRef.current = false;
     localStreamRef.current = null;
-    setJayrrPhoneLocal(null);
     setSharing(false);
   }, []);
 
@@ -114,7 +122,7 @@ export const JayrrCollabVideo = ({
     }
     teardownProducer();
     teardownConsumer();
-    setJayrrPhonePeople([{ userId: JAYRR_PHONE_SELF, label: "On" }]);
+    setJayrrPhonePeople([{ userId: getJayrrPhoneClientId(), label: "On" }]);
   }, [isCollaborating, teardownConsumer, teardownProducer]);
 
   useEffect(
@@ -159,7 +167,10 @@ export const JayrrCollabVideo = ({
               ? "Other device"
               : publication.displayName || "Phone",
         })) ?? [];
-    setJayrrPhonePeople([{ userId: JAYRR_PHONE_SELF, label: "On" }, ...others]);
+    setJayrrPhonePeople([
+      { userId: getJayrrPhoneClientId(), label: "On" },
+      ...others,
+    ]);
   }, [publications, viewer]);
 
   useEffect(() => {
@@ -230,19 +241,18 @@ export const JayrrCollabVideo = ({
             failed.push(track.errorDescription || track.errorCode || "");
             return;
           }
-          if (track.mid) {
-            midMapRef.current.set(track.mid, {
-              userId: requested.userId,
-              displayName: requested.displayName,
-              key: requested.key,
-            });
+          if (!track.mid) {
+            failed.push("Missing media section");
+            return;
           }
+          midMapRef.current.set(track.mid, {
+            userId: requested.userId,
+            displayName: requested.displayName,
+            key: requested.key,
+          });
           subscribedRef.current.add(requested.key);
         });
-        if (
-          result.requiresImmediateRenegotiation &&
-          result.sessionDescription
-        ) {
+        if (result.sessionDescription) {
           await consumer.setRemoteDescription(
             asPeerDescription(result.sessionDescription),
           );
@@ -294,17 +304,36 @@ export const JayrrCollabVideo = ({
     }
     shareLockRef.current = true;
     setJayrrPhoneError(null);
+    const clientId = getJayrrPhoneClientId();
     try {
+      const reusable = peekJayrrPhoneStream(JAYRR_PHONE_SELF);
+      const reusableLive = reusable?.getVideoTracks().some((track) => {
+        return track.readyState === "live";
+      });
       let stream: MediaStream;
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: true,
-          audio: true,
-        });
-      } catch {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: true,
-        });
+      if (reusable && reusableLive) {
+        stream = reusable;
+        ownsTracksRef.current = false;
+      } else {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: true,
+          });
+        } catch (caught) {
+          if (
+            caught instanceof DOMException &&
+            (caught.name === "NotAllowedError" ||
+              caught.name === "NotFoundError")
+          ) {
+            throw caught;
+          }
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+          });
+        }
+        ownsTracksRef.current = true;
+        setJayrrPhoneLocal(stream);
       }
       localStreamRef.current = stream;
       const producer = createSfuPeerConnection();
@@ -316,7 +345,10 @@ export const JayrrCollabVideo = ({
         return {
           kind:
             track.kind === "audio" ? ("audio" as const) : ("video" as const),
-          trackName: track.kind === "audio" ? "microphone" : "camera",
+          trackName:
+            track.kind === "audio"
+              ? `${clientId}.microphone`
+              : `${clientId}.camera`,
           transceiver,
         };
       });
@@ -353,6 +385,16 @@ export const JayrrCollabVideo = ({
     } catch (caught) {
       teardownProducer();
       setJayrrPhoneError(trackError(caught));
+      const denied =
+        caught instanceof DOMException &&
+        (caught.name === "NotAllowedError" || caught.name === "NotFoundError");
+      if (!denied) {
+        window.setTimeout(() => {
+          if (wantedRef.current) {
+            setShareAttempt((value) => value + 1);
+          }
+        }, 2000);
+      }
     } finally {
       shareLockRef.current = false;
     }
@@ -383,7 +425,7 @@ export const JayrrCollabVideo = ({
     if (!wanted && sharing) {
       void stop();
     }
-  }, [isCollaborating, roomId, share, sharing, stop, wanted]);
+  }, [isCollaborating, roomId, share, shareAttempt, sharing, stop, wanted]);
 
   return null;
 };
