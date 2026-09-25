@@ -119,6 +119,92 @@ const phoneIcon = (
   </svg>
 );
 
+const sizeIcon = (
+  <svg
+    aria-hidden="true"
+    focusable="false"
+    width="20"
+    height="20"
+    viewBox="0 0 20 20"
+  >
+    <rect
+      x="3.2"
+      y="4.2"
+      width="13.6"
+      height="11.6"
+      rx="1.5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+    />
+    <path
+      d="M7.2 10h5.6M10 7.2v5.6"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+    />
+  </svg>
+);
+
+const framesIcon = (
+  <svg
+    aria-hidden="true"
+    focusable="false"
+    width="20"
+    height="20"
+    viewBox="0 0 20 20"
+  >
+    <circle
+      cx="10"
+      cy="10"
+      r="6.4"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+    />
+    <path
+      d="M10 6.4V10l2.6 1.6"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+const fitIcon = (
+  <svg
+    aria-hidden="true"
+    focusable="false"
+    width="20"
+    height="20"
+    viewBox="0 0 20 20"
+  >
+    <rect
+      x="2.8"
+      y="2.8"
+      width="14.4"
+      height="14.4"
+      rx="1.5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+    />
+    <rect
+      x="6.2"
+      y="5.4"
+      width="7.6"
+      height="9.2"
+      rx="1"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+    />
+  </svg>
+);
+
 const cropIcon = (
   <svg
     aria-hidden="true"
@@ -499,120 +585,6 @@ const LocalCutoutSetting = () => {
   return <CutoutSetting value={cutout} onChange={setCutout} />;
 };
 
-const PictureTune = ({
-  fit,
-  cropActive,
-  hasCrop,
-  onFit,
-  onToggleCrop,
-  onResetCrop,
-}: {
-  fit: JayrrObjectFit;
-  cropActive: boolean;
-  hasCrop: boolean;
-  onFit: (next: JayrrObjectFit) => void;
-  onToggleCrop: () => void;
-  onResetCrop: () => void;
-}) => (
-  <>
-    <label className="control-label">
-      Fit
-      <select
-        className="dropdown-select"
-        value={fit}
-        aria-label="Fit"
-        onChange={(event) => {
-          const next = event.target.value;
-          if ((JAYRR_OBJECT_FITS as readonly string[]).includes(next)) {
-            onFit(next as JayrrObjectFit);
-          }
-        }}
-      >
-        {JAYRR_OBJECT_FITS.map((option) => (
-          <option key={option} value={option}>
-            {jayrrObjectFitLabel(option)}
-          </option>
-        ))}
-      </select>
-    </label>
-    <div className="jayrr-camera-picker__crop">
-      <span className="control-label">Crop</span>
-      <div className="buttonList">
-        <RadioButton
-          icon={<>{cropIcon}</>}
-          title="Crop"
-          active={cropActive}
-          onClick={onToggleCrop}
-        />
-        {hasCrop ? (
-          <button
-            type="button"
-            className="jayrr-camera-picker__crop-reset"
-            onClick={onResetCrop}
-          >
-            Reset
-          </button>
-        ) : null}
-      </div>
-    </div>
-  </>
-);
-
-const DesktopTune = ({
-  quality,
-  frameRate,
-  onQuality,
-  onFrameRate,
-}: {
-  quality: JayrrDisplayQuality;
-  frameRate: JayrrDisplayRate;
-  onQuality: (next: JayrrDisplayQuality) => void;
-  onFrameRate: (next: JayrrDisplayRate) => void;
-}) => (
-  <div className="jayrr-camera-picker__tune">
-    <label className="control-label">
-      Size
-      <select
-        className="dropdown-select"
-        value={quality}
-        aria-label="Desktop size"
-        onChange={(event) => {
-          const next = event.target.value;
-          if ((JAYRR_DISPLAY_QUALITIES as readonly string[]).includes(next)) {
-            onQuality(next as JayrrDisplayQuality);
-          }
-        }}
-      >
-        {JAYRR_DISPLAY_QUALITIES.map((option) => (
-          <option key={option} value={option}>
-            {jayrrDisplayQualityLabel(option)}
-          </option>
-        ))}
-      </select>
-    </label>
-    <label className="control-label">
-      Frames
-      <select
-        className="dropdown-select"
-        value={frameRate}
-        aria-label="Desktop frames"
-        onChange={(event) => {
-          const next = Number(event.target.value);
-          if (next === 30 || next === 60) {
-            onFrameRate(next);
-          }
-        }}
-      >
-        {JAYRR_DISPLAY_RATES.map((option) => (
-          <option key={option} value={option}>
-            {option} fps
-          </option>
-        ))}
-      </select>
-    </label>
-  </div>
-);
-
 const StreamFields = ({
   compact,
   source,
@@ -883,24 +855,135 @@ const StreamFields = ({
       )}
     </StreamChoice>
   );
-  const cropChoice = (
-    <IconButton
-      type="button"
-      icon={cropIcon}
-      className={cropActive ? "ToolIcon--checked" : undefined}
-      aria-label="Crop"
-      title="Crop"
-      onClick={onToggleCrop}
-    />
-  );
   const pictureOn = cameraOn || phoneOn || screenOn || desktopOn;
+  const sizeChoice = desktopOn ? (
+    <StreamChoice
+      title="Size"
+      icon={sizeIcon}
+      active={false}
+      compact={compact}
+      disabled={false}
+    >
+      {(close) => (
+        <>
+          {JAYRR_DISPLAY_QUALITIES.map((option) => (
+            <MenuItem
+              key={option}
+              selected={quality === option}
+              onSelect={() => {
+                onQuality(option);
+                close();
+              }}
+            >
+              {jayrrDisplayQualityLabel(option)}
+            </MenuItem>
+          ))}
+        </>
+      )}
+    </StreamChoice>
+  ) : null;
+  const framesChoice = desktopOn ? (
+    <StreamChoice
+      title="Frames"
+      icon={framesIcon}
+      active={false}
+      compact={compact}
+      disabled={false}
+    >
+      {(close) => (
+        <>
+          {JAYRR_DISPLAY_RATES.map((option) => (
+            <MenuItem
+              key={option}
+              selected={frameRate === option}
+              onSelect={() => {
+                onFrameRate(option);
+                close();
+              }}
+            >
+              {option} fps
+            </MenuItem>
+          ))}
+        </>
+      )}
+    </StreamChoice>
+  ) : null;
+  const fitChoice = pictureOn ? (
+    <StreamChoice
+      title="Fit"
+      icon={fitIcon}
+      active={false}
+      compact={compact}
+      disabled={false}
+    >
+      {(close) => (
+        <>
+          {JAYRR_OBJECT_FITS.map((option) => (
+            <MenuItem
+              key={option}
+              selected={fit === option}
+              onSelect={() => {
+                onFit(option);
+                close();
+              }}
+            >
+              {jayrrObjectFitLabel(option)}
+            </MenuItem>
+          ))}
+        </>
+      )}
+    </StreamChoice>
+  ) : null;
+  const cropChoice = pictureOn ? (
+    <StreamChoice
+      title="Crop"
+      icon={cropIcon}
+      active={cropActive || hasCrop}
+      compact={compact}
+      disabled={false}
+    >
+      {(close) => (
+        <>
+          <MenuItem
+            selected={cropActive}
+            onSelect={() => {
+              onToggleCrop();
+              close();
+            }}
+          >
+            {cropActive ? "Done" : "Crop"}
+          </MenuItem>
+          {hasCrop ? (
+            <MenuItem
+              selected={false}
+              onSelect={() => {
+                onResetCrop();
+                close();
+              }}
+            >
+              Reset
+            </MenuItem>
+          ) : null}
+        </>
+      )}
+    </StreamChoice>
+  ) : null;
   const choices = compact ? (
     <>
       <div className="compact-action-item">{cameraChoice}</div>
       <div className="compact-action-item">{desktopChoice}</div>
       <div className="compact-action-item">{phoneChoice}</div>
       <div className="compact-action-item">{screenChoice}</div>
-      {pictureOn ? (
+      {sizeChoice ? (
+        <div className="compact-action-item">{sizeChoice}</div>
+      ) : null}
+      {framesChoice ? (
+        <div className="compact-action-item">{framesChoice}</div>
+      ) : null}
+      {fitChoice ? (
+        <div className="compact-action-item">{fitChoice}</div>
+      ) : null}
+      {cropChoice ? (
         <div className="compact-action-item">{cropChoice}</div>
       ) : null}
     </>
@@ -920,26 +1003,20 @@ const StreamFields = ({
   return (
     <>
       {choices}
-      {desktopOn ? (
-        <DesktopTune
-          quality={quality}
-          frameRate={frameRate}
-          onQuality={onQuality}
-          onFrameRate={onFrameRate}
-        />
+      {pictureOn ? (
+        <div className="buttonList jayrr-camera-picker__tune">
+          {sizeChoice}
+          {framesChoice}
+          {fitChoice}
+          {cropChoice}
+        </div>
       ) : null}
       {pictureOn ? (
-        <div className="jayrr-camera-picker__tune">
-          <PictureTune
-            fit={fit}
-            cropActive={cropActive}
-            hasCrop={hasCrop}
-            onFit={onFit}
-            onToggleCrop={onToggleCrop}
-            onResetCrop={onResetCrop}
-          />
-          {isConvexLinked ? <LinkedCutoutSetting /> : <LocalCutoutSetting />}
-        </div>
+        isConvexLinked ? (
+          <LinkedCutoutSetting />
+        ) : (
+          <LocalCutoutSetting />
+        )
       ) : null}
       {error ? (
         <span className="jayrr-camera-picker__error">{error}</span>
