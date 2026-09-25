@@ -8,6 +8,7 @@ import type { NonDeletedExcalidrawElement } from "@excalidraw/element/types";
 
 import { useAtomValue } from "../app-jotai";
 import {
+  peekJayrrPhoneIncoming,
   peekJayrrPhoneStream,
   releaseJayrrPhoneSelf,
   retainJayrrPhoneSelf,
@@ -158,15 +159,16 @@ const CameraVideo = ({
     if (!video || !phone || !phoneUserId) {
       return;
     }
-    if (phoneUserId === JAYRR_PHONE_SELF) {
-      retainJayrrPhoneSelf();
-    }
+    retainJayrrPhoneSelf();
     let cancelled = false;
     const attach = () => {
       if (cancelled) {
         return;
       }
-      const stream = peekJayrrPhoneStream(phoneUserId);
+      const stream =
+        phoneUserId === JAYRR_PHONE_SELF
+          ? peekJayrrPhoneIncoming()
+          : peekJayrrPhoneStream(phoneUserId);
       if (!stream) {
         video.srcObject = null;
         setJayrrCameraVideo(elementId, null);
@@ -175,7 +177,7 @@ const CameraVideo = ({
       }
       if (video.srcObject !== stream) {
         video.srcObject = stream;
-        video.dataset.jayrrMirror = phoneUserId === JAYRR_PHONE_SELF ? "1" : "";
+        video.dataset.jayrrMirror = "";
         setJayrrCameraVideo(elementId, video);
         setStreamReady(true);
         void video.play().catch(() => undefined);
@@ -186,9 +188,7 @@ const CameraVideo = ({
     return () => {
       cancelled = true;
       stopListen();
-      if (phoneUserId === JAYRR_PHONE_SELF) {
-        releaseJayrrPhoneSelf();
-      }
+      releaseJayrrPhoneSelf();
       setJayrrCameraVideo(elementId, null);
       setStreamReady(false);
       video.srcObject = null;
@@ -268,7 +268,7 @@ const CameraVideo = ({
         ref={videoRef}
         className="jayrr-camera-window__video"
         autoPlay
-        muted={!phone || phoneUserId === JAYRR_PHONE_SELF}
+        muted={!phone}
         playsInline
       />
       <canvas ref={cutoutRef} className="jayrr-camera-window__cutout" />

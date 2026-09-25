@@ -114,7 +114,7 @@ export const JayrrCollabVideo = ({
     }
     teardownProducer();
     teardownConsumer();
-    setJayrrPhonePeople([{ userId: JAYRR_PHONE_SELF, label: "You" }]);
+    setJayrrPhonePeople([{ userId: JAYRR_PHONE_SELF, label: "On" }]);
   }, [isCollaborating, teardownConsumer, teardownProducer]);
 
   useEffect(
@@ -159,10 +159,7 @@ export const JayrrCollabVideo = ({
               ? "Other device"
               : publication.displayName || "Phone",
         })) ?? [];
-    setJayrrPhonePeople([
-      { userId: JAYRR_PHONE_SELF, label: "You" },
-      ...others,
-    ]);
+    setJayrrPhonePeople([{ userId: JAYRR_PHONE_SELF, label: "On" }, ...others]);
   }, [publications, viewer]);
 
   useEffect(() => {
@@ -310,7 +307,6 @@ export const JayrrCollabVideo = ({
         });
       }
       localStreamRef.current = stream;
-      setJayrrPhoneLocal(stream);
       const producer = createSfuPeerConnection();
       producerRef.current = producer;
       const offerTracks = stream.getTracks().map((track) => {

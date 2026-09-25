@@ -201,7 +201,7 @@ export const jayrrCameraLabel = (camera: JayrrCamera | null) => {
   }
   if (camera.kind === "phone") {
     return (
-      camera.label || (camera.userId === JAYRR_PHONE_SELF ? "You" : "Phone")
+      camera.label || (camera.userId === JAYRR_PHONE_SELF ? "Call" : "Phone")
     );
   }
   return camera.label || null;

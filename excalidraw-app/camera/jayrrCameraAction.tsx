@@ -8,7 +8,7 @@ import { getDropdownMenuItemClassName } from "@excalidraw/excalidraw/components/
 import { getSelectedElements } from "@excalidraw/excalidraw/scene";
 import { useConvexAuth, useMutation } from "convex/react";
 import { Popover } from "radix-ui";
-import { useState, type ReactNode, useEffect } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import type {
   ExcalidrawElement,
@@ -338,7 +338,7 @@ const cameraFromValue = (
     return {
       kind: "phone",
       userId: phoneUserId,
-      label: phoneUserId === JAYRR_PHONE_SELF ? "You" : undefined,
+      label: phoneUserId === JAYRR_PHONE_SELF ? "Call" : undefined,
     };
   }
   const device = devices.find((item) => item.deviceId === value);
@@ -729,6 +729,11 @@ const StreamFields = ({
               Start live collaboration first
             </span>
           ) : null}
+          {phoneOn && people.length < 2 ? (
+            <span className="jayrr-camera-picker__note">
+              Waiting for the other side.
+            </span>
+          ) : null}
           <MenuItem
             selected={!phoneOn}
             onSelect={() => {
@@ -907,7 +912,10 @@ const CameraPanel = ({
     onChange({
       kind: "phone",
       userId,
-      label: person?.label || sourceLabel || undefined,
+      label:
+        userId === JAYRR_PHONE_SELF
+          ? "Call"
+          : person?.label || sourceLabel || undefined,
     });
   };
 

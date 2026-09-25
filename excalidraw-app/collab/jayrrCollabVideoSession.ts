@@ -21,7 +21,7 @@ const listeners = new Set<() => void>();
 const remotes = new Map<string, MediaStream>();
 
 let localStream: MediaStream | null = null;
-let people: JayrrPhonePerson[] = [{ userId: JAYRR_PHONE_SELF, label: "You" }];
+let people: JayrrPhonePerson[] = [{ userId: JAYRR_PHONE_SELF, label: "On" }];
 let error: string | null = null;
 let selfHold = 0;
 
@@ -43,6 +43,11 @@ export const peekJayrrPhoneStream = (userId: string) => {
     return localStream;
   }
   return remotes.get(userId) ?? null;
+};
+
+export const peekJayrrPhoneIncoming = () => {
+  const first = remotes.values().next();
+  return first.done ? null : first.value;
 };
 
 export const listJayrrPhonePeople = () => people;
