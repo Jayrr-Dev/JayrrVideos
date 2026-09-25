@@ -17,13 +17,23 @@ export type JayrrPhonePerson = {
   label: string;
 };
 
+const SCREEN_PREFIX = "screen:";
+
+export const jayrrScreenClientId = (clientId: string) => `${clientId}:screen`;
+
+export const readJayrrScreenClientId = (clientId: string) =>
+  clientId.endsWith(":screen") ? clientId.slice(0, -":screen".length) : null;
+
 const listeners = new Set<() => void>();
 const remotes = new Map<string, MediaStream>();
 
 let localStream: MediaStream | null = null;
+let localScreen: MediaStream | null = null;
 let people: JayrrPhonePerson[] = [{ userId: JAYRR_PHONE_SELF, label: "On" }];
 let error: string | null = null;
 let selfHold = 0;
+let screenHold = 0;
+let screenGeneration = 0;
 
 const notify = () => {
   for (const listener of listeners) {
@@ -45,6 +55,13 @@ export const peekJayrrPhoneStream = (userId: string) => {
   return remotes.get(userId) ?? null;
 };
 
+export const peekJayrrScreenStream = (userId: string) => {
+  if (userId === JAYRR_PHONE_SELF || userId === getJayrrPhoneClientId()) {
+    return localScreen;
+  }
+  return remotes.get(`${SCREEN_PREFIX}${userId}`) ?? null;
+};
+
 export const peekJayrrPhoneIncoming = () => {
   const first = remotes.values().next();
   return first.done ? null : first.value;
@@ -56,6 +73,10 @@ export const getJayrrPhoneError = () => error;
 
 export const getJayrrPhoneSelfWanted = () => selfHold > 0;
 
+export const getJayrrScreenSelfWanted = () => screenHold > 0;
+
+export const getJayrrScreenGeneration = () => screenGeneration;
+
 export const retainJayrrPhoneSelf = () => {
   selfHold += 1;
   notify();
@@ -66,8 +87,37 @@ export const releaseJayrrPhoneSelf = () => {
   notify();
 };
 
+export const retainJayrrScreenSelf = () => {
+  screenHold += 1;
+  notify();
+};
+
+export const releaseJayrrScreenSelf = () => {
+  screenHold = Math.max(0, screenHold - 1);
+  notify();
+};
+
 export const setJayrrPhoneLocal = (stream: MediaStream | null) => {
   localStream = stream;
+  notify();
+};
+
+export const setJayrrScreenLocal = (stream: MediaStream | null) => {
+  localScreen = stream;
+  screenGeneration += 1;
+  notify();
+};
+
+export const setJayrrScreenRemote = (
+  userId: string,
+  stream: MediaStream | null,
+) => {
+  const key = `${SCREEN_PREFIX}${userId}`;
+  if (!stream) {
+    remotes.delete(key);
+  } else {
+    remotes.set(key, stream);
+  }
   notify();
 };
 

@@ -22,6 +22,8 @@ import {
   getJayrrPhoneClientId,
   getJayrrPhoneError,
   listJayrrPhonePeople,
+  peekJayrrScreenStream,
+  setJayrrScreenLocal,
   subscribeJayrrPhone,
 } from "../collab/jayrrCollabVideoSession";
 import { IconButton, Island, RadioButton } from "../components/ui";
@@ -45,11 +47,13 @@ import {
   isFullDisplayCrop,
   isJayrrDisplay,
   isJayrrPhone,
+  isJayrrScreen,
   jayrrCameraLabel,
   jayrrDisplayQualityLabel,
   jayrrDisplaySurfaceLabel,
   jayrrObjectFitLabel,
   jayrrPhoneSource,
+  jayrrScreenSource,
   parseDisplayCrop,
   readDisplayCrop,
   readDisplayFit,
@@ -57,6 +61,7 @@ import {
   readDisplayRate,
   readJayrrCamera,
   readPhoneSource,
+  readScreenSource,
   writeJayrrCamera,
   type JayrrCamera,
   type JayrrDisplayCrop,
@@ -123,6 +128,35 @@ const cropIcon = (
   >
     <path
       d="M8 5v10a1 1 0 0 0 1 1h10M5 8h10a1 1 0 0 1 1 1v10"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+const screenIcon = (
+  <svg
+    aria-hidden="true"
+    focusable="false"
+    width="20"
+    height="20"
+    viewBox="0 0 20 20"
+  >
+    <rect
+      x="2.5"
+      y="3.5"
+      width="15"
+      height="10"
+      rx="1.5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+    />
+    <path
+      d="M10 13.5V16.2M7.2 16.2h5.6M13.2 8.2l1.6-1.6M14.8 8.2H12.4V5.8"
       fill="none"
       stroke="currentColor"
       strokeWidth="1.5"
@@ -263,6 +297,9 @@ const sourceValue = (camera: JayrrCamera | null) => {
   if (isJayrrPhone(camera)) {
     return jayrrPhoneSource(camera.userId);
   }
+  if (isJayrrScreen(camera)) {
+    return jayrrScreenSource(camera.userId);
+  }
   return camera.deviceId;
 };
 
@@ -313,6 +350,11 @@ const cameraFromValue = (
         label: jayrrCameraLabel(bag) ?? jayrrDisplaySurfaceLabel(surface),
       };
     }
+    if (bag.kind === "screen" && typeof bag.userId === "string" && bag.userId) {
+      const userId =
+        bag.userId === JAYRR_PHONE_SELF ? getJayrrPhoneClientId() : bag.userId;
+      return { kind: "screen", userId, label: "Screen" };
+    }
     if (bag.kind === "phone" && typeof bag.userId === "string" && bag.userId) {
       const userId =
         bag.userId === JAYRR_PHONE_SELF ? getJayrrPhoneClientId() : bag.userId;
@@ -336,6 +378,14 @@ const cameraFromValue = (
   }
   if (value === JAYRR_DISPLAY_SOURCE) {
     return { kind: "display", nonce: Date.now(), label: "Screen" };
+  }
+  const screenUserId = readScreenSource(value);
+  if (screenUserId) {
+    const userId =
+      screenUserId === JAYRR_PHONE_SELF
+        ? getJayrrPhoneClientId()
+        : screenUserId;
+    return { kind: "screen", userId, label: "Screen" };
   }
   const phoneUserId = readPhoneSource(value);
   if (phoneUserId) {
@@ -581,6 +631,9 @@ const StreamFields = ({
   people,
   phoneError,
   onPhoneChange,
+  screenError,
+  onShareScreen,
+  onStopScreen,
 }: {
   compact: boolean;
   source: string;
@@ -608,13 +661,20 @@ const StreamFields = ({
   people: Array<{ userId: string; label: string }>;
   phoneError: string | null;
   onPhoneChange: (userId: string) => void;
+  screenError: string | null;
+  onShareScreen: () => void;
+  onStopScreen: () => void;
 }) => {
   const namedDevices = devices.filter((device) => device.deviceId);
+  const screenSource = readScreenSource(source) ?? "";
   const cameraSource =
-    source === JAYRR_DISPLAY_SOURCE || phoneSource ? "" : source;
+    source === JAYRR_DISPLAY_SOURCE || phoneSource || screenSource
+      ? ""
+      : source;
   const desktopOn = source === JAYRR_DISPLAY_SOURCE;
   const cameraOn = Boolean(cameraSource);
   const phoneOn = Boolean(phoneSource);
+  const screenOn = Boolean(screenSource);
   const linkedMissing = Boolean(
     cameraSource &&
       !namedDevices.some((device) => device.deviceId === cameraSource),
@@ -770,6 +830,50 @@ const StreamFields = ({
       )}
     </StreamChoice>
   );
+  const screenChoice = (
+    <StreamChoice
+      title="Screen"
+      icon={screenIcon}
+      active={screenOn}
+      compact={compact}
+      disabled={false}
+    >
+      {(close) => (
+        <>
+          {screenError ? (
+            <span className="jayrr-camera-picker__error">{screenError}</span>
+          ) : null}
+          {!collaborating ? (
+            <span className="jayrr-camera-picker__error">
+              Start live collaboration first
+            </span>
+          ) : null}
+          <MenuItem
+            selected={!screenOn}
+            onSelect={() => {
+              if (screenOn) {
+                onStopScreen();
+              }
+              close();
+            }}
+          >
+            Off
+          </MenuItem>
+          {collaborating ? (
+            <MenuItem
+              selected={screenOn}
+              onSelect={() => {
+                onShareScreen();
+                close();
+              }}
+            >
+              {screenOn ? "Change screen" : "Share screen"}
+            </MenuItem>
+          ) : null}
+        </>
+      )}
+    </StreamChoice>
+  );
   const cropChoice = (
     <IconButton
       type="button"
@@ -785,6 +889,7 @@ const StreamFields = ({
       <div className="compact-action-item">{cameraChoice}</div>
       <div className="compact-action-item">{desktopChoice}</div>
       <div className="compact-action-item">{phoneChoice}</div>
+      <div className="compact-action-item">{screenChoice}</div>
       {desktopOn ? (
         <div className="compact-action-item">{cropChoice}</div>
       ) : null}
@@ -794,6 +899,7 @@ const StreamFields = ({
       {cameraChoice}
       {desktopChoice}
       {phoneChoice}
+      {screenChoice}
     </div>
   );
 
@@ -818,7 +924,7 @@ const StreamFields = ({
           onResetCrop={onResetCrop}
         />
       ) : null}
-      {cameraOn ? (
+      {cameraOn || desktopOn || screenOn ? (
         isConvexLinked ? (
           <LinkedCutoutSetting />
         ) : (
@@ -855,6 +961,7 @@ const CameraPanel = ({
   crop: JayrrDisplayCrop | undefined;
   onChange: (next: unknown) => void;
 }) => {
+  const { container } = useExcalidrawContainer();
   const mode = useStylesPanelMode();
   const compact = mode !== "full";
   const cropElementId = useAtomValue(desktopCropElementIdAtom);
@@ -862,6 +969,7 @@ const CameraPanel = ({
   const collaborating = useAtomValue(isCollaboratingAtom);
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [screenError, setScreenError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [phoneTick, setPhoneTick] = useState(0);
   const cropActive = cropElementId === elementId;
@@ -907,6 +1015,66 @@ const CameraPanel = ({
       deviceId: next,
       label: device?.label || sourceLabel || undefined,
     });
+  };
+
+  const stopScreen = () => {
+    setCropElementId(null);
+    peekJayrrScreenStream(getJayrrPhoneClientId())
+      ?.getTracks()
+      .forEach((track) => track.stop());
+    setJayrrScreenLocal(null);
+    onChange({ off: true });
+  };
+
+  const shareScreen = async () => {
+    setCropElementId(null);
+    setScreenError(null);
+    const view = container?.ownerDocument.defaultView;
+    if (!view) {
+      return;
+    }
+    try {
+      let stream: MediaStream;
+      try {
+        stream = await view.navigator.mediaDevices.getDisplayMedia({
+          video: true,
+          audio: true,
+        });
+      } catch (caught) {
+        if (
+          caught instanceof DOMException &&
+          caught.name === "NotAllowedError"
+        ) {
+          return;
+        }
+        stream = await view.navigator.mediaDevices.getDisplayMedia({
+          video: true,
+        });
+      }
+      peekJayrrScreenStream(getJayrrPhoneClientId())
+        ?.getTracks()
+        .forEach((track) => track.stop());
+      const video = stream.getVideoTracks()[0];
+      video?.addEventListener("ended", () => {
+        setJayrrScreenLocal(null);
+        onChange({ off: true });
+      });
+      setJayrrScreenLocal(stream);
+      onChange({
+        kind: "screen",
+        userId: getJayrrPhoneClientId(),
+        label: "Screen",
+      });
+    } catch (caught) {
+      if (caught instanceof DOMException && caught.name === "NotAllowedError") {
+        return;
+      }
+      setScreenError(
+        caught instanceof Error
+          ? caught.message
+          : "Could not share the screen.",
+      );
+    }
   };
 
   const pickPhone = (userId: string) => {
@@ -1012,6 +1180,11 @@ const CameraPanel = ({
       people={people}
       phoneError={phoneError}
       onPhoneChange={pickPhone}
+      screenError={screenError}
+      onShareScreen={() => {
+        void shareScreen();
+      }}
+      onStopScreen={stopScreen}
     />
   );
 

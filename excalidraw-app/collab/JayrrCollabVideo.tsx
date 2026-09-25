@@ -18,11 +18,18 @@ import {
   clearJayrrPhoneRemotes,
   getJayrrPhoneClientId,
   getJayrrPhoneSelfWanted,
+  getJayrrScreenGeneration,
+  getJayrrScreenSelfWanted,
+  jayrrScreenClientId,
   peekJayrrPhoneStream,
+  peekJayrrScreenStream,
+  readJayrrScreenClientId,
   setJayrrPhoneError,
   setJayrrPhoneLocal,
   setJayrrPhonePeople,
   setJayrrPhoneRemote,
+  setJayrrScreenLocal,
+  setJayrrScreenRemote,
   subscribeJayrrPhone,
 } from "./jayrrCollabVideoSession";
 
@@ -30,7 +37,11 @@ type TrackMeta = {
   userId: string;
   displayName: string;
   key: string;
+  channel: "phone" | "screen";
 };
+
+const streamKey = (channel: TrackMeta["channel"], userId: string) =>
+  `${channel}:${userId}`;
 
 const readRoomId = () =>
   getCollaborationLinkData(window.location.href)?.roomId ?? null;
@@ -48,6 +59,12 @@ export const JayrrCollabVideo = ({
   const [wanted, setWanted] = useState(getJayrrPhoneSelfWanted);
   const [retry, setRetry] = useState(0);
   const [shareAttempt, setShareAttempt] = useState(0);
+  const [screenSharing, setScreenSharing] = useState(false);
+  const [screenWanted, setScreenWanted] = useState(getJayrrScreenSelfWanted);
+  const [screenAttempt, setScreenAttempt] = useState(0);
+  const [screenGeneration, setScreenGeneration] = useState(
+    getJayrrScreenGeneration,
+  );
   const producerRef = useRef<RTCPeerConnection | null>(null);
   const consumerRef = useRef<RTCPeerConnection | null>(null);
   const consumerSessionRef = useRef<string | null>(null);
@@ -60,10 +77,17 @@ export const JayrrCollabVideo = ({
   const shareLockRef = useRef(false);
   const ownsTracksRef = useRef(false);
   const wantedRef = useRef(wanted);
+  const screenProducerRef = useRef<RTCPeerConnection | null>(null);
+  const screenSharingRef = useRef(screenSharing);
+  const screenWantedRef = useRef(screenWanted);
+  const screenLockRef = useRef(false);
+  const screenRestartRef = useRef(Promise.resolve());
   const roomIdRef = useRef(roomId);
   roomIdRef.current = roomId;
   sharingRef.current = sharing;
   wantedRef.current = wanted;
+  screenSharingRef.current = screenSharing;
+  screenWantedRef.current = screenWanted;
   const viewer = useQuery(api.users.viewer);
   const publications = useQuery(
     api.collabVideo.listRoom,
@@ -90,6 +114,8 @@ export const JayrrCollabVideo = ({
     () =>
       subscribeJayrrPhone(() => {
         setWanted(getJayrrPhoneSelfWanted());
+        setScreenWanted(getJayrrScreenSelfWanted());
+        setScreenGeneration(getJayrrScreenGeneration());
       }),
     [],
   );
@@ -106,6 +132,20 @@ export const JayrrCollabVideo = ({
     setSharing(false);
   }, []);
 
+  const closeScreenProducer = useCallback(() => {
+    screenProducerRef.current?.close();
+    screenProducerRef.current = null;
+    setScreenSharing(false);
+  }, []);
+
+  const teardownScreen = useCallback(() => {
+    closeScreenProducer();
+    peekJayrrScreenStream(JAYRR_PHONE_SELF)
+      ?.getTracks()
+      .forEach((track) => track.stop());
+    setJayrrScreenLocal(null);
+  }, [closeScreenProducer]);
+
   const teardownConsumer = useCallback(() => {
     consumerRef.current?.close();
     consumerRef.current = null;
@@ -121,9 +161,10 @@ export const JayrrCollabVideo = ({
       return;
     }
     teardownProducer();
+    teardownScreen();
     teardownConsumer();
     setJayrrPhonePeople([{ userId: getJayrrPhoneClientId(), label: "On" }]);
-  }, [isCollaborating, teardownConsumer, teardownProducer]);
+  }, [isCollaborating, teardownConsumer, teardownProducer, teardownScreen]);
 
   useEffect(
     () => () => {
@@ -132,6 +173,12 @@ export const JayrrCollabVideo = ({
         void leaveRoom({
           roomId: activeRoomId,
           clientId: getJayrrPhoneClientId(),
+        });
+      }
+      if (activeRoomId && screenSharingRef.current) {
+        void leaveRoom({
+          roomId: activeRoomId,
+          clientId: jayrrScreenClientId(getJayrrPhoneClientId()),
         });
       }
     },
@@ -144,13 +191,18 @@ export const JayrrCollabVideo = ({
     if (!meta) {
       return;
     }
-    let stream = streamsRef.current.get(meta.userId);
+    const key = streamKey(meta.channel, meta.userId);
+    let stream = streamsRef.current.get(key);
     if (!stream) {
       stream = new MediaStream();
-      streamsRef.current.set(meta.userId, stream);
+      streamsRef.current.set(key, stream);
     }
     if (!stream.getTracks().some((track) => track.id === event.track.id)) {
       stream.addTrack(event.track);
+    }
+    if (meta.channel === "screen") {
+      setJayrrScreenRemote(meta.userId, stream);
+      return;
     }
     setJayrrPhoneRemote(meta.userId, stream);
   }, []);
@@ -159,7 +211,11 @@ export const JayrrCollabVideo = ({
     const clientId = getJayrrPhoneClientId();
     const others =
       publications
-        ?.filter((publication) => publication.clientId !== clientId)
+        ?.filter(
+          (publication) =>
+            publication.clientId !== clientId &&
+            !readJayrrScreenClientId(publication.clientId),
+        )
         .map((publication) => ({
           userId: publication.clientId,
           label:
@@ -178,25 +234,43 @@ export const JayrrCollabVideo = ({
       return;
     }
     const clientId = getJayrrPhoneClientId();
+    const screenClientId = jayrrScreenClientId(clientId);
     const desired = publications.flatMap((publication) => {
-      if (publication.clientId === clientId) {
+      if (
+        publication.clientId === clientId ||
+        publication.clientId === screenClientId
+      ) {
         return [];
       }
+      const screenOwner = readJayrrScreenClientId(publication.clientId);
+      const channel = screenOwner ? "screen" : "phone";
+      const userId = screenOwner ?? publication.clientId;
       return publication.tracks.map((track) => ({
         key: `${publication.sessionId}:${track.trackName}`,
         sessionId: publication.sessionId,
         trackName: track.trackName,
-        userId: publication.clientId,
+        userId,
+        channel,
         displayName:
           viewer && publication.userId === viewer._id
             ? "Other device"
             : publication.displayName,
       }));
     });
-    const liveUsers = new Set(desired.map((track) => track.userId));
-    for (const userId of [...streamsRef.current.keys()]) {
-      if (!liveUsers.has(userId)) {
-        streamsRef.current.delete(userId);
+    const liveKeys = new Set(
+      desired.map((track) => streamKey(track.channel, track.userId)),
+    );
+    for (const key of [...streamsRef.current.keys()]) {
+      if (liveKeys.has(key)) {
+        continue;
+      }
+      streamsRef.current.delete(key);
+      const splitAt = key.indexOf(":");
+      const channel = key.slice(0, splitAt);
+      const userId = key.slice(splitAt + 1);
+      if (channel === "screen") {
+        setJayrrScreenRemote(userId, null);
+      } else {
         setJayrrPhoneRemote(userId, null);
       }
     }
@@ -249,6 +323,7 @@ export const JayrrCollabVideo = ({
             userId: requested.userId,
             displayName: requested.displayName,
             key: requested.key,
+            channel: requested.channel,
           });
           subscribedRef.current.add(requested.key);
         });
@@ -426,6 +501,143 @@ export const JayrrCollabVideo = ({
       void stop();
     }
   }, [isCollaborating, roomId, share, shareAttempt, sharing, stop, wanted]);
+
+  const shareScreen = useCallback(async () => {
+    if (!roomId || screenLockRef.current || screenSharingRef.current) {
+      return;
+    }
+    const stream = peekJayrrScreenStream(JAYRR_PHONE_SELF);
+    const live = stream?.getVideoTracks().some((track) => {
+      return track.readyState === "live";
+    });
+    if (!stream || !live) {
+      window.setTimeout(() => {
+        if (screenWantedRef.current) {
+          setScreenAttempt((value) => value + 1);
+        }
+      }, 300);
+      return;
+    }
+    await screenRestartRef.current;
+    if (!roomId || screenLockRef.current || screenSharingRef.current) {
+      return;
+    }
+    screenLockRef.current = true;
+    const clientId = getJayrrPhoneClientId();
+    try {
+      const producer = createSfuPeerConnection();
+      screenProducerRef.current = producer;
+      const offerTracks = stream.getTracks().map((track) => {
+        const transceiver = producer.addTransceiver(track, {
+          direction: "sendonly",
+        });
+        return {
+          kind:
+            track.kind === "audio" ? ("audio" as const) : ("video" as const),
+          trackName:
+            track.kind === "audio"
+              ? `${clientId}.screen-audio`
+              : `${clientId}.screen`,
+          transceiver,
+        };
+      });
+      const offer = await producer.createOffer();
+      await producer.setLocalDescription(offer);
+      await waitForIce(producer);
+      const result = await publishTracks({
+        roomId,
+        sessionDescription: localDescription(producer),
+        tracks: offerTracks.map((track) => ({
+          kind: track.kind,
+          mid: requiredMid(track.transceiver),
+          trackName: track.trackName,
+        })),
+      });
+      if (!result.sessionDescription) {
+        throw new Error("Realtime SFU did not return an answer");
+      }
+      await producer.setRemoteDescription(
+        asPeerDescription(result.sessionDescription),
+      );
+      await waitForConnected(producer);
+      await waitForOutgoingPackets(producer);
+      await recordPublication({
+        roomId,
+        clientId: jayrrScreenClientId(clientId),
+        sessionId: result.sessionId,
+        tracks: offerTracks.map((track) => ({
+          kind: track.kind,
+          trackName: track.trackName,
+        })),
+      });
+      setScreenSharing(true);
+    } catch (caught) {
+      screenProducerRef.current?.close();
+      screenProducerRef.current = null;
+      setScreenSharing(false);
+      setJayrrPhoneError(trackError(caught));
+      window.setTimeout(() => {
+        if (screenWantedRef.current) {
+          setScreenAttempt((value) => value + 1);
+        }
+      }, 2000);
+    } finally {
+      screenLockRef.current = false;
+    }
+  }, [publishTracks, recordPublication, roomId]);
+
+  const stopScreen = useCallback(async () => {
+    teardownScreen();
+    if (!roomId) {
+      return;
+    }
+    try {
+      await leaveRoom({
+        roomId,
+        clientId: jayrrScreenClientId(getJayrrPhoneClientId()),
+      });
+    } catch (caught) {
+      setJayrrPhoneError(trackError(caught));
+    }
+  }, [leaveRoom, roomId, teardownScreen]);
+
+  useEffect(() => {
+    if (!screenSharingRef.current) {
+      return;
+    }
+    closeScreenProducer();
+    if (!roomId) {
+      screenRestartRef.current = Promise.resolve();
+      return;
+    }
+    screenRestartRef.current = leaveRoom({
+      roomId,
+      clientId: jayrrScreenClientId(getJayrrPhoneClientId()),
+    }).then(
+      () => undefined,
+      () => undefined,
+    );
+  }, [closeScreenProducer, leaveRoom, roomId, screenGeneration]);
+
+  useEffect(() => {
+    if (!isCollaborating || !roomId) {
+      return;
+    }
+    if (screenWanted && !screenSharing) {
+      void shareScreen();
+    }
+    if (!screenWanted && screenSharing) {
+      void stopScreen();
+    }
+  }, [
+    isCollaborating,
+    roomId,
+    screenAttempt,
+    screenSharing,
+    screenWanted,
+    shareScreen,
+    stopScreen,
+  ]);
 
   return null;
 };

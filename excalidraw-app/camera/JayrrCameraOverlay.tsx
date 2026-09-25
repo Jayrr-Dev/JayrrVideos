@@ -10,8 +10,11 @@ import { useAtomValue } from "../app-jotai";
 import {
   getJayrrPhoneClientId,
   peekJayrrPhoneStream,
+  peekJayrrScreenStream,
   releaseJayrrPhoneSelf,
+  releaseJayrrScreenSelf,
   retainJayrrPhoneSelf,
+  retainJayrrScreenSelf,
   setJayrrPhoneLocal,
   subscribeJayrrPhone,
 } from "../collab/jayrrCollabVideoSession";
@@ -26,6 +29,7 @@ import {
   canLinkJayrrCamera,
   isJayrrDisplay,
   isJayrrPhone,
+  isJayrrScreen,
   JAYRR_PHONE_SELF,
   jayrrStreamOwnerId,
   readDisplayQuality,
@@ -77,13 +81,17 @@ const CameraVideo = ({
   const cutout = useAtomValue(cameraCutoutAtom);
   const display = isJayrrDisplay(camera);
   const phone = isJayrrPhone(camera);
+  const screen = isJayrrScreen(camera);
   const phoneUserId = phone ? camera.userId : null;
+  const screenUserId = screen ? camera.userId : null;
   const streamOwnerId = jayrrStreamOwnerId(camera);
   const myClientId = getJayrrPhoneClientId();
   const foreignStream = streamOwnerId != null && streamOwnerId !== myClientId;
   const ownPhone =
     phone && (phoneUserId === myClientId || phoneUserId === JAYRR_PHONE_SELF);
-  const cameraId = display || phone || foreignStream ? null : camera.deviceId;
+  const ownScreen = screen && screenUserId === myClientId;
+  const cameraId =
+    display || phone || screen || foreignStream ? null : camera.deviceId;
   const nonce = display ? camera.nonce ?? 0 : 0;
   const surface = display ? camera.surface : undefined;
   const quality = readDisplayQuality(display ? camera : null);
@@ -106,7 +114,7 @@ const CameraVideo = ({
     if (!video) {
       return;
     }
-    if (phone || foreignStream) {
+    if (phone || screen || foreignStream) {
       return;
     }
     let cancelled = false;
@@ -174,12 +182,16 @@ const CameraVideo = ({
     myClientId,
     nonce,
     phone,
+    screen,
     streamOwnerId,
     surface,
   ]);
 
   useEffect(() => {
     const video = videoRef.current;
+    if (screen) {
+      return;
+    }
     const remoteUserId = foreignStream
       ? streamOwnerId
       : phoneUserId && !ownPhone
@@ -225,7 +237,51 @@ const CameraVideo = ({
       setStreamReady(false);
       video.srcObject = null;
     };
-  }, [elementId, foreignStream, ownPhone, phoneUserId, streamOwnerId]);
+  }, [elementId, foreignStream, ownPhone, phoneUserId, screen, streamOwnerId]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !screen || !screenUserId) {
+      return;
+    }
+    if (ownScreen) {
+      retainJayrrScreenSelf();
+    }
+    let cancelled = false;
+    const attach = () => {
+      if (cancelled) {
+        return;
+      }
+      const stream = peekJayrrScreenStream(
+        ownScreen ? JAYRR_PHONE_SELF : screenUserId,
+      );
+      if (!stream) {
+        video.srcObject = null;
+        setJayrrCameraVideo(elementId, null);
+        setStreamReady(false);
+        return;
+      }
+      if (video.srcObject !== stream) {
+        video.srcObject = stream;
+        video.dataset.jayrrMirror = "";
+        setJayrrCameraVideo(elementId, video);
+        setStreamReady(true);
+        void video.play().catch(() => undefined);
+      }
+    };
+    attach();
+    const stopListen = subscribeJayrrPhone(attach);
+    return () => {
+      cancelled = true;
+      stopListen();
+      if (ownScreen) {
+        releaseJayrrScreenSelf();
+      }
+      setJayrrCameraVideo(elementId, null);
+      setStreamReady(false);
+      video.srcObject = null;
+    };
+  }, [elementId, ownScreen, screen, screenUserId]);
 
   useEffect(() => {
     if (!display || !streamReady) {
@@ -280,19 +336,30 @@ const CameraVideo = ({
       }
       cancelAnimationFrame(callback);
     };
-  }, [api, cameraId, display, elementId, nonce, phone, phoneUserId, surface]);
+  }, [
+    api,
+    cameraId,
+    display,
+    elementId,
+    nonce,
+    phone,
+    phoneUserId,
+    screen,
+    screenUserId,
+    surface,
+  ]);
 
   useEffect(() => {
     const video = videoRef.current;
     const canvas = cutoutRef.current;
-    if (!video || !canvas || display || phone || cutout === "off") {
+    if (!video || !canvas || phone || cutout === "off") {
       return;
     }
     if (!streamReady) {
       return;
     }
     return startJayrrCameraCutout(elementId, video, canvas, cutout);
-  }, [cutout, display, elementId, phone, streamReady]);
+  }, [cutout, display, elementId, phone, screen, streamReady]);
 
   return (
     <>
@@ -300,7 +367,7 @@ const CameraVideo = ({
         ref={videoRef}
         className="jayrr-camera-window__video"
         autoPlay
-        muted={!phone}
+        muted={!phone && !(screen && !ownScreen)}
         playsInline
       />
       <canvas ref={cutoutRef} className="jayrr-camera-window__cutout" />

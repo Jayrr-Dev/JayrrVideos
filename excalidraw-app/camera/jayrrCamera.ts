@@ -54,6 +54,11 @@ export const jayrrPhoneSource = (userId: string) => `phone:${userId}`;
 export const readPhoneSource = (value: string) =>
   value.startsWith("phone:") ? value.slice("phone:".length) : null;
 
+export const jayrrScreenSource = (userId: string) => `screen:${userId}`;
+
+export const readScreenSource = (value: string) =>
+  value.startsWith("screen:") ? value.slice("screen:".length) : null;
+
 export type JayrrCamera =
   | {
       kind?: "camera";
@@ -64,6 +69,11 @@ export type JayrrCamera =
     }
   | {
       kind: "phone";
+      userId: string;
+      label?: string;
+    }
+  | {
+      kind: "screen";
       userId: string;
       label?: string;
     }
@@ -206,6 +216,9 @@ export const jayrrCameraLabel = (camera: JayrrCamera | null) => {
       camera.label || (camera.userId === JAYRR_PHONE_SELF ? "Call" : "Phone")
     );
   }
+  if (camera.kind === "screen") {
+    return camera.label || "Screen";
+  }
   return camera.label || null;
 };
 
@@ -242,6 +255,13 @@ export const readJayrrCamera = (
     }
     return { kind: "phone", userId, label };
   }
+  if (bag.kind === "screen") {
+    const userId = typeof bag.userId === "string" ? bag.userId : "";
+    if (!userId) {
+      return null;
+    }
+    return { kind: "screen", userId, label };
+  }
   if (bag.kind === "display") {
     return {
       kind: "display",
@@ -267,7 +287,7 @@ export const jayrrStreamOwnerId = (camera: JayrrCamera | null) => {
   if (!camera) {
     return null;
   }
-  if (camera.kind === "phone") {
+  if (camera.kind === "phone" || camera.kind === "screen") {
     if (!camera.userId || camera.userId === JAYRR_PHONE_SELF) {
       return null;
     }
@@ -305,6 +325,11 @@ export const isJayrrPhone = (
   camera: JayrrCamera | null,
 ): camera is Extract<JayrrCamera, { kind: "phone" }> =>
   camera?.kind === "phone";
+
+export const isJayrrScreen = (
+  camera: JayrrCamera | null,
+): camera is Extract<JayrrCamera, { kind: "screen" }> =>
+  camera?.kind === "screen";
 
 export const readDisplayQuality = (
   camera: JayrrCamera | null,
