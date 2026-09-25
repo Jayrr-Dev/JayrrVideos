@@ -125,7 +125,7 @@ export default defineSchema({
 
   collabVideoPubs: defineTable({
     roomId: v.string(),
-    userId: v.id("users"),
+    userId: v.optional(v.id("users")),
     clientId: v.string(),
     displayName: v.string(),
     sessionId: v.string(),

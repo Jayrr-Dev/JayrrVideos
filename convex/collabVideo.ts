@@ -1,9 +1,8 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 
-import { action, mutation, query } from "./_generated/server";
-
-import { getCurrentUser } from "./lib/auth";
+import { internal } from "./_generated/api";
+import { action, internalQuery, mutation, query } from "./_generated/server";
 
 const ROOM_ID = /^[a-zA-Z0-9_-]{8,64}$/;
 const TRACK_NAME = /^[a-zA-Z0-9._:-]{1,64}$/;
@@ -24,7 +23,7 @@ const publishedTrack = v.object({
 });
 
 const publication = v.object({
-  userId: v.id("users"),
+  userId: v.optional(v.id("users")),
   clientId: v.string(),
   displayName: v.string(),
   sessionId: v.string(),
@@ -210,10 +209,6 @@ export const listRoom = query({
   args: { roomId: v.string() },
   returns: v.array(publication),
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      return [];
-    }
     const roomId = requireRoomId(args.roomId);
     const rows = await ctx.db
       .query("collabVideoPubs")
@@ -238,7 +233,8 @@ export const recordPublication = mutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const user = await getCurrentUser(ctx);
+    const userId = await getAuthUserId(ctx);
+    const user = userId ? await ctx.db.get(userId) : null;
     const roomId = requireRoomId(args.roomId);
     const clientId = args.clientId.trim();
     if (clientId.length < 8 || clientId.length > 80) {
@@ -252,15 +248,15 @@ export const recordPublication = mutation({
       .unique();
     const fields = {
       roomId,
-      userId: user._id,
+      ...(user ? { userId: user._id } : {}),
       clientId,
-      displayName: (user.name ?? user.email ?? "Guest").trim() || "Guest",
+      displayName: (user?.name ?? user?.email ?? "Guest").trim() || "Guest",
       sessionId: requireSessionId(args.sessionId),
       tracks: args.tracks,
       updatedAt: Date.now(),
     };
     if (existing) {
-      if (existing.userId !== user._id) {
+      if (existing.userId && existing.userId !== user?._id) {
         throw new Error("Unauthorized");
       }
       await ctx.db.replace(existing._id, fields);
@@ -275,7 +271,7 @@ export const leaveRoom = mutation({
   args: { roomId: v.string(), clientId: v.string() },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const user = await getCurrentUser(ctx);
+    const userId = await getAuthUserId(ctx);
     const roomId = requireRoomId(args.roomId);
     const clientId = args.clientId.trim();
     const existing = await ctx.db
@@ -284,9 +280,13 @@ export const leaveRoom = mutation({
         q.eq("roomId", roomId).eq("clientId", clientId),
       )
       .unique();
-    if (existing && existing.userId === user._id) {
-      await ctx.db.delete(existing._id);
+    if (!existing) {
+      return null;
     }
+    if (existing.userId && existing.userId !== userId) {
+      return null;
+    }
+    await ctx.db.delete(existing._id);
     return null;
   },
 });
@@ -317,11 +317,7 @@ export const publishTracks = action({
     ),
   },
   returns: tracksCallResult,
-  handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      throw new Error("Not authenticated");
-    }
+  handler: async (_ctx, args) => {
     requireRoomId(args.roomId);
     if (args.tracks.length === 0) {
       throw new Error("No camera tracks to publish");
@@ -355,8 +351,37 @@ export const publishTracks = action({
   },
 });
 
+export const roomHasTracks = internalQuery({
+  args: {
+    roomId: v.string(),
+    tracks: v.array(
+      v.object({
+        sessionId: v.string(),
+        trackName: v.string(),
+      }),
+    ),
+  },
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    const roomId = requireRoomId(args.roomId);
+    const rows = await ctx.db
+      .query("collabVideoPubs")
+      .withIndex("by_room", (q) => q.eq("roomId", roomId))
+      .collect();
+    const known = new Set(
+      rows.flatMap((row) =>
+        row.tracks.map((track) => `${row.sessionId}:${track.trackName}`),
+      ),
+    );
+    return args.tracks.every((track) =>
+      known.has(`${track.sessionId}:${track.trackName}`),
+    );
+  },
+});
+
 export const subscribeTracks = action({
   args: {
+    roomId: v.string(),
     sessionId: v.optional(v.string()),
     tracks: v.array(
       v.object({
@@ -367,10 +392,7 @@ export const subscribeTracks = action({
   },
   returns: tracksCallResult,
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      throw new Error("Not authenticated");
-    }
+    requireRoomId(args.roomId);
     if (args.tracks.length === 0) {
       if (!args.sessionId) {
         throw new Error("Invalid Realtime session");
@@ -380,6 +402,13 @@ export const subscribeTracks = action({
         requiresImmediateRenegotiation: false,
         tracks: [],
       };
+    }
+    const allowed = await ctx.runQuery(internal.collabVideo.roomHasTracks, {
+      roomId: args.roomId,
+      tracks: args.tracks,
+    });
+    if (!allowed) {
+      throw new Error("That call is not in this room");
     }
     const sessionId = args.sessionId
       ? requireSessionId(args.sessionId)
@@ -412,11 +441,7 @@ export const renegotiate = action({
     sessionDescription: sdpDescription,
   },
   returns: v.null(),
-  handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      throw new Error("Not authenticated");
-    }
+  handler: async (_ctx, args) => {
     const sessionId = requireSessionId(args.sessionId);
     await sfuRequest(
       `/sessions/${encodeURIComponent(sessionId)}/renegotiate`,

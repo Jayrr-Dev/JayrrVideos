@@ -1,4 +1,4 @@
-import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { JAYRR_PHONE_SELF } from "../camera/jayrrCamera";
@@ -34,21 +34,14 @@ type TrackMeta = {
 const readRoomId = () =>
   getCollaborationLinkData(window.location.href)?.roomId ?? null;
 
-const trackError = (error: unknown) => {
-  const message =
-    error instanceof Error ? error.message : "Camera sharing failed";
-  if (message.includes("Not authenticated")) {
-    return "Sign in to start a call.";
-  }
-  return message;
-};
+const trackError = (error: unknown) =>
+  error instanceof Error ? error.message : "Camera sharing failed";
 
 export const JayrrCollabVideo = ({
   isCollaborating,
 }: {
   isCollaborating: boolean;
 }) => {
-  const { isAuthenticated, isLoading } = useConvexAuth();
   const [roomId, setRoomId] = useState(readRoomId);
   const [sharing, setSharing] = useState(false);
   const [wanted, setWanted] = useState(getJayrrPhoneSelfWanted);
@@ -69,9 +62,7 @@ export const JayrrCollabVideo = ({
   const viewer = useQuery(api.users.viewer);
   const publications = useQuery(
     api.collabVideo.listRoom,
-    isConvexLinked && isAuthenticated && isCollaborating && roomId
-      ? { roomId }
-      : "skip",
+    isConvexLinked && isCollaborating && roomId ? { roomId } : "skip",
   );
   const publishTracks = useAction(api.collabVideo.publishTracks);
   const recordPublication = useMutation(api.collabVideo.recordPublication);
@@ -175,7 +166,7 @@ export const JayrrCollabVideo = ({
   }, [publications, viewer]);
 
   useEffect(() => {
-    if (!isCollaborating || !roomId || !viewer || !publications) {
+    if (!isCollaborating || !roomId || !publications) {
       return;
     }
     const clientId = getJayrrPhoneClientId();
@@ -189,7 +180,7 @@ export const JayrrCollabVideo = ({
         trackName: track.trackName,
         userId: publication.clientId,
         displayName:
-          publication.userId === viewer._id
+          viewer && publication.userId === viewer._id
             ? "Other device"
             : publication.displayName,
       }));
@@ -223,6 +214,7 @@ export const JayrrCollabVideo = ({
           return;
         }
         const result = await subscribeTracks({
+          roomId,
           ...(sessionId ? { sessionId } : {}),
           tracks: stillPending.map((track) => ({
             sessionId: track.sessionId,
@@ -300,12 +292,7 @@ export const JayrrCollabVideo = ({
   ]);
 
   const share = useCallback(async () => {
-    if (
-      !roomId ||
-      !isAuthenticated ||
-      shareLockRef.current ||
-      sharingRef.current
-    ) {
+    if (!roomId || shareLockRef.current || sharingRef.current) {
       return;
     }
     shareLockRef.current = true;
@@ -373,13 +360,7 @@ export const JayrrCollabVideo = ({
     } finally {
       shareLockRef.current = false;
     }
-  }, [
-    isAuthenticated,
-    publishTracks,
-    recordPublication,
-    roomId,
-    teardownProducer,
-  ]);
+  }, [publishTracks, recordPublication, roomId, teardownProducer]);
 
   const stop = useCallback(async () => {
     teardownProducer();
@@ -400,28 +381,13 @@ export const JayrrCollabVideo = ({
     if (!isCollaborating || !roomId) {
       return;
     }
-    if (wanted && !isAuthenticated) {
-      if (!isLoading) {
-        setJayrrPhoneError("Sign in to start a call.");
-      }
-      return;
-    }
     if (wanted && !sharing) {
       void share();
     }
     if (!wanted && sharing) {
       void stop();
     }
-  }, [
-    isAuthenticated,
-    isCollaborating,
-    isLoading,
-    roomId,
-    share,
-    sharing,
-    stop,
-    wanted,
-  ]);
+  }, [isCollaborating, roomId, share, sharing, stop, wanted]);
 
   return null;
 };
