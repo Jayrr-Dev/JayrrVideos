@@ -1,4 +1,5 @@
 import path from "path";
+
 import { defineConfig, loadEnv } from "vite";
 
 import react from "@vitejs/plugin-react";
@@ -8,7 +9,9 @@ import { createHtmlPlugin } from "vite-plugin-html";
 import { VitePWA } from "vite-plugin-pwa";
 import Sitemap from "vite-plugin-sitemap";
 import svgrPlugin from "vite-plugin-svgr";
+
 import { woff2BrowserPlugin } from "../scripts/woff2/woff2-vite-plugins";
+
 import { soundLibraryProxy } from "./soundLibraryProxy";
 import { sttStreamProxy } from "./sttStreamProxy";
 
@@ -200,6 +203,10 @@ export default defineConfig(({ mode }) => {
             // via a static import from the main bundle, defeating lazy
             // loading. So we exclude it by name instead.
             "**/CodeMirrorEditor-*.js",
+            // ONNX runtime WASM is ~27 MB and only used for background
+            // removal. Precaching it blows the Workbox size limit and
+            // forces every install to download it.
+            "**/*.wasm",
           ],
           runtimeCaching: [
             {
