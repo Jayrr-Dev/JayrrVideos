@@ -112,6 +112,7 @@ import {
   importFromLocalStorage,
   importUsernameFromLocalStorage,
 } from "./data/localStorage";
+import { getAccountCollabName } from "./domain/profile/accountCollabIdentity";
 
 import { getPreferredLanguage } from "./app-language/language-detector";
 import { useAppLangCode } from "./app-language/language-state";
@@ -642,7 +643,8 @@ const ExcalidrawWrapper = () => {
               });
             }
           });
-          collabAPI?.setUsername(username || "");
+          const accountName = getAccountCollabName();
+          collabAPI?.setUsername(accountName || username || "");
         }
 
         if (isBrowserStorageStateNewer(STORAGE_KEYS.VERSION_FILES)) {

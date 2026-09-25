@@ -1,4 +1,6 @@
 import { useAuthActions } from "@convex-dev/auth/react";
+import { useConvexAuth, useQuery } from "convex/react";
+import { useEffect, useState } from "react";
 import {
   eyeIcon,
   LinkIcon,
@@ -8,7 +10,7 @@ import {
   usersIcon,
 } from "@excalidraw/excalidraw/components/icons";
 import { MainMenu, useExcalidrawAPI } from "@excalidraw/excalidraw/index";
-import React, { useState } from "react";
+import React from "react";
 
 import {
   DEFAULT_SIDEBAR,
@@ -19,8 +21,9 @@ import {
 import type { Theme } from "@excalidraw/element/types";
 
 import { appJotaiStore, useAtomValue } from "../app-jotai";
+import { collabAPIAtom } from "../collab/Collab";
 import { LanguageList } from "../app-language/LanguageList";
-import { isConvexLinked } from "../convexClient";
+import { api, isConvexLinked } from "../convexClient";
 import {
   connectGoogleDrive,
   disconnectGoogleDrive,
@@ -31,9 +34,36 @@ import { openBlankCanvas, saveCanvasAsScene } from "../data/jayrrScenes";
 import { JayrrFeatureFlags } from "../domain/flags/JayrrFeatureFlags";
 import { JAYRR_PRESENT_TAB } from "../present/buildPresentDeck";
 import { docsViewAtom, persistDocsView } from "../present/docsView";
+import { setAccountCollabIdentity } from "../domain/profile/accountCollabIdentity";
 
 import { saveDebugState } from "./DebugCanvas";
-import { JayrrSoundLibraryDialog } from "./ui";
+import { JayrrProfileDialog, JayrrSoundLibraryDialog } from "./ui";
+
+const JayrrProfileSync = () => {
+  const { isAuthenticated } = useConvexAuth();
+  const collabAPI = useAtomValue(collabAPIAtom);
+  const viewer = useQuery(api.users.viewer, isAuthenticated ? {} : "skip");
+
+  useEffect(() => {
+    if (!viewer) {
+      return;
+    }
+    const name = viewer.name?.trim() ?? "";
+    const image = viewer.image ?? "";
+    setAccountCollabIdentity(name || null, image || null);
+    if (!collabAPI) {
+      return;
+    }
+    if (name && collabAPI.getUsername() !== name) {
+      collabAPI.setUsername(name);
+    }
+    if (collabAPI.getAvatarUrl() !== image) {
+      collabAPI.setAvatarUrl(image);
+    }
+  }, [collabAPI, viewer]);
+
+  return null;
+};
 
 const SignOutMenuItem = () => {
   const { signOut } = useAuthActions();
@@ -60,6 +90,7 @@ export const AppMainMenu: React.FC<{
   const driveConnected = useAtomValue(googleDriveConnectedAtom);
   const [driveBusy, setDriveBusy] = useState(false);
   const [soundLibraryOpen, setSoundLibraryOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const excalidrawAPI = useExcalidrawAPI();
   let driveLabel = "Connect Google Drive";
   if (driveBusy) {
@@ -107,6 +138,7 @@ export const AppMainMenu: React.FC<{
 
   return (
     <>
+      {isConvexLinked ? <JayrrProfileSync /> : null}
       <MainMenu>
         <MainMenu.DefaultItems.LoadScene />
         <MainMenu.Item
@@ -214,6 +246,16 @@ export const AppMainMenu: React.FC<{
           </MainMenu.Item>
         )}
         <MainMenu.Separator />
+        {isConvexLinked ? (
+          <MainMenu.Item
+            icon={usersIcon}
+            onSelect={() => {
+              setProfileOpen(true);
+            }}
+          >
+            Profile
+          </MainMenu.Item>
+        ) : null}
         {isConvexLinked ? <SignOutMenuItem /> : null}
         {isConvexLinked ? <JayrrFeatureFlags /> : null}
         <MainMenu.DefaultItems.Preferences />
@@ -226,6 +268,13 @@ export const AppMainMenu: React.FC<{
         </MainMenu.ItemCustom>
         <MainMenu.DefaultItems.ChangeCanvasBackground />
       </MainMenu>
+      {profileOpen ? (
+        <JayrrProfileDialog
+          onClose={() => {
+            setProfileOpen(false);
+          }}
+        />
+      ) : null}
       {soundLibraryOpen ? (
         <JayrrSoundLibraryDialog
           onClose={() => {

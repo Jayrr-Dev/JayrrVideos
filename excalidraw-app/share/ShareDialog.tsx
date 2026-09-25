@@ -1,3 +1,5 @@
+import { useConvexAuth, useMutation } from "convex/react";
+
 import { getFrame, KEYS } from "@excalidraw/common";
 import { trackEvent } from "@excalidraw/excalidraw/analytics";
 import { copyTextToSystemClipboard } from "@excalidraw/excalidraw/clipboard";
@@ -20,6 +22,7 @@ import { useEffect, useRef, useState } from "react";
 import { Dialog, FilledButton, Tooltip } from "../components/ui";
 
 import { atom, useAtom, useAtomValue } from "../app-jotai";
+import { api, isConvexLinked } from "../convexClient";
 import { activeRoomLinkAtom } from "../collab/Collab";
 import {
   parseRoomGuestLimit,
@@ -111,6 +114,61 @@ const GuestLimitField = ({
   );
 };
 
+const saveAccountName = (
+  updateProfile: (args: { name: string }) => Promise<unknown>,
+  collabAPI: CollabAPI,
+) => {
+  const next = collabAPI.getUsername().trim();
+  if (!next) {
+    return;
+  }
+  if (next.length > 40) {
+    return;
+  }
+  void updateProfile({ name: next });
+};
+
+const AccountNameField = ({
+  collabAPI,
+  onEnter,
+}: {
+  collabAPI: CollabAPI;
+  onEnter: () => void;
+}) => {
+  const { isAuthenticated } = useConvexAuth();
+  const updateProfile = useMutation(api.users.updateProfile);
+
+  return (
+    <div
+      onBlur={(event) => {
+        if (!isAuthenticated) {
+          return;
+        }
+        if (event.currentTarget.contains(event.relatedTarget as Node)) {
+          return;
+        }
+        saveAccountName(updateProfile, collabAPI);
+      }}
+    >
+      <TextField
+        defaultValue={collabAPI.getUsername()}
+        placeholder="Your name"
+        label="Your name"
+        onChange={collabAPI.setUsername}
+        onKeyDown={(event) => {
+          if (event.key !== KEYS.ENTER) {
+            return;
+          }
+          if (isAuthenticated) {
+            saveAccountName(updateProfile, collabAPI);
+          }
+          onEnter();
+        }}
+      />
+    </div>
+  );
+};
+
 export type ShareDialogProps = {
   collabAPI: CollabAPI | null;
   handleClose: () => void;
@@ -171,13 +229,17 @@ const ActiveRoomDialog = ({
       <h3 className="ShareDialog__active__header">
         {t("labels.liveCollaboration").replace(/\./g, "")}
       </h3>
-      <TextField
-        defaultValue={collabAPI.getUsername()}
-        placeholder="Your name"
-        label="Your name"
-        onChange={collabAPI.setUsername}
-        onKeyDown={(event) => event.key === KEYS.ENTER && handleClose()}
-      />
+      {isConvexLinked ? (
+        <AccountNameField collabAPI={collabAPI} onEnter={handleClose} />
+      ) : (
+        <TextField
+          defaultValue={collabAPI.getUsername()}
+          placeholder="Your name"
+          label="Your name"
+          onChange={collabAPI.setUsername}
+          onKeyDown={(event) => event.key === KEYS.ENTER && handleClose()}
+        />
+      )}
       <GuestLimitField onCommit={collabAPI.setRoomGuestLimit} />
       <div className="ShareDialog__active__linkRow">
         <TextField

@@ -40,6 +40,7 @@ import type * as passwords from "../passwords.js";
 import type * as presentBlob from "../presentBlob.js";
 import type * as presentRecordingFolders from "../presentRecordingFolders.js";
 import type * as presentRecordings from "../presentRecordings.js";
+import type * as profile from "../profile.js";
 import type * as sceneFolders from "../sceneFolders.js";
 import type * as scenes from "../scenes.js";
 import type * as soundFolders from "../soundFolders.js";
@@ -89,6 +90,7 @@ declare const fullApi: ApiFromModules<{
   presentBlob: typeof presentBlob;
   presentRecordingFolders: typeof presentRecordingFolders;
   presentRecordings: typeof presentRecordings;
+  profile: typeof profile;
   sceneFolders: typeof sceneFolders;
   scenes: typeof scenes;
   soundFolders: typeof soundFolders;

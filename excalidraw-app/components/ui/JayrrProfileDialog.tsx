@@ -173,16 +173,12 @@ export const JayrrProfileDialog = ({ onClose }: { onClose: () => void }) => {
       <div ref={rootRef}>
         <p className="visually-hidden">
           {PROFILE_INFO} Display name is what other people see. Your sign-in
-          username stays the same. Photo is optional. Changing the password
-          asks for the current one.
+          username stays the same. Photo is optional. Changing the password asks
+          for the current one.
         </p>
         <div className="jayrr-profile__photo-row">
           {viewer?.image ? (
-            <img
-              className="jayrr-profile__photo"
-              alt=""
-              src={viewer.image}
-            />
+            <img className="jayrr-profile__photo" alt="" src={viewer.image} />
           ) : (
             <span className="jayrr-profile__photo jayrr-profile__photo--letter">
               {initial}
@@ -216,7 +212,9 @@ export const JayrrProfileDialog = ({ onClose }: { onClose: () => void }) => {
                   setPhotoError(null);
                   void clearPhoto()
                     .catch((caught: unknown) => {
-                      setPhotoError(errorText(caught, "Could not remove photo"));
+                      setPhotoError(
+                        errorText(caught, "Could not remove photo"),
+                      );
                     })
                     .finally(() => {
                       setPhotoBusy(false);
@@ -228,7 +226,9 @@ export const JayrrProfileDialog = ({ onClose }: { onClose: () => void }) => {
             ) : null}
           </div>
         </div>
-        {photoError ? <p className="jayrr-profile__error">{photoError}</p> : null}
+        {photoError ? (
+          <p className="jayrr-profile__error">{photoError}</p>
+        ) : null}
         <form
           className="jayrr-profile__form"
           onSubmit={(event) => {
@@ -249,7 +249,9 @@ export const JayrrProfileDialog = ({ onClose }: { onClose: () => void }) => {
           <Field label="Username">
             <Input readOnly value={viewer?.email ?? ""} />
           </Field>
-          {nameError ? <p className="jayrr-profile__error">{nameError}</p> : null}
+          {nameError ? (
+            <p className="jayrr-profile__error">{nameError}</p>
+          ) : null}
           <Button busy={nameBusy} type="submit">
             Save name
           </Button>
@@ -271,7 +273,9 @@ export const JayrrProfileDialog = ({ onClose }: { onClose: () => void }) => {
                 setPasswordMessage("Password updated");
               })
               .catch((caught: unknown) => {
-                setPasswordError(errorText(caught, "Could not change password"));
+                setPasswordError(
+                  errorText(caught, "Could not change password"),
+                );
               })
               .finally(() => {
                 setPasswordBusy(false);

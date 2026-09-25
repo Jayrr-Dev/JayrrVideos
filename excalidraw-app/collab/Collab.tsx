@@ -529,12 +529,14 @@ class Collab extends PureComponent<CollabProps, CollabState> {
       this.setAvatarUrl(accountAvatar);
     }
     if (!this.state.username && !getAccountCollabName()) {
-      void import("@excalidraw/random-username").then(({ getRandomUsername }) => {
-        if (this.state.username || getAccountCollabName()) {
-          return;
-        }
-        this.setUsername(getRandomUsername());
-      });
+      void import("@excalidraw/random-username").then(
+        ({ getRandomUsername }) => {
+          if (this.state.username || getAccountCollabName()) {
+            return;
+          }
+          this.setUsername(getRandomUsername());
+        },
+      );
     }
 
     if (this.portal.socket) {
@@ -948,6 +950,8 @@ class Collab extends PureComponent<CollabProps, CollabState> {
       collaborators.set(
         socketId,
         Object.assign(
+          {},
+          this.collaborators.get(socketId),
           // we never receive our own broadcasts, so we need to seed
           // our own collaborator entry with the local username
           isCurrentUser
@@ -956,7 +960,6 @@ class Collab extends PureComponent<CollabProps, CollabState> {
                 avatarUrl: this.state.avatarUrl || undefined,
               }
             : {},
-          this.collaborators.get(socketId),
           { isCurrentUser },
         ),
       );

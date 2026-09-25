@@ -22,6 +22,7 @@ export { Field, Input } from "./Field";
 export type { JayrrFieldProps, JayrrInputProps } from "./Field";
 export { JayrrAuthPage } from "./JayrrAuthPage";
 export { JayrrConfirmDialog } from "./JayrrConfirmDialog";
+export { JayrrProfileDialog } from "./JayrrProfileDialog";
 export { JayrrLibraryMenu } from "./JayrrLibraryMenu";
 export { JayrrSceneMenu } from "./JayrrSceneMenu";
 export {
