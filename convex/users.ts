@@ -1,18 +1,57 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 
-import { internalMutation, mutation, query } from "./_generated/server";
+import {
+  internalMutation,
+  internalQuery,
+  mutation,
+  query,
+} from "./_generated/server";
 
 import { getCurrentUser, isJayrrUser } from "./lib/auth";
 
-import type { Id } from "./_generated/dataModel";
-import type { MutationCtx } from "./_generated/server";
+import type { Doc, Id } from "./_generated/dataModel";
+import type { MutationCtx, QueryCtx } from "./_generated/server";
 
 const viewerDoc = v.object({
   _id: v.id("users"),
   name: v.optional(v.string()),
   email: v.optional(v.string()),
+  image: v.optional(v.string()),
 });
+
+const profileName = v.object({
+  name: v.string(),
+});
+
+const profileImage = v.object({
+  image: v.union(v.string(), v.null()),
+});
+
+const accountIdDoc = v.object({
+  accountId: v.string(),
+});
+
+const normalizeDisplayName = (name: string) => {
+  const trimmed = name.trim();
+  if (!trimmed) {
+    throw new Error("Name is required");
+  }
+  if (trimmed.length > 40) {
+    throw new Error("Name must be 40 characters or less");
+  }
+  return trimmed;
+};
+
+const profileImageUrl = async (
+  ctx: QueryCtx | MutationCtx,
+  user: Doc<"users">,
+) => {
+  if (!user.imageStorageId) {
+    return user.image;
+  }
+  return (await ctx.storage.getUrl(user.imageStorageId)) ?? undefined;
+};
 
 const claimResult = v.object({
   claimed: v.number(),
@@ -63,7 +102,85 @@ export const viewer = query({
       _id: user._id,
       name: user.name,
       email: user.email,
+      image: await profileImageUrl(ctx, user),
     };
+  },
+});
+
+export const updateProfile = mutation({
+  args: {
+    name: v.string(),
+  },
+  returns: profileName,
+  handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
+    const name = normalizeDisplayName(args.name);
+    await ctx.db.patch(user._id, { name });
+    return { name };
+  },
+});
+
+export const generatePhotoUploadUrl = mutation({
+  args: {},
+  returns: v.string(),
+  handler: async (ctx) => {
+    await getCurrentUser(ctx);
+    return await ctx.storage.generateUploadUrl();
+  },
+});
+
+export const setPhoto = mutation({
+  args: {
+    storageId: v.id("_storage"),
+  },
+  returns: profileImage,
+  handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
+    const image = await ctx.storage.getUrl(args.storageId);
+    if (!image) {
+      throw new Error("Could not save photo");
+    }
+    if (user.imageStorageId && user.imageStorageId !== args.storageId) {
+      await ctx.storage.delete(user.imageStorageId);
+    }
+    await ctx.db.patch(user._id, {
+      image,
+      imageStorageId: args.storageId,
+    });
+    return { image };
+  },
+});
+
+export const clearPhoto = mutation({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx) => {
+    const user = await getCurrentUser(ctx);
+    if (user.imageStorageId) {
+      await ctx.storage.delete(user.imageStorageId);
+    }
+    await ctx.db.patch(user._id, {
+      image: undefined,
+      imageStorageId: undefined,
+    });
+    return null;
+  },
+});
+
+export const accountForPassword = internalQuery({
+  args: {},
+  returns: v.union(accountIdDoc, v.null()),
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      return null;
+    }
+    const user = await ctx.db.get(userId);
+    const accountId = (user?.email ?? "").trim().toLowerCase();
+    if (!accountId) {
+      return null;
+    }
+    return { accountId };
   },
 });
 

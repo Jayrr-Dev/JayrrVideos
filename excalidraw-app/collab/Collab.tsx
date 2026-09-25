@@ -93,6 +93,10 @@ import {
   saveUsernameToLocalStorage,
 } from "../data/localStorage";
 import { resetBrowserStateVersions } from "../data/tabSync";
+import {
+  getAccountCollabAvatar,
+  getAccountCollabName,
+} from "../domain/profile/accountCollabIdentity";
 import { readCalledObjectKind } from "../domain/widgets/model";
 import { readPdfFileId } from "../domain/widgets/objects/pdfConfig";
 
@@ -119,6 +123,7 @@ interface CollabState {
   /** errors related to saving */
   dialogNotifiedErrors: Record<string, boolean>;
   username: string;
+  avatarUrl: string;
   activeRoomLink: string | null;
 }
 
@@ -137,6 +142,8 @@ export interface CollabAPI {
   fetchImageFilesFromFirebase: CollabInstance["fetchImageFilesFromFirebase"];
   setUsername: CollabInstance["setUsername"];
   getUsername: CollabInstance["getUsername"];
+  setAvatarUrl: CollabInstance["setAvatarUrl"];
+  getAvatarUrl: CollabInstance["getAvatarUrl"];
   getActiveRoomLink: CollabInstance["getActiveRoomLink"];
   setCollabError: CollabInstance["setErrorDialog"];
   setRoomGuestLimit: CollabInstance["setRoomGuestLimit"];
@@ -165,7 +172,9 @@ class Collab extends PureComponent<CollabProps, CollabState> {
     this.state = {
       errorMessage: null,
       dialogNotifiedErrors: {},
-      username: importUsernameFromLocalStorage() || "",
+      username:
+        getAccountCollabName() || importUsernameFromLocalStorage() || "",
+      avatarUrl: getAccountCollabAvatar() || "",
       activeRoomLink: null,
     };
     this.portal = new Portal(this);
@@ -258,6 +267,8 @@ class Collab extends PureComponent<CollabProps, CollabState> {
       stopCollaboration: this.stopCollaboration,
       setUsername: this.setUsername,
       getUsername: this.getUsername,
+      setAvatarUrl: this.setAvatarUrl,
+      getAvatarUrl: this.getAvatarUrl,
       getActiveRoomLink: this.getActiveRoomLink,
       setCollabError: this.setErrorDialog,
       setRoomGuestLimit: this.setRoomGuestLimit,
@@ -509,10 +520,20 @@ class Collab extends PureComponent<CollabProps, CollabState> {
   startCollaboration = async (
     existingRoomLinkData: null | { roomId: string; roomKey: string },
   ) => {
-    if (!this.state.username) {
-      import("@excalidraw/random-username").then(({ getRandomUsername }) => {
-        const username = getRandomUsername();
-        this.setUsername(username);
+    const accountName = getAccountCollabName();
+    if (accountName && this.state.username !== accountName) {
+      this.setUsername(accountName);
+    }
+    const accountAvatar = getAccountCollabAvatar();
+    if (accountAvatar && this.state.avatarUrl !== accountAvatar) {
+      this.setAvatarUrl(accountAvatar);
+    }
+    if (!this.state.username && !getAccountCollabName()) {
+      void import("@excalidraw/random-username").then(({ getRandomUsername }) => {
+        if (this.state.username || getAccountCollabName()) {
+          return;
+        }
+        this.setUsername(getRandomUsername());
       });
     }
 
@@ -662,7 +683,7 @@ class Collab extends PureComponent<CollabProps, CollabState> {
             );
             break;
           case WS_SUBTYPES.MOUSE_LOCATION: {
-            const { pointer, button, username, selectedElementIds } =
+            const { pointer, button, username, avatarUrl, selectedElementIds } =
               decryptedData.payload;
 
             const socketId: SocketUpdateDataSource["MOUSE_LOCATION"]["payload"]["socketId"] =
@@ -675,6 +696,7 @@ class Collab extends PureComponent<CollabProps, CollabState> {
               button,
               selectedElementIds,
               username,
+              avatarUrl: avatarUrl || undefined,
             });
 
             break;
@@ -713,10 +735,12 @@ class Collab extends PureComponent<CollabProps, CollabState> {
           }
 
           case WS_SUBTYPES.IDLE_STATUS: {
-            const { userState, socketId, username } = decryptedData.payload;
+            const { userState, socketId, username, avatarUrl } =
+              decryptedData.payload;
             this.updateCollaborator(socketId, {
               userState,
               username,
+              avatarUrl: avatarUrl || undefined,
             });
             break;
           }
@@ -926,7 +950,12 @@ class Collab extends PureComponent<CollabProps, CollabState> {
         Object.assign(
           // we never receive our own broadcasts, so we need to seed
           // our own collaborator entry with the local username
-          isCurrentUser ? { username: this.state.username } : {},
+          isCurrentUser
+            ? {
+                username: this.state.username,
+                avatarUrl: this.state.avatarUrl || undefined,
+              }
+            : {},
           this.collaborators.get(socketId),
           { isCurrentUser },
         ),
@@ -948,7 +977,12 @@ class Collab extends PureComponent<CollabProps, CollabState> {
     const user: Mutable<Collaborator> = Object.assign(
       // we never receive our own broadcasts, so we need to seed
       // our own collaborator entry with the local username
-      isCurrentUser ? { username: this.state.username } : {},
+      isCurrentUser
+        ? {
+            username: this.state.username,
+            avatarUrl: this.state.avatarUrl || undefined,
+          }
+        : {},
       collaborators.get(socketId),
       updates,
       { isCurrentUser },
@@ -1102,6 +1136,18 @@ class Collab extends PureComponent<CollabProps, CollabState> {
   };
 
   getUsername = () => this.state.username;
+
+  setAvatarUrl = (avatarUrl: string) => {
+    this.setState({ avatarUrl });
+    const socketId = this.portal.socket?.id as SocketId | undefined;
+    if (socketId && this.collaborators.has(socketId)) {
+      this.updateCollaborator(socketId, {
+        avatarUrl: avatarUrl || undefined,
+      });
+    }
+  };
+
+  getAvatarUrl = () => this.state.avatarUrl;
 
   setActiveRoomLink = (activeRoomLink: string | null) => {
     this.setState({ activeRoomLink });
