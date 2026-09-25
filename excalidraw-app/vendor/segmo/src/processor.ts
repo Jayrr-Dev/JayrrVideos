@@ -1,3 +1,5 @@
+/// <reference path="./types.d.ts" />
+
 /**
  * LiveKit Background Segmentation Processor
  *
@@ -974,6 +976,14 @@ export class SegmentationProcessor {
   setBlurRadius(radius: number): void {
     this.opts.blurRadius = radius;
     this.pipeline?.updateOptions({ blurRadius: radius });
+  }
+
+  /** Tune cutout refinement without reaching through the private pipeline. */
+  updatePostProcessing(options: Pick<PipelineOptions,
+    'lightWrap' | 'morphology' | 'featherRadius' | 'erosionRadius' |
+    'rangeSigma' | 'appearRate' | 'disappearRate'
+  >): void {
+    this.pipeline?.updateOptions(options);
   }
 
   /** Change quality preset */

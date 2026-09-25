@@ -1,0 +1,11 @@
+node_modules/
+build/
+dist/
+dev-dist/
+coverage/
+firebase/
+public/workbox
+packages/excalidraw/types
+examples/**/public
+excalidraw-app/vendor
+excalidraw-app/vendor/**

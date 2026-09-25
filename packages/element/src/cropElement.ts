@@ -47,8 +47,13 @@ export type CropAspectRatioId =
   | typeof CROP_ASPECT_RATIO_ORIGINAL
   | typeof CROP_ASPECT_RATIO_PRESETS[number]["id"];
 
-export const isCropAspectRatioId = (value: string): value is CropAspectRatioId => {
-  if (value === CROP_ASPECT_RATIO_FREE || value === CROP_ASPECT_RATIO_ORIGINAL) {
+export const isCropAspectRatioId = (
+  value: string,
+): value is CropAspectRatioId => {
+  if (
+    value === CROP_ASPECT_RATIO_FREE ||
+    value === CROP_ASPECT_RATIO_ORIGINAL
+  ) {
     return true;
   }
   return CROP_ASPECT_RATIO_PRESETS.some((preset) => preset.id === value);

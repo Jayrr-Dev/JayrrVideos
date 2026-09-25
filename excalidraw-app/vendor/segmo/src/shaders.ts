@@ -131,10 +131,6 @@ uniform vec2 u_guideSize;          // Guide texture dimensions
 uniform float u_spatialSigma;      // Spatial kernel sigma (pixels)
 uniform float u_rangeSigma;        // Color similarity sigma (0.05-0.15)
 
-// Precomputed spatial distances for 5x5 kernel (avoids int math in loop)
-const float sDist[25] = float[25](
-  8.0,5.0,4.0,5.0,8.0, 5.0,2.0,1.0,2.0,5.0, 4.0,1.0,0.0,1.0,4.0, 5.0,2.0,1.0,2.0,5.0, 8.0,5.0,4.0,5.0,8.0
-);
 const vec2 kOff[25] = vec2[25](
   vec2(-2,-2),vec2(-1,-2),vec2(0,-2),vec2(1,-2),vec2(2,-2),
   vec2(-2,-1),vec2(-1,-1),vec2(0,-1),vec2(1,-1),vec2(2,-1),
@@ -146,6 +142,8 @@ const vec2 kOff[25] = vec2[25](
 void main() {
   vec3 centerColor = texture(u_guide, v_texCoord).rgb;
   vec2 maskTexelSize = 1.0 / u_maskSize;
+  vec2 maskPosition = v_texCoord * u_maskSize - 0.5;
+  vec2 nearestPixel = floor(maskPosition + 0.5);
 
   // Precompute reciprocals (avoid division in loop)
   float spatialRecip = 1.0 / (2.0 * u_spatialSigma * u_spatialSigma);
@@ -159,9 +157,13 @@ void main() {
   float totalMask = 0.0;
 
   for (int i = 0; i < 25; i++) {
-    vec2 sampleCoord = v_texCoord + kOff[i] * maskTexelSize;
-
-    float spatialWeight = exp(-sDist[i] * spatialRecip);
+    // Pair each actual low-resolution mask texel with its RGB guide sample.
+    // Fractional mask samples mix foreground/background BEFORE range rejection,
+    // which blurs narrow gaps even when the guide has a perfectly sharp edge.
+    vec2 samplePixel = clamp(nearestPixel + kOff[i], vec2(0.0), u_maskSize - 1.0);
+    vec2 sampleCoord = (samplePixel + 0.5) * maskTexelSize;
+    vec2 distance = samplePixel - maskPosition;
+    float spatialWeight = exp(-dot(distance, distance) * spatialRecip);
 
     // Perceptual distance: separate luminance and chroma components
     // White bg vs light skin have similar luminance but very different chroma
@@ -296,12 +298,13 @@ void main() {
   float hi = mix(0.85, 0.65, sharpness);
   float mask = smoothstep(lo, hi, rawMask);
 
-  // Transparent cutout: premultiplied person over a punchable blue plate.
-  // 2D drawImage often drops WebGL alpha, so the plate stays keyable.
+  // Preserve the matte across WebGL -> canvas -> WebGL/2D. The drawing buffer
+  // is configured for premultiplied alpha; no synthetic plate belongs in RGB.
   if (u_backgroundMode == 3) {
-    vec3 plate = vec3(0.0, 0.2, 0.8);
-    vec3 rgb = mix(plate, I, mask);
-    outColor = vec4(rgb * mask, mask);
+    // A fixed, gentle transfer avoids making alpha change whenever camera
+    // texture/noise changes the RGB-gradient sharpening strength above.
+    float coverage = smoothstep(0.05, 0.95, rawMask);
+    outColor = vec4(I * coverage, coverage);
     return;
   }
 

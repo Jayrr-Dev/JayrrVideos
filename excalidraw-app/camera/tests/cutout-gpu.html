@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Camera cutout GPU regression checks</title>
+  </head>
+  <body>
+    <h1>Camera cutout GPU regression checks</h1>
+    <pre id="results">Running…</pre>
+    <script type="module">
+      const results = document.querySelector("#results");
+      const ownerDocument = results.ownerDocument;
+      const checks = [];
+      const check = (name, passed, detail) => {
+        checks.push({ name, passed, detail });
+        results.textContent = checks
+          .map((c) => `${c.passed ? "PASS" : "FAIL"} ${c.name}: ${c.detail}`)
+          .join("\n");
+      };
+      const frame = (width, height, color) => {
+        const canvas = ownerDocument.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
+        ctx.fillStyle = color;
+        ctx.fillRect(0, 0, width, height);
+        return canvas;
+      };
+      const read = (canvas, x, y) => {
+        const copy = frame(canvas.width, canvas.height, "transparent");
+        const ctx = copy.getContext("2d");
+        ctx.drawImage(canvas, 0, 0);
+        return [...ctx.getImageData(x, y, 1, 1).data];
+      };
+      try {
+        const { createCutoutKey } = await import("../jayrrCutoutCompositor.ts");
+        const { PostProcessingPipeline } = await import(
+          "../../vendor/segmo/src/pipeline.ts"
+        );
+        const key = createCutoutKey(ownerDocument);
+        if (!key) throw new Error("WebGL2 compositor could not initialize");
+        let timestamp = 1000;
+        const apply = (source, reset = true) => {
+          timestamp += reset ? 500 : 1000 / 30;
+          key.apply(source, source.width, source.height, timestamp);
+        };
+        const blue = frame(16, 16, "rgba(0, 51, 204, 0.5)");
+        apply(blue);
+        const bluePixel = read(key.canvas, 8, 8);
+        check(
+          "Blue foreground preserves fractional coverage",
+          Math.abs(bluePixel[3] - 128) <= 2 && bluePixel[2] > 195,
+          bluePixel,
+        );
+        const green = frame(16, 16, "#00ff00");
+        apply(green);
+        check(
+          "Physical greenscreen stays transparent",
+          read(key.canvas, 8, 8)[3] === 0,
+          read(key.canvas, 8, 8),
+        );
+        const finger = frame(16, 16, "transparent");
+        for (const [name, color] of [
+          ["Dark green hair fringe", "rgba(20, 40, 25, 0.5)"],
+          ["Cyan ear fringe", "rgba(20, 40, 38, 0.5)"],
+        ]) {
+          apply(frame(16, 16, color));
+          const pixel = read(key.canvas, 8, 8);
+          check(name, Math.abs(pixel[3] - 128) <= 2 && pixel[1] - pixel[0] <= 3 && pixel[2] - pixel[0] <= 3, pixel);
+        }
+        apply(frame(16, 16, "rgb(20, 40, 38)"));
+        const interior = read(key.canvas, 8, 8);
+        check("Opaque interior teal is preserved", interior[1] === 40 && interior[2] === 38 && interior[3] === 255, interior);
+        const opaqueEdge = frame(16, 16, "transparent");
+        const opaqueCtx = opaqueEdge.getContext("2d");
+        opaqueCtx.fillStyle = "rgb(20, 40, 38)";
+        opaqueCtx.fillRect(4, 0, 12, 16);
+        apply(opaqueEdge);
+        const edgePixel = read(key.canvas, 4, 8);
+        check("Opaque boundary fringe is cleaned without shrinking", edgePixel[3] === 255 && edgePixel[1] - edgePixel[0] <= 3 && edgePixel[2] - edgePixel[0] <= 3, edgePixel);
+        const ctx = finger.getContext("2d");
+        ctx.fillStyle = "#d69875";
+        ctx.fillRect(3, 2, 2, 12);
+        ctx.fillRect(7, 2, 2, 12);
+        apply(finger);
+        check(
+          "Narrow fingers and gaps survive",
+          read(key.canvas, 3, 8)[3] === 255 && read(key.canvas, 5, 8)[3] === 0,
+          `finger=${read(key.canvas, 3, 8)[3]}, gap=${
+            read(key.canvas, 5, 8)[3]
+          }`,
+        );
+        apply(frame(16, 16, "transparent"), false);
+        check(
+          "Moving finger leaves no alpha trail",
+          read(key.canvas, 3, 8)[3] === 0,
+          read(key.canvas, 3, 8),
+        );
+        const noisyA = frame(16, 16, "rgba(200, 150, 100, 0.48)");
+        const noisyB = frame(16, 16, "rgba(200, 150, 100, 0.52)");
+        apply(noisyA);
+        const alphas = [];
+        for (let i = 0; i < 20; i++) {
+          apply(i % 2 ? noisyA : noisyB, false);
+          if (i > 5) alphas.push(read(key.canvas, 8, 8)[3]);
+        }
+        const variation = Math.max(...alphas) - Math.min(...alphas);
+        check(
+          "Static edge noise is attenuated",
+          variation < 6,
+          `input variation=10, output variation=${variation}`,
+        );
+        apply(noisyA);
+        apply(frame(16, 16, "rgba(50, 50, 50, 0.52)"), false);
+        check(
+          "Color motion rejects stale edge history",
+          Math.abs(read(key.canvas, 8, 8)[3] - 133) <= 2,
+          read(key.canvas, 8, 8),
+        );
+        apply(noisyA);
+        apply(noisyB);
+        check(
+          "Pause discards history",
+          Math.abs(read(key.canvas, 8, 8)[3] - 133) <= 2,
+          read(key.canvas, 8, 8),
+        );
+        apply(frame(24, 12, "rgba(200, 150, 100, 0.3)"), false);
+        check(
+          "Resize discards history",
+          Math.abs(read(key.canvas, 8, 8)[3] - 77) <= 2,
+          read(key.canvas, 8, 8),
+        );
+
+        const pipeline = new PostProcessingPipeline({
+          width: 64,
+          height: 64,
+          maskWidth: 16,
+          maskHeight: 16,
+          backgroundMode: "transparent",
+          lightWrap: false,
+          morphology: false,
+          erosionRadius: 0,
+          featherRadius: 0.75,
+          rangeSigma: 0.08,
+          appearRate: 1,
+          disappearRate: 1,
+        });
+        const mask = new Float32Array(256).fill(0.5);
+        const output = pipeline.process(frame(64, 64, "#d69875"), mask);
+        apply(output);
+        const fractional = read(key.canvas, 32, 32);
+        check(
+          "Offscreen WebGL to WebGL to 2D preserves alpha and color",
+          Math.abs(fractional[3] - 128) <= 3 &&
+            Math.abs(fractional[0] - 214) <= 3 &&
+            Math.abs(fractional[2] - 117) <= 3,
+          fractional,
+        );
+        const camera = frame(64, 64, "#eeeeee");
+        const cameraCtx = camera.getContext("2d");
+        cameraCtx.fillStyle = "#d69875";
+        mask.fill(0);
+        for (const x of [4, 7, 10]) {
+          cameraCtx.fillRect(x * 4, 8, 4, 48);
+          for (let y = 2; y < 14; y++) mask[y * 16 + x] = 1;
+        }
+        const fresh = pipeline.process(camera, mask);
+        const fingerAlpha = read(fresh, 18, 32)[3];
+        const gapAlpha = read(fresh, 23, 32)[3];
+        check(
+          "Guided upscale preserves thin fingers and gaps",
+          fingerAlpha > 220 && gapAlpha < 20,
+          `finger=${fingerAlpha}, gap=${gapAlpha}; row=${Array.from(
+            { length: 20 },
+            (_, x) => read(fresh, x + 12, 32)[3],
+          ).join(",")}`,
+        );
+        const interpolated = pipeline.processInterpolated(camera);
+        check(
+          "Fresh and interpolated masks agree",
+          Math.abs(read(interpolated, 18, 32)[3] - fingerAlpha) <= 1 &&
+            Math.abs(read(interpolated, 23, 32)[3] - gapAlpha) <= 1,
+          `finger=${read(interpolated, 18, 32)[3]}, gap=${
+            read(interpolated, 23, 32)[3]
+          }`,
+        );
+        mask.fill(0);
+        for (let y = 0; y < 6; y++) {
+          for (let x = 0; x < 16; x++) mask[y * 16 + x] = 1;
+        }
+        const asymmetric = frame(64, 64, "#eeeeee");
+        const asymmetricCtx = asymmetric.getContext("2d");
+        asymmetricCtx.fillStyle = "#d69875";
+        asymmetricCtx.fillRect(0, 0, 64, 24);
+        const oriented = pipeline.process(asymmetric, mask);
+        check(
+          "Mask and camera agree vertically",
+          read(oriented, 32, 8)[3] > 240 && read(oriented, 32, 56)[3] < 10,
+          `top=${read(oriented, 32, 8)[3]}, bottom=${
+            read(oriented, 32, 56)[3]
+          }`,
+        );
+        pipeline.destroy();
+        key.destroy();
+        results.textContent += `\n\n${checks.filter((c) => c.passed).length}/${
+          checks.length
+        } checks passed`;
+      } catch (error) {
+        results.textContent += `\nERROR: ${error.stack ?? error}`;
+      }
+    </script>
+  </body>
+</html>

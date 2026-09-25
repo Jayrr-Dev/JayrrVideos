@@ -24,6 +24,23 @@ void main() {
   // Retain the physical greenscreen key, independently of the person matte.
   float alpha = c.a * (1.0 - greenSpill);
   vec3 foreground = vec3(c.r, mix(c.g, min(c.g, max(c.r, c.b)), greenSpill), c.b);
+  // Spill on dark hair is far below the screen-removal threshold. Clean its
+  // color separately from coverage so we don't erode hair, ears, or fingers.
+  vec2 texel = 1.0 / vec2(textureSize(u_image, 0));
+  float neighborAlpha = min(
+    min(texture(u_image, v_uv + vec2(2.0 * texel.x, 0.0)).a,
+        texture(u_image, v_uv - vec2(2.0 * texel.x, 0.0)).a),
+    min(texture(u_image, v_uv + vec2(0.0, 2.0 * texel.y)).a,
+        texture(u_image, v_uv - vec2(0.0, 2.0 * texel.y)).a));
+  float boundary = 1.0 - smoothstep(0.85, 0.99, min(c.a, neighborAlpha));
+  // Green spill can become cyan after camera white balance. Remove the shared
+  // green/blue excess too, but protect blue objects and opaque interior colors.
+  float cyanExcess = max(0.0, min(c.g, c.b) - c.r);
+  float greenExcess = max(0.0, greenLead);
+  float notBlue = 1.0 - smoothstep(0.01, 0.06, c.b - c.g);
+  float despill = boundary * notBlue * smoothstep(0.008, 0.045, greenExcess + cyanExcess);
+  foreground.g = max(0.0, foreground.g - despill * (greenExcess + cyanExcess));
+  foreground.b = max(0.0, foreground.b - despill * cyanExcess);
   if (u_hasPrev > 0.5) {
     vec4 previous = texture(u_prev, vec2(v_uv.x, 1.0 - v_uv.y));
     float prevA = previous.a;

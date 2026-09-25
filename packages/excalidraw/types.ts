@@ -7,7 +7,10 @@ import type {
   throttleRAF,
 } from "@excalidraw/common";
 
-import type { CropAspectRatioId, LinearElementEditor } from "@excalidraw/element";
+import type {
+  CropAspectRatioId,
+  LinearElementEditor,
+} from "@excalidraw/element";
 
 import type { MaybeTransformHandleType } from "@excalidraw/element";
 

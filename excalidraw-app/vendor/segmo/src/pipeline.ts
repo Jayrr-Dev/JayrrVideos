@@ -44,6 +44,8 @@ export interface PipelineOptions {
   morphology?: boolean;
   /** Morphology kernel radius (default: 1.0) */
   morphologyRadius?: number;
+  /** Final full-resolution erosion radius; zero preserves thin structures. */
+  erosionRadius?: number;
   /** Color temperature matching strength for image backgrounds (default: 0.2) */
   colorMatchStrength?: number;
   /** Temporal smoothing appear rate (default: 0.75) */
@@ -126,6 +128,7 @@ export class PostProcessingPipeline {
       lightWrap: true,
       morphology: true,
       morphologyRadius: 1.0,
+      erosionRadius: 0.5,
       colorMatchStrength: 0.2,
       appearRate: 0.75,
       disappearRate: 0.35,
@@ -343,7 +346,9 @@ export class PostProcessingPipeline {
     // Extend mask at frame edges: copy row 2-in from each edge to the outer 2 rows.
     // Prevents boundary artifacts from model low-confidence at truncated body edges,
     // which would otherwise be amplified by bilateral/feathering/erosion kernels.
-    if (maskData instanceof Float32Array) {
+    // A transparent cutout must not invent foreground at the frame boundary.
+    // Padding also contaminates the color-guided upscale with false samples.
+    if (maskData instanceof Float32Array && this.opts.backgroundMode !== "transparent") {
       this.padMaskEdges(maskData, maskWidth, maskHeight);
     }
 
@@ -471,7 +476,7 @@ export class PostProcessingPipeline {
       gl.uniform1f(this.bilateralProg.uniforms["u_spatialSigma"], 3.0);
       gl.uniform1f(
         this.bilateralProg.uniforms["u_rangeSigma"],
-        Math.max(this.opts.rangeSigma, 0.15),
+        Math.max(this.opts.rangeSigma, 0.01),
       );
     });
 
@@ -501,7 +506,7 @@ export class PostProcessingPipeline {
         1.0 / height,
       );
       gl.uniform1f(this.morphologyProg.uniforms["u_operation"], 1.0); // erode
-      gl.uniform1f(this.morphologyProg.uniforms["u_radius"], 0.5);
+      gl.uniform1f(this.morphologyProg.uniforms["u_radius"], this.opts.erosionRadius);
     });
 
     // --- Generate background ---
@@ -619,7 +624,7 @@ export class PostProcessingPipeline {
       gl.uniform1f(this.bilateralProg.uniforms["u_spatialSigma"], 3.0);
       gl.uniform1f(
         this.bilateralProg.uniforms["u_rangeSigma"],
-        Math.max(this.opts.rangeSigma, 0.15),
+        Math.max(this.opts.rangeSigma, 0.01),
       );
     });
 
@@ -647,7 +652,7 @@ export class PostProcessingPipeline {
         1.0 / height,
       );
       gl.uniform1f(this.morphologyProg.uniforms["u_operation"], 1.0); // erode
-      gl.uniform1f(this.morphologyProg.uniforms["u_radius"], 0.5);
+      gl.uniform1f(this.morphologyProg.uniforms["u_radius"], this.opts.erosionRadius);
     });
 
     let backgroundTex: WebGLTexture;

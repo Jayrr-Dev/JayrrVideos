@@ -1,5 +1,6 @@
-import type { CameraCutout } from "../domain/flags/cameraCutoutFlag";
 import { createCutoutKey } from "./jayrrCutoutCompositor";
+
+import type { CameraCutout } from "../domain/flags/cameraCutoutFlag";
 
 const cutouts = new Map<string, HTMLCanvasElement>();
 
