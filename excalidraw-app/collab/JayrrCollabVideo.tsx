@@ -34,15 +34,21 @@ type TrackMeta = {
 const readRoomId = () =>
   getCollaborationLinkData(window.location.href)?.roomId ?? null;
 
-const trackError = (error: unknown) =>
-  error instanceof Error ? error.message : "Camera sharing failed";
+const trackError = (error: unknown) => {
+  const message =
+    error instanceof Error ? error.message : "Camera sharing failed";
+  if (message.includes("Not authenticated")) {
+    return "Sign in to start a call.";
+  }
+  return message;
+};
 
 export const JayrrCollabVideo = ({
   isCollaborating,
 }: {
   isCollaborating: boolean;
 }) => {
-  const { isAuthenticated } = useConvexAuth();
+  const { isAuthenticated, isLoading } = useConvexAuth();
   const [roomId, setRoomId] = useState(readRoomId);
   const [sharing, setSharing] = useState(false);
   const [wanted, setWanted] = useState(getJayrrPhoneSelfWanted);
@@ -294,7 +300,12 @@ export const JayrrCollabVideo = ({
   ]);
 
   const share = useCallback(async () => {
-    if (!roomId || shareLockRef.current || sharingRef.current) {
+    if (
+      !roomId ||
+      !isAuthenticated ||
+      shareLockRef.current ||
+      sharingRef.current
+    ) {
       return;
     }
     shareLockRef.current = true;
@@ -362,7 +373,13 @@ export const JayrrCollabVideo = ({
     } finally {
       shareLockRef.current = false;
     }
-  }, [publishTracks, recordPublication, roomId, teardownProducer]);
+  }, [
+    isAuthenticated,
+    publishTracks,
+    recordPublication,
+    roomId,
+    teardownProducer,
+  ]);
 
   const stop = useCallback(async () => {
     teardownProducer();
@@ -383,13 +400,28 @@ export const JayrrCollabVideo = ({
     if (!isCollaborating || !roomId) {
       return;
     }
+    if (wanted && !isAuthenticated) {
+      if (!isLoading) {
+        setJayrrPhoneError("Sign in to start a call.");
+      }
+      return;
+    }
     if (wanted && !sharing) {
       void share();
     }
     if (!wanted && sharing) {
       void stop();
     }
-  }, [isCollaborating, roomId, share, sharing, stop, wanted]);
+  }, [
+    isAuthenticated,
+    isCollaborating,
+    isLoading,
+    roomId,
+    share,
+    sharing,
+    stop,
+    wanted,
+  ]);
 
   return null;
 };
