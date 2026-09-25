@@ -61,10 +61,13 @@ void main() {
   // Motion-aware adjustment (branchless):
   // Lower threshold + tighter range = triggers earlier on smaller movements
   float motion = texture(u_motionMap, v_texCoord).r;
-  float motionFactor = smoothstep(0.03, 0.2, motion) * u_hasMotionMap;
-  appearRate = mix(appearRate, 0.98, motionFactor);
+  float motionFactor = smoothstep(0.06, 0.24, motion) * u_hasMotionMap;
+  // Large disagreement must bypass history even without a motion map. Small
+  // confidence fluctuations should not disable stabilization at every edge.
+  motionFactor = max(motionFactor, smoothstep(0.12, 0.4, abs(current - previous)));
+  appearRate = mix(appearRate, 1.0, motionFactor);
   // Near-instant fade for vacated pixels — kills trailing
-  disappearRate = mix(disappearRate, 0.95, motionFactor);
+  disappearRate = mix(disappearRate, 1.0, motionFactor);
 
   // Hysteresis: different rates for appearing vs disappearing (branchless)
   float alpha = mix(disappearRate, appearRate, step(previous, current));

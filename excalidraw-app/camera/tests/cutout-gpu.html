@@ -66,18 +66,34 @@
         ]) {
           apply(frame(16, 16, color));
           const pixel = read(key.canvas, 8, 8);
-          check(name, Math.abs(pixel[3] - 128) <= 2 && pixel[1] - pixel[0] <= 3 && pixel[2] - pixel[0] <= 3, pixel);
+          check(
+            name,
+            Math.abs(pixel[3] - 128) <= 2 &&
+              pixel[1] - pixel[0] <= 3 &&
+              pixel[2] - pixel[0] <= 3,
+            pixel,
+          );
         }
         apply(frame(16, 16, "rgb(20, 40, 38)"));
         const interior = read(key.canvas, 8, 8);
-        check("Opaque interior teal is preserved", interior[1] === 40 && interior[2] === 38 && interior[3] === 255, interior);
+        check(
+          "Opaque interior teal is preserved",
+          interior[1] === 40 && interior[2] === 38 && interior[3] === 255,
+          interior,
+        );
         const opaqueEdge = frame(16, 16, "transparent");
         const opaqueCtx = opaqueEdge.getContext("2d");
         opaqueCtx.fillStyle = "rgb(20, 40, 38)";
         opaqueCtx.fillRect(4, 0, 12, 16);
         apply(opaqueEdge);
         const edgePixel = read(key.canvas, 4, 8);
-        check("Opaque boundary fringe is cleaned without shrinking", edgePixel[3] === 255 && edgePixel[1] - edgePixel[0] <= 3 && edgePixel[2] - edgePixel[0] <= 3, edgePixel);
+        check(
+          "Opaque boundary fringe is cleaned without shrinking",
+          edgePixel[3] === 255 &&
+            edgePixel[1] - edgePixel[0] <= 3 &&
+            edgePixel[2] - edgePixel[0] <= 3,
+          edgePixel,
+        );
         const ctx = finger.getContext("2d");
         ctx.fillStyle = "#d69875";
         ctx.fillRect(3, 2, 2, 12);

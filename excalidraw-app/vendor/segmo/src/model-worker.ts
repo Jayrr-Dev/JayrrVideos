@@ -207,7 +207,15 @@ function segment(bitmap, timestamp, crop) {
 
 self.onmessage = (e) => {
   if (e.data.type === 'init') init(e.data.config);
-  if (e.data.type === 'segment') segment(e.data.bitmap, e.data.timestamp, e.data.crop);
+  if (e.data.type === 'segment') {
+    try {
+      segment(e.data.bitmap, e.data.timestamp, e.data.crop);
+    } finally {
+      e.data.bitmap.close();
+      // Always release backpressure, including empty masks and failed inference.
+      self.postMessage({ type: 'done' });
+    }
+  }
 };
 `;
 
@@ -221,6 +229,7 @@ export interface WorkerMaskResult {
 export class ModelWorkerClient {
   private worker: Worker | null = null;
   private ready = false;
+  private inFlight = false;
   private config: Required<ModelConfig>;
   private onMask: ((result: WorkerMaskResult) => void) | null = null;
   private blobUrl: string | null = null;
@@ -260,6 +269,8 @@ export class ModelWorkerClient {
             this.actualDelegate = e.data.actualDelegate ?? this.config.delegate;
             clearTimeout(timeout);
             resolve();
+          } else if (e.data.type === 'done') {
+            this.inFlight = false;
           } else if (e.data.type === 'mask') {
             this.onMask?.({
               mask: new Float32Array(e.data.mask),
@@ -271,6 +282,7 @@ export class ModelWorkerClient {
         };
 
         this.worker.onerror = (e) => {
+          this.inFlight = false;
           clearTimeout(timeout);
           reject(new Error(`Worker error: ${e.message}`));
         };
@@ -291,15 +303,27 @@ export class ModelWorkerClient {
     timestamp: number,
     crop?: CropRegion | null,
   ): void {
-    if (!this.worker || !this.ready) return;
+    if (!this.worker || !this.ready || this.inFlight) return;
+    const worker = this.worker;
+    this.inFlight = true;
 
     // createImageBitmap is async but fast — just schedules the copy
     createImageBitmap(frame as ImageBitmapSource).then(bitmap => {
-      this.worker?.postMessage(
+      if (this.worker !== worker || !this.ready) {
+        bitmap.close();
+        return;
+      }
+      try {
+        worker.postMessage(
         { type: 'segment', bitmap, timestamp, crop: crop ?? null },
         [bitmap], // transfer ownership (zero-copy)
-      );
+        );
+      } catch {
+        bitmap.close();
+        this.inFlight = false;
+      }
     }).catch(() => {
+      if (this.worker === worker) this.inFlight = false;
       // Frame capture failed (e.g., video not playing) — skip silently
     });
   }
@@ -312,6 +336,7 @@ export class ModelWorkerClient {
     this.worker?.terminate();
     this.worker = null;
     this.ready = false;
+    this.inFlight = false;
     if (this.blobUrl) {
       URL.revokeObjectURL(this.blobUrl);
       this.blobUrl = null;

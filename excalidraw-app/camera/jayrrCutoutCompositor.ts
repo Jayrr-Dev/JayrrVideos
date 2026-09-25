@@ -39,7 +39,7 @@ void main() {
   float greenExcess = max(0.0, greenLead);
   float notBlue = 1.0 - smoothstep(0.01, 0.06, c.b - c.g);
   float despill = boundary * notBlue * smoothstep(0.008, 0.045, greenExcess + cyanExcess);
-  foreground.g = max(0.0, foreground.g - despill * (greenExcess + cyanExcess));
+  foreground.g = min(foreground.g, c.g - despill * (greenExcess + cyanExcess));
   foreground.b = max(0.0, foreground.b - despill * cyanExcess);
   if (u_hasPrev > 0.5) {
     vec4 previous = texture(u_prev, vec2(v_uv.x, 1.0 - v_uv.y));
@@ -47,14 +47,14 @@ void main() {
     float edge = 1.0 - abs(alpha * 2.0 - 1.0);
     // Small changes are usually edge noise. Large changes must follow hands
     // immediately, rather than accumulating a second trail after Segmo's EMA.
-    float change = smoothstep(0.06, 0.24, abs(alpha - prevA));
+    float change = smoothstep(0.04, 0.18, abs(alpha - prevA));
     // Reject history when RGB changes even if coverage is similar: a moving
     // finger should not inherit the previous surface's fractional silhouette.
     vec3 previousColor = previous.rgb / max(prevA, 0.001);
     vec3 colorDelta = foreground - previousColor;
     float colorChange = smoothstep(0.0025, 0.025, dot(colorDelta, colorDelta));
     change = max(change, colorChange * step(0.1, min(alpha, prevA)));
-    float rate = mix(mix(0.72, 0.35, edge), 1.0, change);
+    float rate = mix(mix(0.72, 0.20, edge), 1.0, change);
     rate = 1.0 - pow(1.0 - rate, u_frameScale);
     prevA = clamp(prevA, alpha - 0.12, alpha + 0.12);
     alpha = mix(prevA, alpha, rate);

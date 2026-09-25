@@ -651,7 +651,9 @@ const startSegmo = async (
     backgroundMode: "transparent",
     quality: "ultra",
     adaptive: false,
-    modelFps: 30,
+    // The worker admits one frame at a time. A higher ceiling lets the next
+    // camera frame start promptly without building a queue on slower devices.
+    modelFps: 60,
     useWorker: true,
     outputFps: 30,
   });
@@ -669,8 +671,8 @@ const startSegmo = async (
     featherRadius: 0.75,
     erosionRadius: 0,
     rangeSigma: 0.08,
-    appearRate: 0.6,
-    disappearRate: 0.45,
+    appearRate: 0.3,
+    disappearRate: 0.3,
   });
   const key = createCutoutKey(video.ownerDocument);
   if (!key) {
