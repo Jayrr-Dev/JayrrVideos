@@ -352,14 +352,14 @@ const CameraVideo = ({
   useEffect(() => {
     const video = videoRef.current;
     const canvas = cutoutRef.current;
-    if (!video || !canvas || phone || cutout === "off") {
+    if (!video || !canvas || cutout === "off") {
       return;
     }
     if (!streamReady) {
       return;
     }
     return startJayrrCameraCutout(elementId, video, canvas, cutout);
-  }, [cutout, display, elementId, phone, screen, streamReady]);
+  }, [cutout, display, elementId, screen, streamReady]);
 
   return (
     <>

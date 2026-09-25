@@ -6,7 +6,7 @@ import {
   FolderPlusIcon,
   TrashIcon,
 } from "@excalidraw/excalidraw/components/icons";
-import { useAction, useMutation, useQuery } from "convex/react";
+import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
 import {
   useEffect,
   useRef,
@@ -551,15 +551,20 @@ const JayrrPresentRecordingsAuthed = ({
   uploading: boolean;
 }) => {
   const api = useExcalidrawAPI();
+  const { isAuthenticated } = useConvexAuth();
   const [openFolderId, setOpenFolderId] = useAtom(openRecordingFolderIdAtom);
-  const folders = useQuery(convexApi.presentRecordingFolders.list);
+  const folders = useQuery(
+    convexApi.presentRecordingFolders.list,
+    isAuthenticated ? {} : "skip",
+  );
   const openFolder = useQuery(
     convexApi.presentRecordingFolders.get,
-    openFolderId ? { folderId: openFolderId } : "skip",
+    isAuthenticated && openFolderId ? { folderId: openFolderId } : "skip",
   );
-  const recordings = useQuery(convexApi.presentRecordings.list, {
-    folderId: openFolderId ?? null,
-  });
+  const recordings = useQuery(
+    convexApi.presentRecordings.list,
+    isAuthenticated ? { folderId: openFolderId ?? null } : "skip",
+  );
   const createFolder = useMutation(convexApi.presentRecordingFolders.create);
   const renameFolder = useMutation(convexApi.presentRecordingFolders.rename);
   const removeFolder = useMutation(convexApi.presentRecordingFolders.remove);
@@ -600,6 +605,16 @@ const JayrrPresentRecordingsAuthed = ({
     folderRenameRef.current?.focus();
     folderRenameRef.current?.select();
   }, [renamingFolderId, openFolderId]);
+
+  if (!isAuthenticated) {
+    return (
+      <RecordingsShell uploading={uploading}>
+        <p className="jayrr-present__empty">
+          Sign in to store recordings here.
+        </p>
+      </RecordingsShell>
+    );
+  }
 
   const openFolderById = (folderId: Id<"presentRecordingFolders">) => {
     setOpenFolderId(folderId);

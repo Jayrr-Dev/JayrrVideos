@@ -66,16 +66,22 @@ export type JayrrCamera =
       label?: string;
       /** Collaboration client that is streaming into this box. */
       ownerId?: string;
+      fit?: JayrrObjectFit;
+      crop?: JayrrDisplayCrop;
     }
   | {
       kind: "phone";
       userId: string;
       label?: string;
+      fit?: JayrrObjectFit;
+      crop?: JayrrDisplayCrop;
     }
   | {
       kind: "screen";
       userId: string;
       label?: string;
+      fit?: JayrrObjectFit;
+      crop?: JayrrDisplayCrop;
     }
   | {
       kind: "display";
@@ -141,6 +147,9 @@ const isDisplaySurface = (value: unknown): value is JayrrDisplaySurface =>
 const isObjectFit = (value: unknown): value is JayrrObjectFit =>
   typeof value === "string" &&
   (JAYRR_OBJECT_FITS as readonly string[]).includes(value);
+
+export const parseObjectFit = (value: unknown): JayrrObjectFit | undefined =>
+  isObjectFit(value) ? value : undefined;
 
 const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
 
@@ -248,19 +257,21 @@ export const readJayrrCamera = (
     crop?: unknown;
   };
   const label = typeof bag.label === "string" ? bag.label : undefined;
+  const fit = parseObjectFit(bag.fit);
+  const crop = parseDisplayCrop(bag.crop);
   if (bag.kind === "phone") {
     const userId = typeof bag.userId === "string" ? bag.userId : "";
     if (!userId) {
       return null;
     }
-    return { kind: "phone", userId, label };
+    return { kind: "phone", userId, label, fit, crop };
   }
   if (bag.kind === "screen") {
     const userId = typeof bag.userId === "string" ? bag.userId : "";
     if (!userId) {
       return null;
     }
-    return { kind: "screen", userId, label };
+    return { kind: "screen", userId, label, fit, crop };
   }
   if (bag.kind === "display") {
     return {
@@ -269,8 +280,8 @@ export const readJayrrCamera = (
       surface: isDisplaySurface(bag.surface) ? bag.surface : undefined,
       quality: isDisplayQuality(bag.quality) ? bag.quality : undefined,
       frameRate: isDisplayRate(bag.frameRate) ? bag.frameRate : undefined,
-      fit: isObjectFit(bag.fit) ? bag.fit : undefined,
-      crop: parseDisplayCrop(bag.crop),
+      fit,
+      crop,
       label,
     };
   }
@@ -279,7 +290,7 @@ export const readJayrrCamera = (
     return null;
   }
   const ownerId = typeof bag.ownerId === "string" ? bag.ownerId : undefined;
-  return { kind: "camera", deviceId, label, ownerId };
+  return { kind: "camera", deviceId, label, ownerId, fit, crop };
 };
 
 /** Account that is streaming into this box, when the box is tied to one. */
@@ -350,17 +361,15 @@ export const readDisplayRate = (
 };
 
 export const readDisplayFit = (camera: JayrrCamera | null): JayrrObjectFit => {
-  if (!isJayrrDisplay(camera) || !camera.fit) {
+  if (camera?.fit) {
+    return camera.fit;
+  }
+  if (camera?.kind === "display") {
     return "contain";
   }
-  return camera.fit;
+  return "cover";
 };
 
 export const readDisplayCrop = (
   camera: JayrrCamera | null,
-): JayrrDisplayCrop | undefined => {
-  if (!isJayrrDisplay(camera)) {
-    return undefined;
-  }
-  return camera.crop;
-};
+): JayrrDisplayCrop | undefined => camera?.crop;

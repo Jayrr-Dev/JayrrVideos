@@ -55,6 +55,7 @@ import {
   jayrrPhoneSource,
   jayrrScreenSource,
   parseDisplayCrop,
+  parseObjectFit,
   readDisplayCrop,
   readDisplayFit,
   readDisplayQuality,
@@ -332,12 +333,7 @@ const cameraFromValue = (
         bag.frameRate === 30 || bag.frameRate === 60
           ? bag.frameRate
           : undefined;
-      const fit =
-        "fit" in bag &&
-        typeof bag.fit === "string" &&
-        (JAYRR_OBJECT_FITS as readonly string[]).includes(bag.fit)
-          ? (bag.fit as JayrrObjectFit)
-          : undefined;
+      const fit = parseObjectFit("fit" in bag ? bag.fit : undefined);
       const nonce = typeof bag.nonce === "number" ? bag.nonce : Date.now();
       return {
         kind: "display",
@@ -350,10 +346,14 @@ const cameraFromValue = (
         label: jayrrCameraLabel(bag) ?? jayrrDisplaySurfaceLabel(surface),
       };
     }
+    const picture = {
+      fit: parseObjectFit("fit" in bag ? bag.fit : undefined),
+      crop: parseDisplayCrop("crop" in bag ? bag.crop : undefined),
+    };
     if (bag.kind === "screen" && typeof bag.userId === "string" && bag.userId) {
       const userId =
         bag.userId === JAYRR_PHONE_SELF ? getJayrrPhoneClientId() : bag.userId;
-      return { kind: "screen", userId, label: "Screen" };
+      return { kind: "screen", userId, label: "Screen", ...picture };
     }
     if (bag.kind === "phone" && typeof bag.userId === "string" && bag.userId) {
       const userId =
@@ -362,6 +362,7 @@ const cameraFromValue = (
         kind: "phone",
         userId,
         label: userId === getJayrrPhoneClientId() ? "On" : bag.label,
+        ...picture,
       };
     }
     if ("deviceId" in bag && typeof bag.deviceId === "string" && bag.deviceId) {
@@ -370,6 +371,7 @@ const cameraFromValue = (
         deviceId: bag.deviceId,
         label: bag.label,
         ownerId: getJayrrPhoneClientId(),
+        ...picture,
       };
     }
   }
@@ -497,28 +499,75 @@ const LocalCutoutSetting = () => {
   return <CutoutSetting value={cutout} onChange={setCutout} />;
 };
 
-const DesktopTune = ({
-  quality,
-  frameRate,
+const PictureTune = ({
   fit,
   cropActive,
   hasCrop,
-  onQuality,
-  onFrameRate,
   onFit,
   onToggleCrop,
   onResetCrop,
 }: {
-  quality: JayrrDisplayQuality;
-  frameRate: JayrrDisplayRate;
   fit: JayrrObjectFit;
   cropActive: boolean;
   hasCrop: boolean;
-  onQuality: (next: JayrrDisplayQuality) => void;
-  onFrameRate: (next: JayrrDisplayRate) => void;
   onFit: (next: JayrrObjectFit) => void;
   onToggleCrop: () => void;
   onResetCrop: () => void;
+}) => (
+  <>
+    <label className="control-label">
+      Fit
+      <select
+        className="dropdown-select"
+        value={fit}
+        aria-label="Fit"
+        onChange={(event) => {
+          const next = event.target.value;
+          if ((JAYRR_OBJECT_FITS as readonly string[]).includes(next)) {
+            onFit(next as JayrrObjectFit);
+          }
+        }}
+      >
+        {JAYRR_OBJECT_FITS.map((option) => (
+          <option key={option} value={option}>
+            {jayrrObjectFitLabel(option)}
+          </option>
+        ))}
+      </select>
+    </label>
+    <div className="jayrr-camera-picker__crop">
+      <span className="control-label">Crop</span>
+      <div className="buttonList">
+        <RadioButton
+          icon={<>{cropIcon}</>}
+          title="Crop"
+          active={cropActive}
+          onClick={onToggleCrop}
+        />
+        {hasCrop ? (
+          <button
+            type="button"
+            className="jayrr-camera-picker__crop-reset"
+            onClick={onResetCrop}
+          >
+            Reset
+          </button>
+        ) : null}
+      </div>
+    </div>
+  </>
+);
+
+const DesktopTune = ({
+  quality,
+  frameRate,
+  onQuality,
+  onFrameRate,
+}: {
+  quality: JayrrDisplayQuality;
+  frameRate: JayrrDisplayRate;
+  onQuality: (next: JayrrDisplayQuality) => void;
+  onFrameRate: (next: JayrrDisplayRate) => void;
 }) => (
   <div className="jayrr-camera-picker__tune">
     <label className="control-label">
@@ -561,46 +610,6 @@ const DesktopTune = ({
         ))}
       </select>
     </label>
-    <label className="control-label">
-      Fit
-      <select
-        className="dropdown-select"
-        value={fit}
-        aria-label="Desktop fit"
-        onChange={(event) => {
-          const next = event.target.value;
-          if ((JAYRR_OBJECT_FITS as readonly string[]).includes(next)) {
-            onFit(next as JayrrObjectFit);
-          }
-        }}
-      >
-        {JAYRR_OBJECT_FITS.map((option) => (
-          <option key={option} value={option}>
-            {jayrrObjectFitLabel(option)}
-          </option>
-        ))}
-      </select>
-    </label>
-    <div className="jayrr-camera-picker__crop">
-      <span className="control-label">Crop</span>
-      <div className="buttonList">
-        <RadioButton
-          icon={<>{cropIcon}</>}
-          title="Crop desktop"
-          active={cropActive}
-          onClick={onToggleCrop}
-        />
-        {hasCrop ? (
-          <button
-            type="button"
-            className="jayrr-camera-picker__crop-reset"
-            onClick={onResetCrop}
-          >
-            Reset
-          </button>
-        ) : null}
-      </div>
-    </div>
   </div>
 );
 
@@ -879,18 +888,19 @@ const StreamFields = ({
       type="button"
       icon={cropIcon}
       className={cropActive ? "ToolIcon--checked" : undefined}
-      aria-label="Crop desktop"
-      title="Crop desktop"
+      aria-label="Crop"
+      title="Crop"
       onClick={onToggleCrop}
     />
   );
+  const pictureOn = cameraOn || phoneOn || screenOn || desktopOn;
   const choices = compact ? (
     <>
       <div className="compact-action-item">{cameraChoice}</div>
       <div className="compact-action-item">{desktopChoice}</div>
       <div className="compact-action-item">{phoneChoice}</div>
       <div className="compact-action-item">{screenChoice}</div>
-      {desktopOn ? (
+      {pictureOn ? (
         <div className="compact-action-item">{cropChoice}</div>
       ) : null}
     </>
@@ -914,22 +924,22 @@ const StreamFields = ({
         <DesktopTune
           quality={quality}
           frameRate={frameRate}
-          fit={fit}
-          cropActive={cropActive}
-          hasCrop={hasCrop}
           onQuality={onQuality}
           onFrameRate={onFrameRate}
-          onFit={onFit}
-          onToggleCrop={onToggleCrop}
-          onResetCrop={onResetCrop}
         />
       ) : null}
-      {cameraOn || desktopOn || screenOn ? (
-        isConvexLinked ? (
-          <LinkedCutoutSetting />
-        ) : (
-          <LocalCutoutSetting />
-        )
+      {pictureOn ? (
+        <div className="jayrr-camera-picker__tune">
+          <PictureTune
+            fit={fit}
+            cropActive={cropActive}
+            hasCrop={hasCrop}
+            onFit={onFit}
+            onToggleCrop={onToggleCrop}
+            onResetCrop={onResetCrop}
+          />
+          {isConvexLinked ? <LinkedCutoutSetting /> : <LocalCutoutSetting />}
+        </div>
       ) : null}
       {error ? (
         <span className="jayrr-camera-picker__error">{error}</span>
@@ -1139,6 +1149,46 @@ const CameraPanel = ({
     });
   };
 
+  const applyPicture = (
+    nextFit: JayrrObjectFit,
+    nextCrop: JayrrDisplayCrop | undefined,
+  ) => {
+    if (phoneSource) {
+      onChange({
+        kind: "phone",
+        userId: phoneSource,
+        label: sourceLabel ?? undefined,
+        fit: nextFit,
+        crop: nextCrop,
+      });
+      return;
+    }
+    const screenSource = readScreenSource(source);
+    if (screenSource) {
+      onChange({
+        kind: "screen",
+        userId: screenSource,
+        label: sourceLabel || "Screen",
+        fit: nextFit,
+        crop: nextCrop,
+      });
+      return;
+    }
+    if (source === JAYRR_DISPLAY_SOURCE) {
+      keepDisplay(quality, frameRate, nextFit, nextCrop);
+      return;
+    }
+    if (source) {
+      onChange({
+        kind: "camera",
+        deviceId: source,
+        label: sourceLabel ?? undefined,
+        fit: nextFit,
+        crop: nextCrop,
+      });
+    }
+  };
+
   const fields = (
     <StreamFields
       compact={compact}
@@ -1163,13 +1213,13 @@ const CameraPanel = ({
         keepDisplay(quality, next);
       }}
       onFit={(next) => {
-        keepDisplay(quality, frameRate, next);
+        applyPicture(next, crop);
       }}
       onToggleCrop={() => {
         setCropElementId(cropActive ? null : elementId);
       }}
       onResetCrop={() => {
-        keepDisplay(quality, frameRate, fit, undefined);
+        applyPicture(fit, undefined);
         setCropElementId(null);
       }}
       onUnlock={() => {

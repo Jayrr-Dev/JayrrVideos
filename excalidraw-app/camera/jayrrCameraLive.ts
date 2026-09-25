@@ -12,7 +12,6 @@ import { readCaption } from "../domain/transcription";
 import {
   canLinkJayrrCamera,
   isFullDisplayCrop,
-  isJayrrDisplay,
   readDisplayCrop,
   readDisplayFit,
   readJayrrCamera,
@@ -230,10 +229,7 @@ export const paintJayrrCameraLive = (
     }
     const editingCrop =
       appJotaiStore.get(desktopCropElementIdAtom) === element.id;
-    const crop =
-      !editingCrop && isJayrrDisplay(camera)
-        ? readDisplayCrop(camera)
-        : undefined;
+    const crop = editingCrop ? undefined : readDisplayCrop(camera);
     const useCrop = crop && !isFullDisplayCrop(crop);
     drawFitted(
       context,
@@ -242,7 +238,7 @@ export const paintJayrrCameraLive = (
       sourceH,
       width,
       height,
-      isJayrrDisplay(camera) ? readDisplayFit(camera) : "cover",
+      readDisplayFit(camera),
       useCrop ? crop.x * sourceW : 0,
       useCrop ? crop.y * sourceH : 0,
       useCrop ? crop.width * sourceW : sourceW,

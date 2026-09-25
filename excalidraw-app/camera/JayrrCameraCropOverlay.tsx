@@ -17,18 +17,19 @@ import {
   FULL_DISPLAY_CROP,
   canLinkJayrrCamera,
   isFullDisplayCrop,
-  isJayrrDisplay,
   readDisplayCrop,
+  readDisplayFit,
   readJayrrCamera,
   writeJayrrCamera,
   type JayrrDisplayCrop,
+  type JayrrObjectFit,
 } from "./jayrrCamera";
 import { getJayrrCameraVideo } from "./jayrrCameraLive";
 import {
   DISPLAY_CROP_HANDLES,
   applyDisplayCropHandle,
-  containRect,
   desktopCropElementIdAtom,
+  fitRect,
   type DisplayCropHandle,
 } from "./jayrrDisplayCrop";
 
@@ -41,13 +42,14 @@ const presenting = () =>
 const videoBox = (
   element: NonDeletedExcalidrawElement,
   video: HTMLVideoElement | null,
+  fit: JayrrObjectFit,
 ) => {
   const pad = element.strokeWidth;
   const innerW = Math.max(1, element.width - pad * 2);
   const innerH = Math.max(1, element.height - pad * 2);
   const sourceW = video?.videoWidth || innerW;
   const sourceH = video?.videoHeight || innerH;
-  const fitted = containRect(sourceW, sourceH, innerW, innerH);
+  const fitted = fitRect(sourceW, sourceH, innerW, innerH, fit);
   return {
     x: pad + fitted.x,
     y: pad + fitted.y,
@@ -60,12 +62,14 @@ const CropEditor = ({
   element,
   appState,
   crop,
+  fit,
   onCrop,
   onDone,
 }: {
   element: NonDeletedExcalidrawElement;
   appState: AppState;
   crop: JayrrDisplayCrop;
+  fit: JayrrObjectFit;
   onCrop: (next: JayrrDisplayCrop, immediate: boolean) => void;
   onDone: () => void;
 }) => {
@@ -77,7 +81,7 @@ const CropEditor = ({
     originY: number;
   } | null>(null);
   const video = getJayrrCameraVideo(element.id);
-  const box = videoBox(element, video);
+  const box = videoBox(element, video, fit);
   const { x, y } = sceneCoordsToViewportCoords(
     { sceneX: element.x, sceneY: element.y },
     appState,
@@ -283,10 +287,14 @@ export const JayrrCameraCropOverlay = () => {
       return null;
     }
     const camera = readJayrrCamera(element);
-    if (!isJayrrDisplay(camera)) {
+    if (!camera) {
       return null;
     }
-    return { element, crop: readDisplayCrop(camera) ?? FULL_DISPLAY_CROP };
+    return {
+      element,
+      crop: readDisplayCrop(camera) ?? FULL_DISPLAY_CROP,
+      fit: readDisplayFit(camera),
+    };
   }, [elementId, elements]);
 
   useEffect(() => {
@@ -308,7 +316,7 @@ export const JayrrCameraCropOverlay = () => {
 
   const writeCrop = (next: JayrrDisplayCrop, immediate: boolean) => {
     const camera = readJayrrCamera(target.element);
-    if (!isJayrrDisplay(camera)) {
+    if (!camera) {
       return;
     }
     const customData = writeJayrrCamera(target.element, {
@@ -334,6 +342,7 @@ export const JayrrCameraCropOverlay = () => {
         element={target.element}
         appState={appState}
         crop={target.crop}
+        fit={target.fit}
         onCrop={writeCrop}
         onDone={() => setElementId(null)}
       />

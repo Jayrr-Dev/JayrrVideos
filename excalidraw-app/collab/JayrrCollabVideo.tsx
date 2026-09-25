@@ -40,6 +40,15 @@ type TrackMeta = {
   channel: "phone" | "screen";
 };
 
+type RemoteTrack = {
+  key: string;
+  sessionId: string;
+  trackName: string;
+  userId: string;
+  channel: TrackMeta["channel"];
+  displayName: string;
+};
+
 const streamKey = (channel: TrackMeta["channel"], userId: string) =>
   `${channel}:${userId}`;
 
@@ -235,7 +244,7 @@ export const JayrrCollabVideo = ({
     }
     const clientId = getJayrrPhoneClientId();
     const screenClientId = jayrrScreenClientId(clientId);
-    const desired = publications.flatMap((publication) => {
+    const desired = publications.flatMap((publication): RemoteTrack[] => {
       if (
         publication.clientId === clientId ||
         publication.clientId === screenClientId

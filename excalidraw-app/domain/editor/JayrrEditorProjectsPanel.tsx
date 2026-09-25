@@ -6,7 +6,7 @@ import {
   FolderPlusIcon,
   TrashIcon,
 } from "@excalidraw/excalidraw/components/icons";
-import { useMutation, useQuery } from "convex/react";
+import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import {
   useEffect,
   useRef,
@@ -373,18 +373,23 @@ const ProjectsShell = ({
 
 const JayrrEditorProjectsAuthed = () => {
   const api = useExcalidrawAPI();
+  const { isAuthenticated } = useConvexAuth();
   const { loadProject } = useJayrrEditorSession();
   const [openFolderId, setOpenFolderId] = useAtom(
     openEditorProjectFolderIdAtom,
   );
-  const folders = useQuery(convexApi.editorProjectFolders.list);
+  const folders = useQuery(
+    convexApi.editorProjectFolders.list,
+    isAuthenticated ? {} : "skip",
+  );
   const openFolder = useQuery(
     convexApi.editorProjectFolders.get,
-    openFolderId ? { folderId: openFolderId } : "skip",
+    isAuthenticated && openFolderId ? { folderId: openFolderId } : "skip",
   );
-  const projects = useQuery(convexApi.editorProjects.list, {
-    folderId: openFolderId ?? null,
-  });
+  const projects = useQuery(
+    convexApi.editorProjects.list,
+    isAuthenticated ? { folderId: openFolderId ?? null } : "skip",
+  );
   const createFolder = useMutation(convexApi.editorProjectFolders.create);
   const renameFolder = useMutation(convexApi.editorProjectFolders.rename);
   const removeFolder = useMutation(convexApi.editorProjectFolders.remove);
@@ -422,6 +427,14 @@ const JayrrEditorProjectsAuthed = () => {
     folderRenameRef.current?.focus();
     folderRenameRef.current?.select();
   }, [renamingFolderId, openFolderId]);
+
+  if (!isAuthenticated) {
+    return (
+      <ProjectsShell>
+        <p className="jayrr-present__empty">Sign in to store projects here.</p>
+      </ProjectsShell>
+    );
+  }
 
   const openFolderById = (folderId: Id<"editorProjectFolders">) => {
     setOpenFolderId(folderId);

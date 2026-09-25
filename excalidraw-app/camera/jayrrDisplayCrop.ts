@@ -31,6 +31,43 @@ export const DISPLAY_CROP_HANDLES: readonly DisplayCropHandle[] = [
   "se",
 ];
 
+export const fitRect = (
+  sourceW: number,
+  sourceH: number,
+  boxW: number,
+  boxH: number,
+  fit: "contain" | "cover" | "fill" | "none" | "scale-down",
+) => {
+  const safeW = Math.max(sourceW, 1);
+  const safeH = Math.max(sourceH, 1);
+  if (fit === "fill") {
+    return { x: 0, y: 0, width: boxW, height: boxH };
+  }
+  if (
+    fit === "none" ||
+    (fit === "scale-down" && safeW <= boxW && safeH <= boxH)
+  ) {
+    return {
+      x: (boxW - safeW) / 2,
+      y: (boxH - safeH) / 2,
+      width: safeW,
+      height: safeH,
+    };
+  }
+  const scale =
+    fit === "contain" || fit === "scale-down"
+      ? Math.min(boxW / safeW, boxH / safeH)
+      : Math.max(boxW / safeW, boxH / safeH);
+  const width = safeW * scale;
+  const height = safeH * scale;
+  return {
+    x: (boxW - width) / 2,
+    y: (boxH - height) / 2,
+    width,
+    height,
+  };
+};
+
 export const containRect = (
   sourceW: number,
   sourceH: number,
