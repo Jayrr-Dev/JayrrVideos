@@ -69,205 +69,6 @@ const applyPersonMask = (
   context.putImageData(frame, 0, 0);
 };
 
-const punchChroma = (
-  context: CanvasRenderingContext2D,
-  width: number,
-  height: number,
-) => {
-  const frame = context.getImageData(0, 0, width, height);
-  const pixels = frame.data;
-  for (let i = 0; i < pixels.length; i += 4) {
-    const r = pixels[i] ?? 0;
-    const g = pixels[i + 1] ?? 0;
-    const b = pixels[i + 2] ?? 0;
-    const rg = Math.max(r, g);
-    const blueLead = b - rg;
-    if (blueLead > 30) {
-      const fade = Math.min(1, (blueLead - 30) / 66);
-      pixels[i + 2] = Math.round(b * (1 - fade) + rg * fade);
-      pixels[i + 3] = Math.round((pixels[i + 3] ?? 255) * (1 - fade));
-    }
-  }
-  context.putImageData(frame, 0, 0);
-};
-
-const CHROMA_VERT = `#version 300 es
-in vec2 a_pos;
-out vec2 v_uv;
-void main() {
-  v_uv = vec2(a_pos.x * 0.5 + 0.5, 1.0 - (a_pos.y * 0.5 + 0.5));
-  gl_Position = vec4(a_pos, 0.0, 1.0);
-}`;
-
-const CHROMA_FRAG = `#version 300 es
-precision highp float;
-uniform sampler2D u_image;
-uniform sampler2D u_prev;
-uniform float u_hasPrev;
-in vec2 v_uv;
-out vec4 outColor;
-
-float blueLead(vec3 c) {
-  return c.b - max(c.r, c.g);
-}
-
-void main() {
-  vec4 c = texture(u_image, v_uv);
-  float lead = blueLead(c.rgb);
-  float spill = smoothstep(0.12, 0.38, lead);
-  float alpha = 1.0 - spill;
-  float keptB = mix(c.b, min(c.b, max(c.r, c.g)), spill);
-  vec3 rgb = vec3(c.r, c.g, keptB);
-  if (u_hasPrev > 0.5) {
-    float prevA = texture(u_prev, vec2(v_uv.x, 1.0 - v_uv.y)).a;
-    float mid = 1.0 - abs(alpha * 2.0 - 1.0);
-    float rate = mix(0.85, 0.4, mid);
-    alpha = mix(prevA, alpha, rate);
-  }
-  outColor = vec4(rgb * alpha, alpha);
-}`;
-
-const compileShader = (
-  gl: WebGL2RenderingContext,
-  type: number,
-  source: string,
-) => {
-  const shader = gl.createShader(type);
-  if (!shader) {
-    return null;
-  }
-  gl.shaderSource(shader, source);
-  gl.compileShader(shader);
-  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-    gl.deleteShader(shader);
-    return null;
-  }
-  return shader;
-};
-
-type ChromaKey = {
-  canvas: HTMLCanvasElement;
-  apply: (source: TexImageSource, width: number, height: number) => boolean;
-  destroy: () => void;
-};
-
-const createChromaKey = (): ChromaKey | null => {
-  const canvas = document.createElement("canvas");
-  const gl = canvas.getContext("webgl2", {
-    alpha: true,
-    antialias: false,
-    depth: false,
-    stencil: false,
-    premultipliedAlpha: true,
-    preserveDrawingBuffer: true,
-  });
-  if (!gl) {
-    return null;
-  }
-  const vert = compileShader(gl, gl.VERTEX_SHADER, CHROMA_VERT);
-  const frag = compileShader(gl, gl.FRAGMENT_SHADER, CHROMA_FRAG);
-  if (!vert || !frag) {
-    return null;
-  }
-  const program = gl.createProgram();
-  if (!program) {
-    return null;
-  }
-  gl.attachShader(program, vert);
-  gl.attachShader(program, frag);
-  gl.linkProgram(program);
-  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-    return null;
-  }
-  const buffer = gl.createBuffer();
-  const texture = gl.createTexture();
-  const prev = gl.createTexture();
-  if (!buffer || !texture || !prev) {
-    return null;
-  }
-  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-  gl.bufferData(
-    gl.ARRAY_BUFFER,
-    new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
-    gl.STATIC_DRAW,
-  );
-  const loc = gl.getAttribLocation(program, "a_pos");
-  gl.enableVertexAttribArray(loc);
-  gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
-  gl.useProgram(program);
-  gl.uniform1i(gl.getUniformLocation(program, "u_image"), 0);
-  gl.uniform1i(gl.getUniformLocation(program, "u_prev"), 1);
-  const hasPrevLoc = gl.getUniformLocation(program, "u_hasPrev");
-  let hasPrev = false;
-  gl.bindTexture(gl.TEXTURE_2D, prev);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-  gl.texImage2D(
-    gl.TEXTURE_2D,
-    0,
-    gl.RGBA,
-    1,
-    1,
-    0,
-    gl.RGBA,
-    gl.UNSIGNED_BYTE,
-    new Uint8Array([0, 0, 0, 0]),
-  );
-  gl.bindTexture(gl.TEXTURE_2D, texture);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
-  gl.clearColor(0, 0, 0, 0);
-  gl.disable(gl.DEPTH_TEST);
-  gl.disable(gl.BLEND);
-
-  return {
-    canvas,
-    apply: (source, width, height) => {
-      if (canvas.width !== width || canvas.height !== height) {
-        canvas.width = width;
-        canvas.height = height;
-        hasPrev = false;
-      }
-      gl.viewport(0, 0, width, height);
-      gl.useProgram(program);
-      gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-      gl.enableVertexAttribArray(loc);
-      gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
-      gl.uniform1f(hasPrevLoc, hasPrev ? 1 : 0);
-      gl.activeTexture(gl.TEXTURE1);
-      gl.bindTexture(gl.TEXTURE_2D, prev);
-      gl.activeTexture(gl.TEXTURE0);
-      gl.bindTexture(gl.TEXTURE_2D, texture);
-      gl.texImage2D(
-        gl.TEXTURE_2D,
-        0,
-        gl.RGBA,
-        gl.RGBA,
-        gl.UNSIGNED_BYTE,
-        source,
-      );
-      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-      gl.bindTexture(gl.TEXTURE_2D, prev);
-      gl.copyTexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 0, 0, width, height, 0);
-      hasPrev = true;
-      return true;
-    },
-    destroy: () => {
-      gl.deleteTexture(prev);
-      gl.deleteTexture(texture);
-      gl.deleteBuffer(buffer);
-      gl.deleteProgram(program);
-      gl.deleteShader(vert);
-      gl.deleteShader(frag);
-    },
-  };
-};
-
 const loopVideo = (
   video: HTMLVideoElement,
   cancelled: () => boolean,
@@ -582,8 +383,7 @@ const startSegmo = async (
   const width = video.videoWidth || 640;
   const height = video.videoHeight || 360;
   const processor = new SegmentationProcessor({
-    backgroundMode: "color",
-    backgroundColor: "#0033CC",
+    backgroundMode: "blur",
     quality: "high",
     adaptive: false,
     modelFps: 30,
@@ -595,22 +395,13 @@ const startSegmo = async (
     processor.destroy();
     return () => undefined;
   }
-  const chroma = createChromaKey();
-  const context = canvas.getContext("2d", { willReadFrequently: true });
-  if (!chroma && !context) {
+  const context = canvas.getContext("2d");
+  if (!context) {
     processor.destroy();
     return () => undefined;
   }
 
   let published = false;
-  const publish = (target: HTMLCanvasElement) => {
-    if (published) {
-      return;
-    }
-    published = true;
-    setJayrrCameraCutout(elementId, target);
-  };
-
   const stopLoop = loopVideo(video, cancelled, () => {
     if (video.videoWidth < 2 || video.videoHeight < 2) {
       return;
@@ -619,26 +410,19 @@ const startSegmo = async (
     if (!output) {
       return;
     }
-    if (chroma) {
-      chroma.apply(output, output.width, output.height);
-      publish(chroma.canvas);
-      return;
-    }
-    if (!context) {
-      return;
-    }
     if (canvas.width !== output.width || canvas.height !== output.height) {
       canvas.width = output.width;
       canvas.height = output.height;
     }
-    context.clearRect(0, 0, output.width, output.height);
     context.drawImage(output, 0, 0, output.width, output.height);
-    punchChroma(context, output.width, output.height);
-    publish(canvas);
+    if (published) {
+      return;
+    }
+    published = true;
+    setJayrrCameraCutout(elementId, canvas);
   });
   return () => {
     stopLoop();
-    chroma?.destroy();
     processor.destroy();
   };
 };
