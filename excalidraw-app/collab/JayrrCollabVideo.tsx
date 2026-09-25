@@ -1,4 +1,4 @@
-import { useConvexAuth, useAction, useMutation, useQuery } from "convex/react";
+import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { JAYRR_PHONE_SELF } from "../camera/jayrrCamera";
@@ -6,8 +6,8 @@ import { api, isConvexLinked } from "../convexClient";
 import { getCollaborationLinkData } from "../data";
 
 import {
-  createSfuPeerConnection,
   asPeerDescription,
+  createSfuPeerConnection,
   localDescription,
   requiredMid,
   waitForConnected,
@@ -74,10 +74,15 @@ export const JayrrCollabVideo = ({
   const leaveRoom = useMutation(api.collabVideo.leaveRoom);
 
   useEffect(() => {
-    const onHash = () => setRoomId(readRoomId());
-    window.addEventListener("hashchange", onHash);
-    return () => window.removeEventListener("hashchange", onHash);
-  }, []);
+    const syncRoom = () => setRoomId(readRoomId());
+    syncRoom();
+    window.addEventListener("hashchange", syncRoom);
+    window.addEventListener("popstate", syncRoom);
+    return () => {
+      window.removeEventListener("hashchange", syncRoom);
+      window.removeEventListener("popstate", syncRoom);
+    };
+  }, [isCollaborating]);
 
   useEffect(
     () =>
@@ -306,6 +311,8 @@ export const JayrrCollabVideo = ({
           video: true,
         });
       }
+      localStreamRef.current = stream;
+      setJayrrPhoneLocal(stream);
       const producer = createSfuPeerConnection();
       producerRef.current = producer;
       const offerTracks = stream.getTracks().map((track) => {
@@ -348,8 +355,6 @@ export const JayrrCollabVideo = ({
           trackName: track.trackName,
         })),
       });
-      localStreamRef.current = stream;
-      setJayrrPhoneLocal(stream);
       setSharing(true);
     } catch (caught) {
       teardownProducer();
