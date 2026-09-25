@@ -21,6 +21,16 @@ export const JAYRR_DISPLAY_RATES = [30, 60] as const;
 
 export type JayrrDisplayRate = typeof JAYRR_DISPLAY_RATES[number];
 
+export const JAYRR_OBJECT_FITS = [
+  "contain",
+  "cover",
+  "fill",
+  "none",
+  "scale-down",
+] as const;
+
+export type JayrrObjectFit = typeof JAYRR_OBJECT_FITS[number];
+
 export type JayrrDisplayCrop = {
   x: number;
   y: number;
@@ -62,6 +72,7 @@ export type JayrrCamera =
       surface?: JayrrDisplaySurface;
       quality?: JayrrDisplayQuality;
       frameRate?: JayrrDisplayRate;
+      fit?: JayrrObjectFit;
       crop?: JayrrDisplayCrop;
     };
 
@@ -88,6 +99,22 @@ export const jayrrDisplayQualityLabel = (quality: JayrrDisplayQuality) => {
   return "Screen size";
 };
 
+export const jayrrObjectFitLabel = (fit: JayrrObjectFit) => {
+  if (fit === "cover") {
+    return "Cover";
+  }
+  if (fit === "fill") {
+    return "Fill";
+  }
+  if (fit === "none") {
+    return "None";
+  }
+  if (fit === "scale-down") {
+    return "Scale down";
+  }
+  return "Contain";
+};
+
 const isDisplayQuality = (value: unknown): value is JayrrDisplayQuality =>
   typeof value === "string" &&
   (JAYRR_DISPLAY_QUALITIES as readonly string[]).includes(value);
@@ -98,6 +125,10 @@ const isDisplayRate = (value: unknown): value is JayrrDisplayRate =>
 const isDisplaySurface = (value: unknown): value is JayrrDisplaySurface =>
   typeof value === "string" &&
   (JAYRR_DISPLAY_SURFACES as readonly string[]).includes(value);
+
+const isObjectFit = (value: unknown): value is JayrrObjectFit =>
+  typeof value === "string" &&
+  (JAYRR_OBJECT_FITS as readonly string[]).includes(value);
 
 const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
 
@@ -197,6 +228,7 @@ export const readJayrrCamera = (
     surface?: unknown;
     quality?: unknown;
     frameRate?: unknown;
+    fit?: unknown;
     crop?: unknown;
   };
   const label = typeof bag.label === "string" ? bag.label : undefined;
@@ -214,6 +246,7 @@ export const readJayrrCamera = (
       surface: isDisplaySurface(bag.surface) ? bag.surface : undefined,
       quality: isDisplayQuality(bag.quality) ? bag.quality : undefined,
       frameRate: isDisplayRate(bag.frameRate) ? bag.frameRate : undefined,
+      fit: isObjectFit(bag.fit) ? bag.fit : undefined,
       crop: parseDisplayCrop(bag.crop),
       label,
     };
@@ -268,6 +301,13 @@ export const readDisplayRate = (
     return 30;
   }
   return camera.frameRate;
+};
+
+export const readDisplayFit = (camera: JayrrCamera | null): JayrrObjectFit => {
+  if (!isJayrrDisplay(camera) || !camera.fit) {
+    return "contain";
+  }
+  return camera.fit;
 };
 
 export const readDisplayCrop = (

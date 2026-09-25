@@ -14,7 +14,9 @@ import {
   isFullDisplayCrop,
   isJayrrDisplay,
   readDisplayCrop,
+  readDisplayFit,
   readJayrrCamera,
+  type JayrrObjectFit,
 } from "./jayrrCamera";
 import { getJayrrCameraCutout } from "./jayrrCameraCutout";
 import { desktopCropElementIdAtom } from "./jayrrDisplayCrop";
@@ -80,7 +82,7 @@ const drawFitted = (
   sourceH: number,
   width: number,
   height: number,
-  contain: boolean,
+  fit: JayrrObjectFit,
   cropX = 0,
   cropY = 0,
   cropW = sourceW,
@@ -90,11 +92,19 @@ const drawFitted = (
   const sy = Math.max(0, cropY);
   const sw = Math.max(1, Math.min(cropW, sourceW - sx));
   const sh = Math.max(1, Math.min(cropH, sourceH - sy));
-  const scale = contain
-    ? Math.min(width / sw, height / sh)
-    : Math.max(width / sw, height / sh);
-  const drawW = sw * scale;
-  const drawH = sh * scale;
+  let drawW = width;
+  let drawH = height;
+  if (fit === "none" || (fit === "scale-down" && sw <= width && sh <= height)) {
+    drawW = sw;
+    drawH = sh;
+  } else if (fit !== "fill") {
+    const scale =
+      fit === "contain" || fit === "scale-down"
+        ? Math.min(width / sw, height / sh)
+        : Math.max(width / sw, height / sh);
+    drawW = sw * scale;
+    drawH = sh * scale;
+  }
   context.imageSmoothingEnabled = true;
   context.imageSmoothingQuality = "high";
   context.drawImage(
@@ -232,7 +242,7 @@ export const paintJayrrCameraLive = (
       sourceH,
       width,
       height,
-      isJayrrDisplay(camera),
+      isJayrrDisplay(camera) ? readDisplayFit(camera) : "cover",
       useCrop ? crop.x * sourceW : 0,
       useCrop ? crop.y * sourceH : 0,
       useCrop ? crop.width * sourceW : sourceW,

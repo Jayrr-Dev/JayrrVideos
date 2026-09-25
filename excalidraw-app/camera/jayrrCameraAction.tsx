@@ -38,6 +38,7 @@ import {
   JAYRR_DISPLAY_RATES,
   JAYRR_DISPLAY_SOURCE,
   JAYRR_DISPLAY_SURFACES,
+  JAYRR_OBJECT_FITS,
   JAYRR_PHONE_SELF,
   canLinkJayrrCamera,
   isFullDisplayCrop,
@@ -46,9 +47,11 @@ import {
   jayrrCameraLabel,
   jayrrDisplayQualityLabel,
   jayrrDisplaySurfaceLabel,
+  jayrrObjectFitLabel,
   jayrrPhoneSource,
   parseDisplayCrop,
   readDisplayCrop,
+  readDisplayFit,
   readDisplayQuality,
   readDisplayRate,
   readJayrrCamera,
@@ -59,6 +62,7 @@ import {
   type JayrrDisplayQuality,
   type JayrrDisplayRate,
   type JayrrDisplaySurface,
+  type JayrrObjectFit,
 } from "./jayrrCamera";
 import { stopJayrrDisplay, unlockJayrrCameras } from "./jayrrCameraStreams";
 import { desktopCropElementIdAtom } from "./jayrrDisplayCrop";
@@ -290,6 +294,12 @@ const cameraFromValue = (
         bag.frameRate === 30 || bag.frameRate === 60
           ? bag.frameRate
           : undefined;
+      const fit =
+        "fit" in bag &&
+        typeof bag.fit === "string" &&
+        (JAYRR_OBJECT_FITS as readonly string[]).includes(bag.fit)
+          ? (bag.fit as JayrrObjectFit)
+          : undefined;
       const nonce = typeof bag.nonce === "number" ? bag.nonce : Date.now();
       return {
         kind: "display",
@@ -297,6 +307,7 @@ const cameraFromValue = (
         surface,
         quality,
         frameRate,
+        fit,
         crop: parseDisplayCrop("crop" in bag ? bag.crop : undefined),
         label: jayrrCameraLabel(bag) ?? jayrrDisplaySurfaceLabel(surface),
       };
@@ -432,19 +443,23 @@ const LocalCutoutSetting = () => {
 const DesktopTune = ({
   quality,
   frameRate,
+  fit,
   cropActive,
   hasCrop,
   onQuality,
   onFrameRate,
+  onFit,
   onToggleCrop,
   onResetCrop,
 }: {
   quality: JayrrDisplayQuality;
   frameRate: JayrrDisplayRate;
+  fit: JayrrObjectFit;
   cropActive: boolean;
   hasCrop: boolean;
   onQuality: (next: JayrrDisplayQuality) => void;
   onFrameRate: (next: JayrrDisplayRate) => void;
+  onFit: (next: JayrrObjectFit) => void;
   onToggleCrop: () => void;
   onResetCrop: () => void;
 }) => (
@@ -489,6 +504,26 @@ const DesktopTune = ({
         ))}
       </select>
     </label>
+    <label className="control-label">
+      Fit
+      <select
+        className="dropdown-select"
+        value={fit}
+        aria-label="Desktop fit"
+        onChange={(event) => {
+          const next = event.target.value;
+          if ((JAYRR_OBJECT_FITS as readonly string[]).includes(next)) {
+            onFit(next as JayrrObjectFit);
+          }
+        }}
+      >
+        {JAYRR_OBJECT_FITS.map((option) => (
+          <option key={option} value={option}>
+            {jayrrObjectFitLabel(option)}
+          </option>
+        ))}
+      </select>
+    </label>
     <div className="jayrr-camera-picker__crop">
       <span className="control-label">Crop</span>
       <div className="buttonList">
@@ -519,6 +554,7 @@ const StreamFields = ({
   displaySurface,
   quality,
   frameRate,
+  fit,
   cropActive,
   hasCrop,
   devices,
@@ -529,6 +565,7 @@ const StreamFields = ({
   onChangeSource,
   onQuality,
   onFrameRate,
+  onFit,
   onToggleCrop,
   onResetCrop,
   onUnlock,
@@ -544,6 +581,7 @@ const StreamFields = ({
   displaySurface: JayrrDisplaySurface | undefined;
   quality: JayrrDisplayQuality;
   frameRate: JayrrDisplayRate;
+  fit: JayrrObjectFit;
   cropActive: boolean;
   hasCrop: boolean;
   devices: MediaDeviceInfo[];
@@ -554,6 +592,7 @@ const StreamFields = ({
   onChangeSource: () => void;
   onQuality: (next: JayrrDisplayQuality) => void;
   onFrameRate: (next: JayrrDisplayRate) => void;
+  onFit: (next: JayrrObjectFit) => void;
   onToggleCrop: () => void;
   onResetCrop: () => void;
   onUnlock: () => void;
@@ -757,10 +796,12 @@ const StreamFields = ({
         <DesktopTune
           quality={quality}
           frameRate={frameRate}
+          fit={fit}
           cropActive={cropActive}
           hasCrop={hasCrop}
           onQuality={onQuality}
           onFrameRate={onFrameRate}
+          onFit={onFit}
           onToggleCrop={onToggleCrop}
           onResetCrop={onResetCrop}
         />
@@ -787,6 +828,7 @@ const CameraPanel = ({
   displayNonce,
   quality,
   frameRate,
+  fit,
   crop,
   onChange,
 }: {
@@ -797,6 +839,7 @@ const CameraPanel = ({
   displayNonce: number | undefined;
   quality: JayrrDisplayQuality;
   frameRate: JayrrDisplayRate;
+  fit: JayrrObjectFit;
   crop: JayrrDisplayCrop | undefined;
   onChange: (next: unknown) => void;
 }) => {
@@ -876,6 +919,7 @@ const CameraPanel = ({
         surface,
         quality,
         frameRate,
+        fit,
         label: jayrrDisplaySurfaceLabel(surface),
       });
       return;
@@ -889,6 +933,7 @@ const CameraPanel = ({
       surface: displaySurface ?? "monitor",
       quality,
       frameRate,
+      fit,
       label: jayrrDisplaySurfaceLabel(displaySurface),
     });
   };
@@ -896,6 +941,7 @@ const CameraPanel = ({
   const keepDisplay = (
     nextQuality: JayrrDisplayQuality,
     nextRate: JayrrDisplayRate,
+    nextFit: JayrrObjectFit = fit,
     nextCrop: JayrrDisplayCrop | undefined = crop,
   ) => {
     onChange({
@@ -904,6 +950,7 @@ const CameraPanel = ({
       nonce: displayNonce ?? 0,
       quality: nextQuality,
       frameRate: nextRate,
+      fit: nextFit,
       crop: nextCrop,
       label: sourceLabel || jayrrDisplaySurfaceLabel(displaySurface),
     });
@@ -917,6 +964,7 @@ const CameraPanel = ({
       displaySurface={displaySurface}
       quality={quality}
       frameRate={frameRate}
+      fit={fit}
       cropActive={cropActive}
       hasCrop={hasCrop}
       devices={devices}
@@ -931,11 +979,14 @@ const CameraPanel = ({
       onFrameRate={(next) => {
         keepDisplay(quality, next);
       }}
+      onFit={(next) => {
+        keepDisplay(quality, frameRate, next);
+      }}
       onToggleCrop={() => {
         setCropElementId(cropActive ? null : elementId);
       }}
       onResetCrop={() => {
-        keepDisplay(quality, frameRate, undefined);
+        keepDisplay(quality, frameRate, fit, undefined);
         setCropElementId(null);
       }}
       onUnlock={() => {
@@ -1008,6 +1059,7 @@ export const jayrrCameraAction: Action = {
         displayNonce={isJayrrDisplay(camera) ? camera.nonce : undefined}
         quality={readDisplayQuality(camera)}
         frameRate={readDisplayRate(camera)}
+        fit={readDisplayFit(camera)}
         crop={readDisplayCrop(camera)}
         onChange={(next) => updateData(next)}
       />

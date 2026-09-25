@@ -30,3 +30,6 @@ meta*.json
 
 .vercel
 .env*
+
+.vercel
+.env*
