@@ -19,6 +19,12 @@ The camera compositor keeps a physical green-screen key, but no longer keys
 blue out of the foreground. It rejects temporal history on color changes as
 well as coverage changes. This is local history rejection, not optical flow.
 
+Motion handling admits one worker capture/inference at a time, dropping frames
+while busy instead of queueing stale camera images. The cutout requests up to
+60 model frames per second; actual throughput remains limited by the camera and
+inference time. Small mask changes use stronger smoothing, while large changes
+bypass history even when no motion map is available.
+
 Research basis:
 
 - [Joint bilateral upsampling](https://www.microsoft.com/en-us/research/publication/joint-bilateral-upsampling/):

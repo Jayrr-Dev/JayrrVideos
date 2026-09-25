@@ -216,6 +216,23 @@
             read(oriented, 32, 56)[3]
           }`,
         );
+        pipeline.updateOptions({ appearRate: 0.3, disappearRate: 0.3 });
+        const motionFrame = frame(64, 64, "#d69875");
+        mask.fill(0);
+        pipeline.process(motionFrame, mask);
+        mask.fill(1);
+        const appearing = read(pipeline.process(motionFrame, mask), 32, 32)[3];
+        mask.fill(0);
+        const disappearing = read(
+          pipeline.process(motionFrame, mask),
+          32,
+          32,
+        )[3];
+        check(
+          "Large model changes bypass smoothing without a motion map",
+          appearing > 250 && disappearing < 5,
+          `appearing=${appearing}, disappearing=${disappearing}`,
+        );
         pipeline.destroy();
         key.destroy();
         results.textContent += `\n\n${checks.filter((c) => c.passed).length}/${
