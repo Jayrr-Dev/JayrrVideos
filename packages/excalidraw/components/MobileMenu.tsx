@@ -5,20 +5,20 @@ import type { NonDeletedExcalidrawElement } from "@excalidraw/element/types";
 import { useTunnels } from "../context/tunnels";
 import { t } from "../i18n";
 import { getScrollToContentState } from "../scene";
-import { SCROLLBAR_WIDTH, SCROLLBAR_MARGIN } from "../scene/scrollbars";
+import { SCROLLBAR_MARGIN, SCROLLBAR_WIDTH } from "../scene/scrollbars";
 
 import { ExitViewModeButton, MobileShapeActions } from "./Actions";
-import { MobileToolbar } from "./MobileToolbar";
 import { FixedSideContainer } from "./FixedSideContainer";
+import { MobileToolbar } from "./MobileToolbar";
 
 import { Island } from "./Island";
 
 import { PenModeButton } from "./PenModeButton";
 import { ViewportStatusBadge } from "./ViewportStatusFrame/ViewportStatusFrame";
 
+import type { JSX } from "react";
 import type { ActionManager } from "../actions/manager";
 import type { AppClassProperties, AppState, UIAppState } from "../types";
-import type { JSX } from "react";
 
 type MobileMenuProps = {
   appState: UIAppState;
@@ -68,23 +68,26 @@ export const MobileMenu = ({
       return null;
     }
 
+    const hostTopRightUI = renderTopRightUI?.(true, appState);
     const topRightUI = (
       <div className="excalidraw-ui-top-right">
-        {renderTopRightUI?.(true, appState) ??
-          (!appState.viewModeEnabled && (
-            <>
-              {defaultUIEnabled && (
-                <PenModeButton
-                  checked={appState.penMode}
-                  onChange={() => onPenModeToggle(null)}
-                  title={t("toolBar.penMode")}
-                  isMobile
-                  penDetected={appState.penDetected}
-                />
-              )}
-              <DefaultSidebarTriggerTunnel.Out />
-            </>
-          ))}
+        {hostTopRightUI}
+        {!appState.viewModeEnabled && defaultUIEnabled && (
+          <>
+            {!hostTopRightUI && (
+              <PenModeButton
+                checked={appState.penMode}
+                onChange={() => onPenModeToggle(null)}
+                title={t("toolBar.penMode")}
+                isMobile
+                penDetected={appState.penDetected}
+              />
+            )}
+            {/* Host top-right UI must not replace the library trigger.
+                Desktop keeps both; phone used to drop the trigger. */}
+            <DefaultSidebarTriggerTunnel.Out />
+          </>
+        )}
         {defaultUIEnabled &&
           appState.viewModeEnabled &&
           app.isInteractionEnabled() && (

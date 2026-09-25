@@ -39,6 +39,26 @@
     }
   }
 
+  @include isMobile {
+    .sidebar {
+      width: 100%;
+      max-width: 100%;
+      padding-top: var(--sat);
+      padding-bottom: var(--sab);
+      padding-left: var(--sal);
+      padding-right: var(--sar);
+    }
+
+    .sidebar__header {
+      min-width: 0;
+      gap: 0.25rem;
+    }
+
+    .sidebar__header__buttons {
+      flex-shrink: 0;
+    }
+  }
+
   // ---------------------------- sidebar header ------------------------------
 
   .sidebar__header {
@@ -174,6 +194,19 @@
 
         border: none;
       }
+    }
+  }
+
+  @include isMobile {
+    .default-sidebar .sidebar-triggers {
+      display: flex;
+      min-width: 0;
+      flex: 1 1 auto;
+      overflow-x: auto;
+    }
+
+    .default-sidebar .sidebar-triggers .sidebar-tab-trigger {
+      flex: 0 0 var(--lg-button-size);
     }
   }
 }

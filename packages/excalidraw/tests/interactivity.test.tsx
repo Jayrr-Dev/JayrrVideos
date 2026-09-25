@@ -1,4 +1,3 @@
-import React from "react";
 import { vi } from "vitest";
 
 import { CODES, CURSOR_TYPE, POINTER_BUTTON } from "@excalidraw/common";
@@ -768,6 +767,20 @@ describe("ui={{ enabled: ... }}", () => {
 
     expect(queryContainer(".scroll-back-to-content")).not.toBe(null);
     expect(queryContainer(".mobile-toolbar")).toBe(null);
+  });
+
+  it("keeps the library trigger when the host supplies top-right UI on mobile", async () => {
+    await render(
+      <Excalidraw
+        UIOptions={{ getFormFactor: () => "phone" }}
+        renderTopRightUI={() => <div data-testid="host-top-right" />}
+      />,
+    );
+    fireEvent.resize(window);
+    await waitFor(() => expect(h.app.editorInterface.formFactor).toBe("phone"));
+
+    expect(queryContainer("[data-testid='host-top-right']")).not.toBe(null);
+    expect(queryContainer(".default-sidebar-trigger")).not.toBe(null);
   });
 });
 

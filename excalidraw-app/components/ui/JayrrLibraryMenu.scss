@@ -368,6 +368,13 @@
     background: var(--color-surface-mid);
   }
 
+  &.excalidraw--mobile .jayrr-libraries__view-btn {
+    flex: 1 1 auto;
+    min-height: 2.75rem;
+    font-size: 0.875rem;
+    padding: 0.4rem 0.75rem;
+  }
+
   .jayrr-libraries__content,
   .jayrr-libraries__pane {
     display: flex;
