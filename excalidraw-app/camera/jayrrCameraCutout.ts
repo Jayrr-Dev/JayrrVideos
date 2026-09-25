@@ -398,9 +398,7 @@ type ModnetImage = {
   data: Uint8Array | Uint8ClampedArray;
 };
 
-type ModnetRemover = (
-  image: HTMLCanvasElement,
-) => Promise<ModnetImage | null>;
+type ModnetRemover = (image: HTMLCanvasElement) => Promise<ModnetImage | null>;
 
 let modnetLoad: Promise<ModnetRemover | null> | null = null;
 let modnetQueue: Promise<unknown> = Promise.resolve();
