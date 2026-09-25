@@ -643,7 +643,7 @@ const StreamFields = ({
   phoneError: string | null;
   onPhoneChange: (userId: string) => void;
   screenError: string | null;
-  onShareScreen: () => void;
+  onShareScreen: () => boolean;
   onStopScreen: () => void;
 }) => {
   const namedDevices = devices.filter((device) => device.deviceId);
@@ -844,8 +844,9 @@ const StreamFields = ({
             <MenuItem
               selected={screenOn}
               onSelect={() => {
-                onShareScreen();
-                close();
+                if (onShareScreen()) {
+                  close();
+                }
               }}
             >
               {screenOn ? "Change screen" : "Share screen"}
@@ -1113,17 +1114,28 @@ const CameraPanel = ({
     onChange({ off: true });
   };
 
-  const shareScreen = async () => {
+  const shareScreen = () => {
     setCropElementId(null);
     setScreenError(null);
     const view = container?.ownerDocument.defaultView;
-    if (!view) {
-      return;
+    const mediaDevices = view?.navigator.mediaDevices;
+    if (
+      !view ||
+      !mediaDevices ||
+      typeof mediaDevices.getDisplayMedia !== "function"
+    ) {
+      setScreenError("This browser can't share the screen.");
+      return false;
     }
+    void captureSharedScreen(mediaDevices);
+    return true;
+  };
+
+  const captureSharedScreen = async (mediaDevices: MediaDevices) => {
     try {
       let stream: MediaStream;
       try {
-        stream = await view.navigator.mediaDevices.getDisplayMedia({
+        stream = await mediaDevices.getDisplayMedia({
           video: true,
           audio: true,
         });
@@ -1134,7 +1146,7 @@ const CameraPanel = ({
         ) {
           return;
         }
-        stream = await view.navigator.mediaDevices.getDisplayMedia({
+        stream = await mediaDevices.getDisplayMedia({
           video: true,
         });
       }
@@ -1308,9 +1320,7 @@ const CameraPanel = ({
       phoneError={phoneError}
       onPhoneChange={pickPhone}
       screenError={screenError}
-      onShareScreen={() => {
-        void shareScreen();
-      }}
+      onShareScreen={shareScreen}
       onStopScreen={stopScreen}
     />
   );

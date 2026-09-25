@@ -15,7 +15,6 @@ import {
   releaseJayrrScreenSelf,
   retainJayrrPhoneSelf,
   retainJayrrScreenSelf,
-  setJayrrPhoneLocal,
   subscribeJayrrPhone,
 } from "../collab/jayrrCollabVideoSession";
 import { cameraCutoutAtom } from "../domain/flags/cameraCutoutFlag";
@@ -86,12 +85,14 @@ const CameraVideo = ({
   const screenUserId = screen ? camera.userId : null;
   const streamOwnerId = jayrrStreamOwnerId(camera);
   const myClientId = getJayrrPhoneClientId();
-  const foreignStream = streamOwnerId != null && streamOwnerId !== myClientId;
+  const localCamera = !display && !phone && !screen;
+  const foreignCamera =
+    localCamera && streamOwnerId != null && streamOwnerId !== myClientId;
   const ownPhone =
     phone && (phoneUserId === myClientId || phoneUserId === JAYRR_PHONE_SELF);
   const ownScreen = screen && screenUserId === myClientId;
   const cameraId =
-    display || phone || screen || foreignStream ? null : camera.deviceId;
+    "deviceId" in camera && !foreignCamera ? camera.deviceId : null;
   const nonce = display ? camera.nonce ?? 0 : 0;
   const surface = display ? camera.surface : undefined;
   const quality = readDisplayQuality(display ? camera : null);
@@ -114,7 +115,7 @@ const CameraVideo = ({
     if (!video) {
       return;
     }
-    if (phone || screen || foreignStream) {
+    if (phone || screen || foreignCamera) {
       return;
     }
     let cancelled = false;
@@ -150,10 +151,6 @@ const CameraVideo = ({
         }
         setJayrrCameraVideo(elementId, video);
         setStreamReady(true);
-        if (streamOwnerId === myClientId) {
-          setJayrrPhoneLocal(stream);
-          retainJayrrPhoneSelf();
-        }
         return video.play().catch(() => undefined);
       })
       .catch(() => undefined);
@@ -162,9 +159,6 @@ const CameraVideo = ({
       setJayrrCameraVideo(elementId, null);
       setStreamReady(false);
       video.srcObject = null;
-      if (streamOwnerId === myClientId) {
-        releaseJayrrPhoneSelf();
-      }
       if (!held) {
         return;
       }
@@ -178,12 +172,10 @@ const CameraVideo = ({
     cameraId,
     display,
     elementId,
-    foreignStream,
-    myClientId,
+    foreignCamera,
     nonce,
     phone,
     screen,
-    streamOwnerId,
     surface,
   ]);
 
@@ -192,11 +184,7 @@ const CameraVideo = ({
     if (screen) {
       return;
     }
-    const remoteUserId = foreignStream
-      ? streamOwnerId
-      : phoneUserId && !ownPhone
-      ? phoneUserId
-      : null;
+    const remoteUserId = phoneUserId && !ownPhone ? phoneUserId : null;
     if (!video || (!ownPhone && !remoteUserId)) {
       return;
     }
@@ -237,7 +225,7 @@ const CameraVideo = ({
       setStreamReady(false);
       video.srcObject = null;
     };
-  }, [elementId, foreignStream, ownPhone, phoneUserId, screen, streamOwnerId]);
+  }, [elementId, ownPhone, phoneUserId, screen]);
 
   useEffect(() => {
     const video = videoRef.current;
