@@ -69,6 +69,173 @@ const applyPersonMask = (
   context.putImageData(frame, 0, 0);
 };
 
+const CUTOUT_VERT = `#version 300 es
+in vec2 a_pos;
+out vec2 v_uv;
+void main() {
+  v_uv = vec2(a_pos.x * 0.5 + 0.5, 1.0 - (a_pos.y * 0.5 + 0.5));
+  gl_Position = vec4(a_pos, 0.0, 1.0);
+}`;
+
+const CUTOUT_FRAG = `#version 300 es
+precision highp float;
+uniform sampler2D u_image;
+uniform sampler2D u_prev;
+uniform float u_hasPrev;
+in vec2 v_uv;
+out vec4 outColor;
+
+void main() {
+  vec4 c = texture(u_image, v_uv);
+  float blueLead = c.b - max(c.r, c.g);
+  float greenLead = c.g - max(c.r, c.b);
+  float blueSpill = smoothstep(0.10, 0.30, blueLead);
+  float greenSpill = smoothstep(0.10, 0.30, greenLead);
+  float spill = max(blueSpill, greenSpill);
+  float alpha = 1.0 - spill;
+  if (u_hasPrev > 0.5) {
+    float prevA = texture(u_prev, vec2(v_uv.x, 1.0 - v_uv.y)).a;
+    float edge = 1.0 - abs(alpha * 2.0 - 1.0);
+    alpha = mix(prevA, alpha, mix(0.72, 0.35, edge));
+  }
+  float keptB = mix(c.b, min(c.b, max(c.r, c.g)), blueSpill);
+  float keptG = mix(c.g, min(c.g, max(c.r, c.b)), greenSpill);
+  outColor = vec4(c.r * alpha, keptG * alpha, keptB * alpha, alpha);
+}`;
+
+type CutoutKey = {
+  canvas: HTMLCanvasElement;
+  apply: (source: TexImageSource, width: number, height: number) => void;
+  destroy: () => void;
+};
+
+const createCutoutKey = (): CutoutKey | null => {
+  const canvas = document.createElement("canvas");
+  const gl = canvas.getContext("webgl2", {
+    alpha: true,
+    antialias: false,
+    depth: false,
+    stencil: false,
+    premultipliedAlpha: true,
+    preserveDrawingBuffer: true,
+  });
+  if (!gl) {
+    return null;
+  }
+  const compile = (type: number, source: string) => {
+    const shader = gl.createShader(type);
+    if (!shader) {
+      return null;
+    }
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+      gl.deleteShader(shader);
+      return null;
+    }
+    return shader;
+  };
+  const vert = compile(gl.VERTEX_SHADER, CUTOUT_VERT);
+  const frag = compile(gl.FRAGMENT_SHADER, CUTOUT_FRAG);
+  if (!vert || !frag) {
+    return null;
+  }
+  const program = gl.createProgram();
+  if (!program) {
+    return null;
+  }
+  gl.attachShader(program, vert);
+  gl.attachShader(program, frag);
+  gl.linkProgram(program);
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    return null;
+  }
+  const buffer = gl.createBuffer();
+  const texture = gl.createTexture();
+  const prev = gl.createTexture();
+  if (!buffer || !texture || !prev) {
+    return null;
+  }
+  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+  gl.bufferData(
+    gl.ARRAY_BUFFER,
+    new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
+    gl.STATIC_DRAW,
+  );
+  const loc = gl.getAttribLocation(program, "a_pos");
+  gl.enableVertexAttribArray(loc);
+  gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+  gl.useProgram(program);
+  gl.uniform1i(gl.getUniformLocation(program, "u_image"), 0);
+  gl.uniform1i(gl.getUniformLocation(program, "u_prev"), 1);
+  const hasPrevLoc = gl.getUniformLocation(program, "u_hasPrev");
+  let hasPrev = false;
+  const setupTex = (target: WebGLTexture) => {
+    gl.bindTexture(gl.TEXTURE_2D, target);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  };
+  setupTex(prev);
+  gl.texImage2D(
+    gl.TEXTURE_2D,
+    0,
+    gl.RGBA,
+    1,
+    1,
+    0,
+    gl.RGBA,
+    gl.UNSIGNED_BYTE,
+    new Uint8Array([0, 0, 0, 0]),
+  );
+  setupTex(texture);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+  gl.disable(gl.DEPTH_TEST);
+  gl.disable(gl.BLEND);
+
+  return {
+    canvas,
+    apply: (source, width, height) => {
+      if (canvas.width !== width || canvas.height !== height) {
+        canvas.width = width;
+        canvas.height = height;
+        hasPrev = false;
+      }
+      gl.viewport(0, 0, width, height);
+      gl.useProgram(program);
+      gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+      gl.enableVertexAttribArray(loc);
+      gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+      gl.uniform1f(hasPrevLoc, hasPrev ? 1 : 0);
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, prev);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      gl.texImage2D(
+        gl.TEXTURE_2D,
+        0,
+        gl.RGBA,
+        gl.RGBA,
+        gl.UNSIGNED_BYTE,
+        source,
+      );
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      gl.bindTexture(gl.TEXTURE_2D, prev);
+      gl.copyTexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 0, 0, width, height, 0);
+      hasPrev = true;
+    },
+    destroy: () => {
+      gl.deleteTexture(prev);
+      gl.deleteTexture(texture);
+      gl.deleteBuffer(buffer);
+      gl.deleteProgram(program);
+      gl.deleteShader(vert);
+      gl.deleteShader(frag);
+    },
+  };
+};
+
 const loopVideo = (
   video: HTMLVideoElement,
   cancelled: () => boolean,
@@ -190,41 +357,247 @@ const startMediaPipe = async (
 };
 
 const MODNET_MODEL = "Xenova/modnet";
-const MODNET_EDGE = 512;
+const MODNET_SHORT_EDGE = 512;
+const MODNET_LONG_EDGE = 1024;
 
-type ModnetImage = {
+type ModnetFrame = {
+  data: Uint8ClampedArray;
   width: number;
   height: number;
-  channels: number;
-  data: Uint8Array | Uint8ClampedArray;
 };
 
-type ModnetRemover = (image: HTMLCanvasElement) => Promise<ModnetImage | null>;
+type ModnetMatte = {
+  data: Uint8Array;
+  width: number;
+  height: number;
+};
 
-let modnetLoad: Promise<ModnetRemover | null> | null = null;
+type MatteTensor = {
+  dims: ArrayLike<number>;
+  data: ArrayLike<number>;
+  mul: (value: number) => MatteTensor;
+  to: (type: "uint8") => MatteTensor;
+};
+
+type ModnetRunner = (frame: ModnetFrame) => Promise<ModnetMatte | null>;
+
+let modnetLoad: Promise<ModnetRunner | null> | null = null;
 let modnetQueue: Promise<unknown> = Promise.resolve();
 
-const asModnetImage = (value: unknown): ModnetImage | null => {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+const mattePlane = (tensor: MatteTensor) => {
+  const dims: number[] = [];
+  for (let i = 0; i < tensor.dims.length; i += 1) {
+    dims.push(Number(tensor.dims[i]));
+  }
+  while (dims.length > 2) {
+    if (dims[0] !== 1) {
+      break;
+    }
+    dims.shift();
+  }
+  if (dims.length !== 2) {
     return null;
   }
-  if (
-    !("data" in value) ||
-    !("width" in value) ||
-    !("height" in value) ||
-    !("channels" in value)
-  ) {
+  const height = dims[0] ?? 0;
+  const width = dims[1] ?? 0;
+  const count = width * height;
+  if (width < 2 || height < 2 || tensor.data.length < count) {
     return null;
   }
-  const image = value as ModnetImage;
-  if (
-    typeof image.width !== "number" ||
-    typeof image.height !== "number" ||
-    typeof image.channels !== "number"
-  ) {
-    return null;
+  const data = new Uint8Array(count);
+  for (let i = 0; i < count; i += 1) {
+    data[i] = tensor.data[i] ?? 0;
   }
-  return image;
+  return { data, width, height };
+};
+
+const morphPass = (
+  src: Uint8Array,
+  width: number,
+  height: number,
+  radius: number,
+  takeMin: boolean,
+) => {
+  const temp = new Uint8Array(src.length);
+  const out = new Uint8Array(src.length);
+  const pick = (left: number, right: number) => {
+    if (takeMin) {
+      return left < right ? left : right;
+    }
+    return left > right ? left : right;
+  };
+  for (let y = 0; y < height; y += 1) {
+    const row = y * width;
+    for (let x = 0; x < width; x += 1) {
+      let value = src[row + x] ?? 0;
+      const x0 = Math.max(0, x - radius);
+      const x1 = Math.min(width - 1, x + radius);
+      for (let i = x0; i <= x1; i += 1) {
+        value = pick(value, src[row + i] ?? 0);
+      }
+      temp[row + x] = value;
+    }
+  }
+  for (let y = 0; y < height; y += 1) {
+    const y0 = Math.max(0, y - radius);
+    const y1 = Math.min(height - 1, y + radius);
+    for (let x = 0; x < width; x += 1) {
+      let value = temp[y * width + x] ?? 0;
+      for (let i = y0; i <= y1; i += 1) {
+        value = pick(value, temp[i * width + x] ?? 0);
+      }
+      out[y * width + x] = value;
+    }
+  }
+  return out;
+};
+
+const fillMatteHoles = (src: Uint8Array, width: number, height: number) => {
+  const seen = new Uint8Array(src.length);
+  const stack: number[] = [];
+  const push = (index: number) => {
+    if (index < 0 || index >= src.length || seen[index]) {
+      return;
+    }
+    if ((src[index] ?? 0) > 127) {
+      return;
+    }
+    seen[index] = 1;
+    stack.push(index);
+  };
+  for (let x = 0; x < width; x += 1) {
+    push(x);
+    push((height - 1) * width + x);
+  }
+  for (let y = 0; y < height; y += 1) {
+    push(y * width);
+    push(y * width + width - 1);
+  }
+  while (stack.length > 0) {
+    const index = stack.pop() ?? 0;
+    const x = index % width;
+    if (x > 0) {
+      push(index - 1);
+    }
+    if (x + 1 < width) {
+      push(index + 1);
+    }
+    if (index >= width) {
+      push(index - width);
+    }
+    if (index + width < src.length) {
+      push(index + width);
+    }
+  }
+  const out = new Uint8Array(src.length);
+  for (let i = 0; i < src.length; i += 1) {
+    if ((src[i] ?? 0) > 127 || seen[i] === 0) {
+      out[i] = 255;
+    }
+  }
+  return out;
+};
+
+const downsampleMax = (
+  src: Uint8Array,
+  width: number,
+  height: number,
+  targetW: number,
+  targetH: number,
+) => {
+  const out = new Uint8Array(targetW * targetH);
+  for (let y = 0; y < targetH; y += 1) {
+    const y0 = Math.min(height - 1, Math.floor((y * height) / targetH));
+    const y1 = Math.max(
+      y0 + 1,
+      Math.min(height, Math.floor(((y + 1) * height) / targetH)),
+    );
+    for (let x = 0; x < targetW; x += 1) {
+      const x0 = Math.min(width - 1, Math.floor((x * width) / targetW));
+      const x1 = Math.max(
+        x0 + 1,
+        Math.min(width, Math.floor(((x + 1) * width) / targetW)),
+      );
+      let value = 0;
+      for (let py = y0; py < y1; py += 1) {
+        for (let px = x0; px < x1; px += 1) {
+          value = Math.max(value, src[py * width + px] ?? 0);
+        }
+      }
+      out[y * targetW + x] = value;
+    }
+  }
+  return out;
+};
+
+const upsampleBilinear = (
+  src: Uint8Array,
+  width: number,
+  height: number,
+  targetW: number,
+  targetH: number,
+) => {
+  const out = new Uint8Array(targetW * targetH);
+  for (let y = 0; y < targetH; y += 1) {
+    const fy = (y + 0.5) * (height / targetH) - 0.5;
+    const y0 = Math.max(0, Math.min(height - 1, Math.floor(fy)));
+    const y1 = Math.min(height - 1, y0 + 1);
+    const ty = Math.max(0, Math.min(1, fy - y0));
+    for (let x = 0; x < targetW; x += 1) {
+      const fx = (x + 0.5) * (width / targetW) - 0.5;
+      const x0 = Math.max(0, Math.min(width - 1, Math.floor(fx)));
+      const x1 = Math.min(width - 1, x0 + 1);
+      const tx = Math.max(0, Math.min(1, fx - x0));
+      const top =
+        (src[y0 * width + x0] ?? 0) * (1 - tx) +
+        (src[y0 * width + x1] ?? 0) * tx;
+      const bottom =
+        (src[y1 * width + x0] ?? 0) * (1 - tx) +
+        (src[y1 * width + x1] ?? 0) * tx;
+      out[y * targetW + x] = Math.round(top * (1 - ty) + bottom * ty);
+    }
+  }
+  return out;
+};
+
+// MODNet leaves holes in flat skin and clothing. Close those holes, then
+// keep the original matte wherever it was already more opaque.
+const repairMatte = (src: Uint8Array, width: number, height: number) => {
+  const limit = 320;
+  const scale = Math.min(1, limit / Math.max(width, height));
+  const smallW = Math.max(2, Math.round(width * scale));
+  const smallH = Math.max(2, Math.round(height * scale));
+  const small = downsampleMax(src, width, height, smallW, smallH);
+  const binary = new Uint8Array(small.length);
+  for (let i = 0; i < small.length; i += 1) {
+    binary[i] = (small[i] ?? 0) >= 96 ? 255 : 0;
+  }
+  const radius = Math.max(3, Math.round(Math.min(smallW, smallH) * 0.06));
+  const closed = morphPass(
+    morphPass(binary, smallW, smallH, radius, false),
+    smallW,
+    smallH,
+    radius,
+    true,
+  );
+  const filled = fillMatteHoles(closed, smallW, smallH);
+  let covered = 0;
+  for (let i = 0; i < filled.length; i += 1) {
+    if ((filled[i] ?? 0) > 127) {
+      covered += 1;
+    }
+  }
+  if (covered > filled.length * 0.98) {
+    return src;
+  }
+  const solid = upsampleBilinear(filled, smallW, smallH, width, height);
+  const out = new Uint8Array(src.length);
+  for (let i = 0; i < out.length; i += 1) {
+    const base = src[i] ?? 0;
+    const hole = solid[i] ?? 0;
+    out[i] = base > hole ? base : hole;
+  }
+  return out;
 };
 
 const loadModnet = () => {
@@ -235,21 +608,36 @@ const loadModnet = () => {
     if (!("gpu" in navigator) || !navigator.gpu) {
       return null;
     }
-    const { env, pipeline } = await import("@huggingface/transformers");
+    const { env, AutoModel, AutoProcessor, RawImage } = await import(
+      "@huggingface/transformers"
+    );
     env.allowLocalModels = false;
     const wasm = env.backends.onnx.wasm;
     if (wasm) {
       wasm.proxy = false;
     }
-    const remover = await pipeline("background-removal", MODNET_MODEL, {
+    const model = (await AutoModel.from_pretrained(MODNET_MODEL, {
       device: "webgpu",
-    });
-    return async (image: HTMLCanvasElement) => {
-      const result = await remover(image);
-      if (Array.isArray(result)) {
-        return asModnetImage(result[0]);
+      dtype: "fp32",
+    })) as unknown as (inputs: {
+      input: unknown;
+    }) => Promise<{ output: MatteTensor }>;
+    const processor = (await AutoProcessor.from_pretrained(MODNET_MODEL)) as (
+      image: InstanceType<typeof RawImage>,
+    ) => Promise<{ pixel_values: unknown }>;
+    return async (frame: ModnetFrame) => {
+      const image = new RawImage(frame.data, frame.width, frame.height, 3);
+      const { pixel_values } = await processor(image);
+      const { output } = await model({ input: pixel_values });
+      const plane = mattePlane(output.mul(255).to("uint8"));
+      if (!plane) {
+        return null;
       }
-      return asModnetImage(result);
+      return {
+        data: repairMatte(plane.data, plane.width, plane.height),
+        width: plane.width,
+        height: plane.height,
+      };
     };
   })().catch(() => {
     modnetLoad = null;
@@ -267,6 +655,29 @@ const runModnet = <T>(job: () => Promise<T>) => {
   return run;
 };
 
+const sampleByteMask = (
+  mask: Uint8Array | Uint8ClampedArray,
+  maskW: number,
+  maskH: number,
+  channels: number,
+  fx: number,
+  fy: number,
+) => {
+  const stride = Math.max(1, channels);
+  const channel = stride > 1 ? stride - 1 : 0;
+  const x0 = Math.max(0, Math.min(maskW - 1, Math.floor(fx)));
+  const y0 = Math.max(0, Math.min(maskH - 1, Math.floor(fy)));
+  const x1 = Math.min(maskW - 1, x0 + 1);
+  const y1 = Math.min(maskH - 1, y0 + 1);
+  const tx = Math.max(0, Math.min(1, fx - x0));
+  const ty = Math.max(0, Math.min(1, fy - y0));
+  const at = (px: number, py: number) =>
+    mask[(py * maskW + px) * stride + channel] ?? 0;
+  const top = at(x0, y0) * (1 - tx) + at(x1, y0) * tx;
+  const bottom = at(x0, y1) * (1 - tx) + at(x1, y1) * tx;
+  return top * (1 - ty) + bottom * ty;
+};
+
 const applyByteMask = (
   context: CanvasRenderingContext2D,
   width: number,
@@ -278,14 +689,15 @@ const applyByteMask = (
 ) => {
   const frame = context.getImageData(0, 0, width, height);
   const pixels = frame.data;
-  const stride = Math.max(1, channels);
   for (let y = 0; y < height; y += 1) {
-    const my = Math.min(maskH - 1, Math.floor((y * maskH) / height));
-    const row = my * maskW;
     for (let x = 0; x < width; x += 1) {
-      const mx = Math.min(maskW - 1, Math.floor((x * maskW) / width));
-      const alpha = mask[(row + mx) * stride + (stride > 1 ? stride - 1 : 0)];
-      pixels[(y * width + x) * 4 + 3] = alpha ?? 0;
+      const sx = (x + 0.5) * (maskW / width) - 0.5;
+      const sy = (y + 0.5) * (maskH / height) - 0.5;
+      const alpha = sampleByteMask(mask, maskW, maskH, channels, sx, sy);
+      pixels[(y * width + x) * 4 + 3] = Math.max(
+        0,
+        Math.min(255, Math.round(alpha)),
+      );
     }
   }
   context.putImageData(frame, 0, 0);
@@ -338,8 +750,15 @@ const startModnet = async (
       return;
     }
     busy = true;
-    const edge = Math.max(width, height);
-    const scale = Math.min(1, MODNET_EDGE / edge);
+    const short = Math.min(width, height);
+    const long = Math.max(width, height);
+    let scale = MODNET_SHORT_EDGE / short;
+    if (long * scale > MODNET_LONG_EDGE) {
+      scale = MODNET_LONG_EDGE / long;
+    }
+    if (scale > 1) {
+      scale = 1;
+    }
     const sampleW = Math.max(2, Math.round(width * scale));
     const sampleH = Math.max(2, Math.round(height * scale));
     if (scratch.width !== sampleW || scratch.height !== sampleH) {
@@ -347,7 +766,16 @@ const startModnet = async (
       scratch.height = sampleH;
     }
     scratchContext.drawImage(video, 0, 0, sampleW, sampleH);
-    void runModnet(() => runtime(scratch))
+    const pixels = scratchContext.getImageData(0, 0, sampleW, sampleH).data;
+    const rgb = new Uint8ClampedArray(sampleW * sampleH * 3);
+    for (let i = 0, j = 0; i < pixels.length; i += 4, j += 3) {
+      rgb[j] = pixels[i] ?? 0;
+      rgb[j + 1] = pixels[i + 1] ?? 0;
+      rgb[j + 2] = pixels[i + 2] ?? 0;
+    }
+    void runModnet(() =>
+      runtime({ data: rgb, width: sampleW, height: sampleH }),
+    )
       .then((matte) => {
         if (!matte || cancelled()) {
           return;
@@ -355,7 +783,7 @@ const startModnet = async (
         mask = matte.data;
         maskW = matte.width;
         maskH = matte.height;
-        maskChannels = matte.channels;
+        maskChannels = 1;
       })
       .catch(() => undefined)
       .finally(() => {
@@ -383,8 +811,9 @@ const startSegmo = async (
   const width = video.videoWidth || 640;
   const height = video.videoHeight || 360;
   const processor = new SegmentationProcessor({
-    backgroundMode: "blur",
-    quality: "high",
+    backgroundMode: "color",
+    backgroundColor: "#0033CC",
+    quality: "ultra",
     adaptive: false,
     modelFps: 30,
     useWorker: true,
@@ -395,8 +824,16 @@ const startSegmo = async (
     processor.destroy();
     return () => undefined;
   }
-  const context = canvas.getContext("2d");
-  if (!context) {
+  const pipeline = (
+    processor as {
+      pipeline?: {
+        updateOptions: (options: { lightWrap: boolean }) => void;
+      } | null;
+    }
+  ).pipeline;
+  pipeline?.updateOptions({ lightWrap: false });
+  const key = createCutoutKey();
+  if (!key) {
     processor.destroy();
     return () => undefined;
   }
@@ -410,19 +847,16 @@ const startSegmo = async (
     if (!output) {
       return;
     }
-    if (canvas.width !== output.width || canvas.height !== output.height) {
-      canvas.width = output.width;
-      canvas.height = output.height;
-    }
-    context.drawImage(output, 0, 0, output.width, output.height);
+    key.apply(output, output.width, output.height);
     if (published) {
       return;
     }
     published = true;
-    setJayrrCameraCutout(elementId, canvas);
+    setJayrrCameraCutout(elementId, key.canvas);
   });
   return () => {
     stopLoop();
+    key.destroy();
     processor.destroy();
   };
 };

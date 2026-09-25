@@ -48,7 +48,7 @@
     "marked": "18.0.13",
     "react": "19.0.0",
     "react-dom": "19.0.0",
-    "segmo": "0.1.6",
+    "segmo": "file:./vendor/segmo",
     "socket.io-client": "4.7.2",
     "uqr": "0.1.2",
     "vite-plugin-html": "3.2.2"

@@ -23,7 +23,7 @@
       "@mediapipe/tasks-vision": ["./node_modules/@mediapipe/tasks-vision/vision.d.ts"],
       "@openrouter/ai-sdk-provider": ["./node_modules/@openrouter/ai-sdk-provider/dist/index.d.ts"],
       "ai": ["./node_modules/ai/dist/index.d.ts"],
-      "segmo": ["./node_modules/segmo/dist/index.d.ts"],
+      "segmo": ["./excalidraw-app/vendor/segmo/src/index.ts"],
       "@excalidraw/common": ["./packages/common/src/index.ts"],
       "@excalidraw/common/*": ["./packages/common/src/*"],
       "@excalidraw/excalidraw": ["./packages/excalidraw/index.tsx"],

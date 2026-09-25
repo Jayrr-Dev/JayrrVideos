@@ -1,0 +1,13 @@
+dist/
+.DS_Store
+*.tsbuildinfo
+*.tgz
+firebase-debug.log
+.claude/
+
+node_modules/
+node_modules/*
+
+# Telemetry server runtime files
+telemetry-server/node_modules/
+telemetry-server/data/
