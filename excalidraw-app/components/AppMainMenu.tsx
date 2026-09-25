@@ -1,6 +1,4 @@
 import { useAuthActions } from "@convex-dev/auth/react";
-import { useConvexAuth, useQuery } from "convex/react";
-import { useEffect, useState } from "react";
 import {
   eyeIcon,
   LinkIcon,
@@ -10,19 +8,20 @@ import {
   usersIcon,
 } from "@excalidraw/excalidraw/components/icons";
 import { MainMenu, useExcalidrawAPI } from "@excalidraw/excalidraw/index";
-import React from "react";
+import { useConvexAuth, useQuery } from "convex/react";
+import React, { useEffect, useState } from "react";
 
 import {
   DEFAULT_SIDEBAR,
-  LIBRARY_SIDEBAR_TAB,
   isDevEnv,
+  LIBRARY_SIDEBAR_TAB,
 } from "@excalidraw/common";
 
 import type { Theme } from "@excalidraw/element/types";
 
 import { appJotaiStore, useAtomValue } from "../app-jotai";
-import { collabAPIAtom } from "../collab/Collab";
 import { LanguageList } from "../app-language/LanguageList";
+import { collabAPIAtom } from "../collab/Collab";
 import { api, isConvexLinked } from "../convexClient";
 import {
   connectGoogleDrive,
@@ -32,9 +31,9 @@ import {
 } from "../data/connectGoogleDrive";
 import { openBlankCanvas, saveCanvasAsScene } from "../data/jayrrScenes";
 import { JayrrFeatureFlags } from "../domain/flags/JayrrFeatureFlags";
+import { setAccountCollabIdentity } from "../domain/profile/accountCollabIdentity";
 import { JAYRR_PRESENT_TAB } from "../present/buildPresentDeck";
 import { docsViewAtom, persistDocsView } from "../present/docsView";
-import { setAccountCollabIdentity } from "../domain/profile/accountCollabIdentity";
 
 import { saveDebugState } from "./DebugCanvas";
 import { JayrrProfileDialog, JayrrSoundLibraryDialog } from "./ui";

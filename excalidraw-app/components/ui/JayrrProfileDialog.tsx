@@ -5,13 +5,13 @@ import { helpIcon } from "@excalidraw/excalidraw/components/icons";
 
 import { api } from "../../convexClient";
 
-import type { Id } from "../../../convex/_generated/dataModel";
-
 import { Button } from "./Button";
 import { Dialog, Tooltip } from "./editor";
 import { Field, Input } from "./Field";
 
 import "./JayrrProfileDialog.scss";
+
+import type { Id } from "../../../convex/_generated/dataModel";
 
 const PROFILE_INFO =
   "Your name and photo are what other people see in live collaboration.";
