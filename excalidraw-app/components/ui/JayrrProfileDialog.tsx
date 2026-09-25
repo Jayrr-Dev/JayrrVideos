@@ -16,7 +16,7 @@ import type { Id } from "../../../convex/_generated/dataModel";
 const PROFILE_INFO =
   "Your name and photo are what other people see in live collaboration.";
 
-const fitPhoto = (file: File, view: Window) =>
+const fitPhoto = (file: File, view: Window & typeof globalThis) =>
   new Promise<Blob>((resolve, reject) => {
     const image = new view.Image();
     const url = view.URL.createObjectURL(file);
@@ -114,7 +114,7 @@ export const JayrrProfileDialog = ({ onClose }: { onClose: () => void }) => {
     }
     setPhotoBusy(true);
     setPhotoError(null);
-    void fitPhoto(file, view)
+    void fitPhoto(file, view as Window & typeof globalThis)
       .then(async (blob) => {
         const uploadUrl = await generatePhotoUploadUrl();
         const response = await view.fetch(uploadUrl, {
