@@ -1,5 +1,6 @@
 {
   "extends": ["@excalidraw/eslint-config", "react-app"],
+  "ignorePatterns": ["excalidraw-app/vendor/**", "vendor/**"],
   "rules": {
     "import/order": [
       "warn",

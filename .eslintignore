@@ -9,3 +9,7 @@ packages/excalidraw/types
 examples/**/public
 dev-dist
 coverage
+excalidraw-app/vendor
+excalidraw-app/vendor/**
+vendor
+vendor/**

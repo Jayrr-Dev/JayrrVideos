@@ -1,4 +1,5 @@
 import type { CameraCutout } from "../domain/flags/cameraCutoutFlag";
+import { createCutoutKey } from "./jayrrCutoutCompositor";
 
 const cutouts = new Map<string, HTMLCanvasElement>();
 
@@ -67,173 +68,6 @@ const applyPersonMask = (
     }
   }
   context.putImageData(frame, 0, 0);
-};
-
-const CUTOUT_VERT = `#version 300 es
-in vec2 a_pos;
-out vec2 v_uv;
-void main() {
-  v_uv = vec2(a_pos.x * 0.5 + 0.5, 1.0 - (a_pos.y * 0.5 + 0.5));
-  gl_Position = vec4(a_pos, 0.0, 1.0);
-}`;
-
-const CUTOUT_FRAG = `#version 300 es
-precision highp float;
-uniform sampler2D u_image;
-uniform sampler2D u_prev;
-uniform float u_hasPrev;
-in vec2 v_uv;
-out vec4 outColor;
-
-void main() {
-  vec4 c = texture(u_image, v_uv);
-  float blueLead = c.b - max(c.r, c.g);
-  float greenLead = c.g - max(c.r, c.b);
-  float blueSpill = smoothstep(0.10, 0.30, blueLead);
-  float greenSpill = smoothstep(0.10, 0.30, greenLead);
-  float spill = max(blueSpill, greenSpill);
-  float alpha = 1.0 - spill;
-  if (u_hasPrev > 0.5) {
-    float prevA = texture(u_prev, vec2(v_uv.x, 1.0 - v_uv.y)).a;
-    float edge = 1.0 - abs(alpha * 2.0 - 1.0);
-    alpha = mix(prevA, alpha, mix(0.72, 0.35, edge));
-  }
-  float keptB = mix(c.b, min(c.b, max(c.r, c.g)), blueSpill);
-  float keptG = mix(c.g, min(c.g, max(c.r, c.b)), greenSpill);
-  outColor = vec4(c.r * alpha, keptG * alpha, keptB * alpha, alpha);
-}`;
-
-type CutoutKey = {
-  canvas: HTMLCanvasElement;
-  apply: (source: TexImageSource, width: number, height: number) => void;
-  destroy: () => void;
-};
-
-const createCutoutKey = (): CutoutKey | null => {
-  const canvas = document.createElement("canvas");
-  const gl = canvas.getContext("webgl2", {
-    alpha: true,
-    antialias: false,
-    depth: false,
-    stencil: false,
-    premultipliedAlpha: true,
-    preserveDrawingBuffer: true,
-  });
-  if (!gl) {
-    return null;
-  }
-  const compile = (type: number, source: string) => {
-    const shader = gl.createShader(type);
-    if (!shader) {
-      return null;
-    }
-    gl.shaderSource(shader, source);
-    gl.compileShader(shader);
-    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-      gl.deleteShader(shader);
-      return null;
-    }
-    return shader;
-  };
-  const vert = compile(gl.VERTEX_SHADER, CUTOUT_VERT);
-  const frag = compile(gl.FRAGMENT_SHADER, CUTOUT_FRAG);
-  if (!vert || !frag) {
-    return null;
-  }
-  const program = gl.createProgram();
-  if (!program) {
-    return null;
-  }
-  gl.attachShader(program, vert);
-  gl.attachShader(program, frag);
-  gl.linkProgram(program);
-  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-    return null;
-  }
-  const buffer = gl.createBuffer();
-  const texture = gl.createTexture();
-  const prev = gl.createTexture();
-  if (!buffer || !texture || !prev) {
-    return null;
-  }
-  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-  gl.bufferData(
-    gl.ARRAY_BUFFER,
-    new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
-    gl.STATIC_DRAW,
-  );
-  const loc = gl.getAttribLocation(program, "a_pos");
-  gl.enableVertexAttribArray(loc);
-  gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
-  gl.useProgram(program);
-  gl.uniform1i(gl.getUniformLocation(program, "u_image"), 0);
-  gl.uniform1i(gl.getUniformLocation(program, "u_prev"), 1);
-  const hasPrevLoc = gl.getUniformLocation(program, "u_hasPrev");
-  let hasPrev = false;
-  const setupTex = (target: WebGLTexture) => {
-    gl.bindTexture(gl.TEXTURE_2D, target);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-  };
-  setupTex(prev);
-  gl.texImage2D(
-    gl.TEXTURE_2D,
-    0,
-    gl.RGBA,
-    1,
-    1,
-    0,
-    gl.RGBA,
-    gl.UNSIGNED_BYTE,
-    new Uint8Array([0, 0, 0, 0]),
-  );
-  setupTex(texture);
-  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
-  gl.disable(gl.DEPTH_TEST);
-  gl.disable(gl.BLEND);
-
-  return {
-    canvas,
-    apply: (source, width, height) => {
-      if (canvas.width !== width || canvas.height !== height) {
-        canvas.width = width;
-        canvas.height = height;
-        hasPrev = false;
-      }
-      gl.viewport(0, 0, width, height);
-      gl.useProgram(program);
-      gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-      gl.enableVertexAttribArray(loc);
-      gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
-      gl.uniform1f(hasPrevLoc, hasPrev ? 1 : 0);
-      gl.activeTexture(gl.TEXTURE1);
-      gl.bindTexture(gl.TEXTURE_2D, prev);
-      gl.activeTexture(gl.TEXTURE0);
-      gl.bindTexture(gl.TEXTURE_2D, texture);
-      gl.texImage2D(
-        gl.TEXTURE_2D,
-        0,
-        gl.RGBA,
-        gl.RGBA,
-        gl.UNSIGNED_BYTE,
-        source,
-      );
-      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-      gl.bindTexture(gl.TEXTURE_2D, prev);
-      gl.copyTexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 0, 0, width, height, 0);
-      hasPrev = true;
-    },
-    destroy: () => {
-      gl.deleteTexture(prev);
-      gl.deleteTexture(texture);
-      gl.deleteBuffer(buffer);
-      gl.deleteProgram(program);
-      gl.deleteShader(vert);
-      gl.deleteShader(frag);
-    },
-  };
 };
 
 const loopVideo = (
@@ -800,7 +634,9 @@ const startSegmo = async (
   canvas: HTMLCanvasElement,
   cancelled: () => boolean,
 ): Promise<StopCutout> => {
-  const { SegmentationProcessor } = await import("segmo");
+  // Import the maintained fork directly; file: packages in node_modules are
+  // copies and can otherwise silently run older shaders after a source edit.
+  const { SegmentationProcessor } = await import("../vendor/segmo/src");
   if (cancelled()) {
     return () => undefined;
   }
@@ -811,8 +647,7 @@ const startSegmo = async (
   const width = video.videoWidth || 640;
   const height = video.videoHeight || 360;
   const processor = new SegmentationProcessor({
-    backgroundMode: "color",
-    backgroundColor: "#0033CC",
+    backgroundMode: "transparent",
     quality: "ultra",
     adaptive: false,
     modelFps: 30,
@@ -824,15 +659,19 @@ const startSegmo = async (
     processor.destroy();
     return () => undefined;
   }
-  const pipeline = (
-    processor as {
-      pipeline?: {
-        updateOptions: (options: { lightWrap: boolean }) => void;
-      } | null;
-    }
-  ).pipeline;
-  pipeline?.updateOptions({ lightWrap: false });
-  const key = createCutoutKey();
+  processor.updatePostProcessing({
+    lightWrap: false,
+    // Low-resolution closing joins the spaces between fingers. It also only
+    // runs on fresh masks, making edges alternate on interpolated frames.
+    morphology: false,
+    // Retain antialiasing without spreading coverage across narrow fingers.
+    featherRadius: 0.75,
+    erosionRadius: 0,
+    rangeSigma: 0.08,
+    appearRate: 0.6,
+    disappearRate: 0.45,
+  });
+  const key = createCutoutKey(video.ownerDocument);
   if (!key) {
     processor.destroy();
     return () => undefined;
@@ -843,11 +682,12 @@ const startSegmo = async (
     if (video.videoWidth < 2 || video.videoHeight < 2) {
       return;
     }
-    const output = processor.processFrame(video, performance.now());
+    const timestamp = video.ownerDocument.defaultView!.performance.now();
+    const output = processor.processFrame(video, timestamp);
     if (!output) {
       return;
     }
-    key.apply(output, output.width, output.height);
+    key.apply(output, output.width, output.height, timestamp);
     if (published) {
       return;
     }
