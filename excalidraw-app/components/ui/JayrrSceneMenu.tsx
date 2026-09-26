@@ -27,8 +27,8 @@ import {
 } from "../../data/jayrrScenes";
 
 import { JayrrConfirmDialog } from "./JayrrConfirmDialog";
-import { LibrariesPane } from "./librariesChrome";
 import "./JayrrLibraryMenu.scss";
+import { LibrariesPane } from "./librariesChrome";
 
 import type { DragEvent, ReactNode, RefObject } from "react";
 
@@ -157,11 +157,12 @@ const JayrrSceneMenuConnected = () => {
   const renameInputRef = useRef<HTMLInputElement>(null);
   const timerRef = useRef<number | null>(null);
   const saveQueueRef = useRef(Promise.resolve());
-  const skipAutosaveRef = useRef(false);
+  const skipAutosaveRef = useRef(true);
   const sceneBoundRef = useRef(false);
   const lastSavedIdRef = useRef<Id<"scenes"> | null>(null);
   const lastSavedJsonRef = useRef<string | null>(null);
   const lastErrorRef = useRef<string | null>(null);
+  const didHydrateActiveSceneRef = useRef(false);
 
   const { isAuthenticated } = useConvexAuth();
   const folders = useQuery(
@@ -218,6 +219,8 @@ const JayrrSceneMenuConnected = () => {
     sceneBoundRef.current = true;
     lastErrorRef.current = null;
   };
+  const rememberSavedRef = useRef(rememberSaved);
+  rememberSavedRef.current = rememberSaved;
 
   const persistSceneNow = async (sceneId: Id<"scenes">) => {
     const canvas = excalidrawAPIRef.current;
@@ -330,8 +333,70 @@ const JayrrSceneMenuConnected = () => {
       if (timerRef.current !== null) {
         window.clearTimeout(timerRef.current);
       }
+      const sceneId = appJotaiStore.get(activeSceneIdAtom);
+      if (sceneId && !skipAutosaveRef.current) {
+        void enqueuePersistRef.current(sceneId).catch(() => undefined);
+      }
     };
   }, []);
+
+  useEffect(() => {
+    if (!excalidrawAPI || !isAuthenticated) {
+      return;
+    }
+    if (didHydrateActiveSceneRef.current) {
+      return;
+    }
+    if (!activeSceneId || !convexClient) {
+      didHydrateActiveSceneRef.current = true;
+      skipAutosaveRef.current = false;
+      return;
+    }
+
+    didHydrateActiveSceneRef.current = true;
+    skipAutosaveRef.current = true;
+    let cancelled = false;
+
+    const hydrate = async () => {
+      try {
+        const scene = await convexClient.query(api.scenes.get, {
+          sceneId: activeSceneId,
+        });
+        if (cancelled) {
+          return;
+        }
+        if (!scene) {
+          setActiveSceneId(null);
+          return;
+        }
+        applySceneJsonToCanvas(excalidrawAPI, scene.sceneJson);
+        rememberSavedRef.current(
+          scene._id,
+          serializeCurrentCanvas(excalidrawAPI),
+        );
+      } catch (error) {
+        if (!cancelled) {
+          excalidrawAPI.setToast({
+            message:
+              error instanceof Error ? error.message : "Could not load scene",
+            closable: true,
+          });
+        }
+      } finally {
+        if (!cancelled) {
+          skipAutosaveRef.current = false;
+        }
+      }
+    };
+
+    void hydrate();
+    return () => {
+      cancelled = true;
+      if (!sceneBoundRef.current) {
+        didHydrateActiveSceneRef.current = false;
+      }
+    };
+  }, [activeSceneId, excalidrawAPI, isAuthenticated]);
 
   const clearPendingAutosave = () => {
     if (timerRef.current !== null) {
@@ -460,7 +525,7 @@ const JayrrSceneMenuConnected = () => {
     if (!excalidrawAPI || busy) {
       return;
     }
-    if (sceneId === activeSceneId) {
+    if (sceneId === activeSceneId && sceneBoundRef.current) {
       return;
     }
     if (!convexClient) {
@@ -471,9 +536,12 @@ const JayrrSceneMenuConnected = () => {
     skipAutosaveRef.current = true;
     try {
       let savedCurrent = false;
-      if (activeSceneId) {
+      if (activeSceneId && sceneId !== activeSceneId) {
         await enqueuePersist(activeSceneId);
-      } else if (excalidrawAPI.getSceneElements().length > 0) {
+      } else if (
+        !activeSceneId &&
+        excalidrawAPI.getSceneElements().length > 0
+      ) {
         const sceneJson = serializeCurrentCanvas(excalidrawAPI);
         await createScene({
           name: nextSceneName(scenes?.map((scene) => scene.name) ?? []),
