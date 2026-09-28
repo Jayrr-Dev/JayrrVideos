@@ -115,7 +115,26 @@
     background: var(--color-gray-40, #adb5bd);
   }
 
-  .jayrr-scene-status__collab.is-on .jayrr-scene-status__dot {
+  .jayrr-scene-card__live {
+    position: absolute;
+    left: 0.45rem;
+    bottom: 0.45rem;
+    z-index: 1;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.1rem 0.45rem;
+    border-radius: 999px;
+    background: var(--island-bg-color);
+    border: 1px solid rgba(47, 158, 68, 0.45);
+    color: var(--color-success-text, #2b8a3e);
+    font-size: 0.7rem;
+    font-weight: 600;
+    pointer-events: none;
+  }
+
+  .jayrr-scene-status__collab.is-on .jayrr-scene-status__dot,
+  .jayrr-scene-card__live .jayrr-scene-status__dot {
     background: #2f9e44;
     box-shadow: 0 0 0 3px rgba(47, 158, 68, 0.2);
   }

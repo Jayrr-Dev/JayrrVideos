@@ -1014,103 +1014,96 @@ const StreamFields = ({
       )}
     </StreamChoice>
   );
-  const phoneChoice = (
-    <StreamChoice
-      title="Phone"
-      icon={phoneIcon}
-      active={phoneOn}
-      compact={compact}
-      disabled={false}
-    >
-      {(close) => (
-        <>
-          {phoneError ? (
-            <span className="jayrr-camera-picker__error">{phoneError}</span>
-          ) : null}
-          {!collaborating ? (
-            <span className="jayrr-camera-picker__error">
-              Start live collaboration first
-            </span>
-          ) : null}
-          {phoneOn && people.length < 2 ? (
-            <span className="jayrr-camera-picker__note">
-              Waiting for the other side.
-            </span>
-          ) : null}
-          <MenuItem
-            selected={!phoneOn}
-            onSelect={() => {
-              if (phoneOn) {
-                onPhoneChange("");
-              }
-              close();
-            }}
-          >
-            Off
-          </MenuItem>
-          {collaborating
-            ? people.map((person) => (
-                <MenuItem
-                  key={person.userId}
-                  selected={phoneSource === person.userId}
-                  onSelect={() => {
-                    onPhoneChange(person.userId);
-                    close();
-                  }}
-                >
-                  {person.label}
-                </MenuItem>
-              ))
-            : null}
-        </>
-      )}
-    </StreamChoice>
-  );
-  const screenChoice = (
-    <StreamChoice
-      title="Screen"
-      icon={screenIcon}
-      active={screenOn}
-      compact={compact}
-      disabled={false}
-    >
-      {(close) => (
-        <>
-          {screenError ? (
-            <span className="jayrr-camera-picker__error">{screenError}</span>
-          ) : null}
-          {!collaborating ? (
-            <span className="jayrr-camera-picker__error">
-              Start live collaboration first
-            </span>
-          ) : null}
-          <MenuItem
-            selected={!screenOn}
-            onSelect={() => {
-              if (screenOn) {
-                onStopScreen();
-              }
-              close();
-            }}
-          >
-            Off
-          </MenuItem>
-          {collaborating ? (
+  // Phone and screen need a live room; hide them otherwise (unless still on).
+  const phoneChoice =
+    !collaborating && !phoneOn ? null : (
+      <StreamChoice
+        title="Phone"
+        icon={phoneIcon}
+        active={phoneOn}
+        compact={compact}
+        disabled={false}
+      >
+        {(close) => (
+          <>
+            {phoneError ? (
+              <span className="jayrr-camera-picker__error">{phoneError}</span>
+            ) : null}
+            {phoneOn && people.length < 2 ? (
+              <span className="jayrr-camera-picker__note">
+                Waiting for the other side.
+              </span>
+            ) : null}
             <MenuItem
-              selected={screenOn}
+              selected={!phoneOn}
               onSelect={() => {
-                if (onShareScreen()) {
-                  close();
+                if (phoneOn) {
+                  onPhoneChange("");
                 }
+                close();
               }}
             >
-              {screenOn ? "Change screen" : "Share screen"}
+              Off
             </MenuItem>
-          ) : null}
-        </>
-      )}
-    </StreamChoice>
-  );
+            {collaborating
+              ? people.map((person) => (
+                  <MenuItem
+                    key={person.userId}
+                    selected={phoneSource === person.userId}
+                    onSelect={() => {
+                      onPhoneChange(person.userId);
+                      close();
+                    }}
+                  >
+                    {person.label}
+                  </MenuItem>
+                ))
+              : null}
+          </>
+        )}
+      </StreamChoice>
+    );
+  const screenChoice =
+    !collaborating && !screenOn ? null : (
+      <StreamChoice
+        title="Screen"
+        icon={screenIcon}
+        active={screenOn}
+        compact={compact}
+        disabled={false}
+      >
+        {(close) => (
+          <>
+            {screenError ? (
+              <span className="jayrr-camera-picker__error">{screenError}</span>
+            ) : null}
+            <MenuItem
+              selected={!screenOn}
+              onSelect={() => {
+                if (screenOn) {
+                  onStopScreen();
+                }
+                close();
+              }}
+            >
+              Off
+            </MenuItem>
+            {collaborating ? (
+              <MenuItem
+                selected={screenOn}
+                onSelect={() => {
+                  if (onShareScreen()) {
+                    close();
+                  }
+                }}
+              >
+                {screenOn ? "Change screen" : "Share screen"}
+              </MenuItem>
+            ) : null}
+          </>
+        )}
+      </StreamChoice>
+    );
   const pictureOn = cameraOn || phoneOn || screenOn || desktopOn;
   const sizeChoice = desktopOn ? (
     <StreamChoice
@@ -1404,8 +1397,12 @@ const StreamFields = ({
     <>
       <div className="compact-action-item">{cameraChoice}</div>
       <div className="compact-action-item">{desktopChoice}</div>
-      <div className="compact-action-item">{phoneChoice}</div>
-      <div className="compact-action-item">{screenChoice}</div>
+      {phoneChoice ? (
+        <div className="compact-action-item">{phoneChoice}</div>
+      ) : null}
+      {screenChoice ? (
+        <div className="compact-action-item">{screenChoice}</div>
+      ) : null}
       {sizeChoice ? (
         <div className="compact-action-item">{sizeChoice}</div>
       ) : null}

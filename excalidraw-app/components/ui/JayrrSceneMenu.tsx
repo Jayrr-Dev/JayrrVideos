@@ -832,7 +832,6 @@ const JayrrSceneMenuConnected = () => {
         }
       >
         <div className="jayrr-library__body">
-          {sceneStatus}
           {scenes.length === 0 ? (
             <div className="library-menu-items__no-items">
               <div className="library-menu-items__no-items__label">
@@ -846,6 +845,7 @@ const JayrrSceneMenuConnected = () => {
             <SceneGrid
               scenes={scenes}
               activeSceneId={activeSceneId}
+              collaborating={isCollaborating}
               busy={busy}
               folders={folders}
               renameInputRef={renameInputRef}
@@ -926,6 +926,7 @@ const JayrrSceneMenuConnected = () => {
                 key={scene._id}
                 scene={scene}
                 active={scene._id === activeSceneId}
+                live={isCollaborating && scene._id === activeSceneId}
                 busy={busy}
                 folders={folders}
                 renameInputRef={renameInputRef}
@@ -1097,6 +1098,7 @@ type FolderRow = {
 const SceneGrid = ({
   scenes,
   activeSceneId,
+  collaborating,
   busy,
   folders,
   renameInputRef,
@@ -1114,6 +1116,7 @@ const SceneGrid = ({
 }: {
   scenes: SceneRow[];
   activeSceneId: Id<"scenes"> | null;
+  collaborating: boolean;
   busy: boolean;
   folders: FolderRow[];
   renameInputRef: RefObject<HTMLInputElement | null>;
@@ -1138,6 +1141,7 @@ const SceneGrid = ({
         key={scene._id}
         scene={scene}
         active={scene._id === activeSceneId}
+        live={collaborating && scene._id === activeSceneId}
         busy={busy}
         folders={folders}
         renameInputRef={renameInputRef}
@@ -1161,6 +1165,7 @@ const SceneGrid = ({
 const SceneCard = ({
   scene,
   active,
+  live,
   busy,
   folders,
   renameInputRef,
@@ -1179,6 +1184,7 @@ const SceneCard = ({
 }: {
   scene: SceneRow;
   active: boolean;
+  live: boolean;
   busy: boolean;
   folders: FolderRow[];
   renameInputRef: RefObject<HTMLInputElement | null>;
@@ -1238,6 +1244,15 @@ const SceneCard = ({
         onLoad={onLoad}
         onDragScene={onDragScene}
       />
+      {live ? (
+        <span
+          className="jayrr-scene-card__live"
+          title="Live collaboration is on"
+        >
+          <span className="jayrr-scene-status__dot" aria-hidden="true" />
+          Live
+        </span>
+      ) : null}
       <DropdownMenu open={menuOpen}>
         <DropdownMenu.Trigger
           className="jayrr-scene-card__menu"
