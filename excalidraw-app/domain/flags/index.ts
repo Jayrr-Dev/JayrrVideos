@@ -1,9 +1,15 @@
 export {
+  CAMERA_CUTOUT_ENGINES,
   CAMERA_CUTOUT_FLAG,
   CAMERA_CUTOUT_OPTIONS,
   cameraCutoutAtom,
+  cameraCutoutEngineAtom,
+  cameraCutoutOnAtom,
   isCameraCutout,
+  isCameraCutoutEngine,
+  parseCameraCutoutEngine,
   type CameraCutout,
+  type CameraCutoutEngine,
 } from "./cameraCutoutFlag";
 export { JayrrFeatureFlags } from "./JayrrFeatureFlags";
 export {

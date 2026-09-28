@@ -4,11 +4,11 @@ import {
   useStylesPanelMode,
 } from "@excalidraw/excalidraw";
 import { useExcalidrawContainer } from "@excalidraw/excalidraw/components/App";
+import { Range } from "@excalidraw/excalidraw/components/Range";
 import { getDropdownMenuItemClassName } from "@excalidraw/excalidraw/components/dropdownMenu/common";
 import { getSelectedElements } from "@excalidraw/excalidraw/scene";
-import { useConvexAuth, useMutation } from "convex/react";
 import { Popover } from "radix-ui";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import type {
   ExcalidrawElement,
@@ -27,23 +27,45 @@ import {
   subscribeJayrrPhone,
 } from "../collab/jayrrCollabVideoSession";
 import { IconButton, Island, RadioButton } from "../components/ui";
-import { api, isConvexLinked } from "../convexClient";
 import {
-  CAMERA_CUTOUT_FLAG,
-  CAMERA_CUTOUT_OPTIONS,
-  cameraCutoutAtom,
-  isCameraCutout,
-  type CameraCutout,
+  cameraCutoutOnAtom,
+  setSavedCutoutOn,
 } from "../domain/flags/cameraCutoutFlag";
 
 import {
+  cameraAccessoryAtom,
+  setSavedAccessory,
+  cameraFunOffsetAtom,
+  DEFAULT_FUN_OFFSET,
+  FUN_SCALE_MAX,
+  FUN_SCALE_MIN,
+  funScale,
+  cameraFunOnAtom,
+  cameraLaserOnAtom,
+  cameraEyeLasersOnAtom,
+  setSavedFunOffset,
+  setSavedFunOn,
+  type CameraFunOffset,
+} from "./jayrrCameraFun";
+import {
+  CAMERA_ACCESSORIES,
+  drawAccessoryPreview,
+  type CameraAccessory,
+} from "./jayrrCameraAccessories";
+
+import {
+  DEFAULT_CAMERA_LOOK,
+  JAYRR_CAMERA_LOOK_MAX,
+  JAYRR_CAMERA_LOOK_MIN,
   JAYRR_DISPLAY_QUALITIES,
   JAYRR_DISPLAY_RATES,
   JAYRR_DISPLAY_SOURCE,
   JAYRR_DISPLAY_SURFACES,
   JAYRR_OBJECT_FITS,
   JAYRR_PHONE_SELF,
+  cameraLookFields,
   canLinkJayrrCamera,
+  isDefaultCameraLook,
   isFullDisplayCrop,
   isJayrrDisplay,
   isJayrrPhone,
@@ -51,20 +73,26 @@ import {
   jayrrCameraLabel,
   jayrrDisplayQualityLabel,
   jayrrDisplaySurfaceLabel,
+  jayrrLocalOwnerName,
   jayrrObjectFitLabel,
   jayrrPhoneSource,
   jayrrScreenSource,
+  parseCameraLook,
   parseDisplayCrop,
   parseObjectFit,
+  readCameraLook,
   readDisplayCrop,
   readDisplayFit,
   readDisplayQuality,
   readDisplayRate,
   readJayrrCamera,
+  readJayrrOwnerName,
   readPhoneSource,
   readScreenSource,
+  setSavedCameraLook,
   writeJayrrCamera,
   type JayrrCamera,
+  type JayrrCameraLook,
   type JayrrDisplayCrop,
   type JayrrDisplayQuality,
   type JayrrDisplayRate,
@@ -221,6 +249,172 @@ const cropIcon = (
       strokeLinecap="round"
       strokeLinejoin="round"
     />
+  </svg>
+);
+
+const adjustIcon = (
+  <svg
+    aria-hidden="true"
+    focusable="false"
+    width="20"
+    height="20"
+    viewBox="0 0 20 20"
+  >
+    <path
+      d="M3.4 6.2h13.2M3.4 10h13.2M3.4 13.8h13.2"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+    />
+    <circle cx="7.2" cy="6.2" r="1.45" fill="currentColor" />
+    <circle cx="12.8" cy="10" r="1.45" fill="currentColor" />
+    <circle cx="8.4" cy="13.8" r="1.45" fill="currentColor" />
+  </svg>
+);
+
+const cutoutIcon = (
+  <svg
+    aria-hidden="true"
+    focusable="false"
+    width="20"
+    height="20"
+    viewBox="0 0 20 20"
+  >
+    <rect
+      x="3.2"
+      y="3.2"
+      width="13.6"
+      height="13.6"
+      rx="1.5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+    />
+    <circle
+      cx="10"
+      cy="8.1"
+      r="2.1"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+    />
+    <path
+      d="M6.2 15.2c.5-2.2 1.9-3.4 3.8-3.4s3.3 1.2 3.8 3.4"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+    />
+  </svg>
+);
+
+const funIcon = (
+  <svg
+    aria-hidden="true"
+    focusable="false"
+    width="20"
+    height="20"
+    viewBox="0 0 20 20"
+  >
+    <circle
+      cx="6.4"
+      cy="9.2"
+      r="2.55"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+    />
+    <circle
+      cx="13.6"
+      cy="9.2"
+      r="2.55"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+    />
+    <path
+      d="M8.9 8.7c.4-.7 1.8-.7 2.2 0M4 9.1 2.7 8.6M16 9.1l1.3-.5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+    />
+  </svg>
+);
+
+const AccessoryPreview = ({
+  accessory,
+}: {
+  accessory: Exclude<CameraAccessory, "glasses">;
+}) => {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    if (ref.current) {
+      drawAccessoryPreview(ref.current, accessory);
+    }
+  }, [accessory]);
+  return (
+    <canvas
+      ref={ref}
+      width={96}
+      height={64}
+      className="jayrr-camera-picker__accessory-preview"
+      aria-hidden="true"
+    />
+  );
+};
+
+const glassesPreview = (
+  <svg
+    className="jayrr-camera-picker__glasses-preview"
+    aria-hidden="true"
+    focusable="false"
+    width="48"
+    height="32"
+    viewBox="0 0 42 16"
+    preserveAspectRatio="xMidYMid meet"
+  >
+    <g
+      stroke="#141a1c"
+      strokeWidth="0.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path
+        d="M6.2 7.5H4.5L1.8 4.6Q.8 3.6.6 5.5M35.8 7.5h1.7l2.7-2.9q1-1 1.2.9"
+        strokeWidth="1.2"
+        fill="none"
+      />
+      <path d="M18.5 7.2q2.5-2.2 5 0" fill="none" />
+      <circle cx="12.2" cy="8" r="6.4" fill="#252d30" />
+      <circle cx="29.8" cy="8" r="6.4" fill="#252d30" />
+      <path
+        d="M7 6a5.6 5.6 0 0 1 10.1-.8M24.6 6a5.6 5.6 0 0 1 10.1-.8"
+        stroke="#59615f"
+        strokeWidth="0.4"
+        fill="none"
+      />
+    </g>
+  </svg>
+);
+
+const accessoryOffsetIcon = (
+  <svg
+    aria-hidden="true"
+    focusable="false"
+    width="20"
+    height="20"
+    viewBox="0 0 20 20"
+  >
+    <path
+      d="M10 2.5v15M2.5 10h15M6.2 6.2l7.6 7.6M13.8 6.2l-7.6 7.6"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.35"
+      strokeLinecap="round"
+    />
+    <circle cx="10" cy="10" r="2" fill="currentColor" />
   </svg>
 );
 
@@ -400,6 +594,21 @@ const cameraFromValue = (
   if (typeof value === "object" && value && "off" in value) {
     return null;
   }
+  const ownerNameFor = (userId: string, fallback?: string) => {
+    if (userId === getJayrrPhoneClientId()) {
+      return jayrrLocalOwnerName();
+    }
+    const fromFallback = readJayrrOwnerName(
+      fallback === "Screen" ? undefined : fallback,
+    );
+    if (fromFallback) {
+      return fromFallback;
+    }
+    const person = listJayrrPhonePeople().find(
+      (item) => item.userId === userId,
+    );
+    return readJayrrOwnerName(person?.label);
+  };
   if (typeof value === "object" && value && "kind" in value) {
     const bag = value as JayrrCamera;
     if (bag.kind === "display") {
@@ -439,7 +648,13 @@ const cameraFromValue = (
     if (bag.kind === "screen" && typeof bag.userId === "string" && bag.userId) {
       const userId =
         bag.userId === JAYRR_PHONE_SELF ? getJayrrPhoneClientId() : bag.userId;
-      return { kind: "screen", userId, label: "Screen", ...picture };
+      return {
+        kind: "screen",
+        userId,
+        label: "Screen",
+        ownerName: ownerNameFor(userId, bag.label),
+        ...picture,
+      };
     }
     if (bag.kind === "phone" && typeof bag.userId === "string" && bag.userId) {
       const userId =
@@ -448,16 +663,20 @@ const cameraFromValue = (
         kind: "phone",
         userId,
         label: userId === getJayrrPhoneClientId() ? "On" : bag.label,
+        ownerName: ownerNameFor(userId, bag.label),
         ...picture,
       };
     }
     if ("deviceId" in bag && typeof bag.deviceId === "string" && bag.deviceId) {
+      const ownerId = getJayrrPhoneClientId();
       return {
         kind: "camera",
         deviceId: bag.deviceId,
         label: bag.label,
-        ownerId: getJayrrPhoneClientId(),
+        ownerId,
+        ownerName: ownerNameFor(ownerId),
         ...picture,
+        ...cameraLookFields(parseCameraLook(bag) ?? DEFAULT_CAMERA_LOOK),
       };
     }
   }
@@ -473,7 +692,12 @@ const cameraFromValue = (
       screenUserId === JAYRR_PHONE_SELF
         ? getJayrrPhoneClientId()
         : screenUserId;
-    return { kind: "screen", userId, label: "Screen" };
+    return {
+      kind: "screen",
+      userId,
+      label: "Screen",
+      ownerName: ownerNameFor(userId),
+    };
   }
   const phoneUserId = readPhoneSource(value);
   if (phoneUserId) {
@@ -483,14 +707,17 @@ const cameraFromValue = (
       kind: "phone",
       userId,
       label: userId === getJayrrPhoneClientId() ? "On" : undefined,
+      ownerName: ownerNameFor(userId),
     };
   }
   const device = devices.find((item) => item.deviceId === value);
+  const ownerId = getJayrrPhoneClientId();
   return {
     kind: "camera",
     deviceId: value,
     label: device?.label || undefined,
-    ownerId: getJayrrPhoneClientId(),
+    ownerId,
+    ownerName: ownerNameFor(ownerId),
   };
 };
 
@@ -531,59 +758,50 @@ const withBoundName = (
   });
 };
 
-const CutoutSetting = ({
-  value,
-  onChange,
+const LookFields = ({
+  look,
+  onLook,
 }: {
-  value: CameraCutout;
-  onChange: (next: CameraCutout) => void;
+  look: JayrrCameraLook;
+  onLook: (next: JayrrCameraLook) => void;
 }) => (
-  <label className="control-label jayrr-camera-picker__cutout">
-    Cutout
-    <select
-      className="dropdown-select"
-      value={value}
-      aria-label="Cutout"
-      onChange={(event) => {
-        const next = event.target.value;
-        if (isCameraCutout(next)) {
-          onChange(next);
-        }
-      }}
-    >
-      {CAMERA_CUTOUT_OPTIONS.map((option) => (
-        <option key={option.id} value={option.id}>
-          {option.label}
-        </option>
-      ))}
-    </select>
-  </label>
-);
-
-const LinkedCutoutSetting = () => {
-  const { isAuthenticated } = useConvexAuth();
-  const cutout = useAtomValue(cameraCutoutAtom);
-  const setCutout = useSetAtom(cameraCutoutAtom);
-  const setFlag = useMutation(api.featureFlags.set);
-
-  return (
-    <CutoutSetting
-      value={cutout}
-      onChange={(next) => {
-        setCutout(next);
-        if (isAuthenticated) {
-          void setFlag({ key: CAMERA_CUTOUT_FLAG, value: next });
-        }
-      }}
+  <div className="jayrr-camera-picker__look">
+    <Range
+      label="Brightness"
+      value={look.brightness}
+      min={JAYRR_CAMERA_LOOK_MIN}
+      max={JAYRR_CAMERA_LOOK_MAX}
+      step={1}
+      onChange={(brightness) => onLook({ ...look, brightness })}
     />
-  );
-};
-
-const LocalCutoutSetting = () => {
-  const cutout = useAtomValue(cameraCutoutAtom);
-  const setCutout = useSetAtom(cameraCutoutAtom);
-  return <CutoutSetting value={cutout} onChange={setCutout} />;
-};
+    <Range
+      label="Contrast"
+      value={look.contrast}
+      min={JAYRR_CAMERA_LOOK_MIN}
+      max={JAYRR_CAMERA_LOOK_MAX}
+      step={1}
+      onChange={(contrast) => onLook({ ...look, contrast })}
+    />
+    <Range
+      label="Saturation"
+      value={look.saturation}
+      min={JAYRR_CAMERA_LOOK_MIN}
+      max={JAYRR_CAMERA_LOOK_MAX}
+      step={1}
+      onChange={(saturation) => onLook({ ...look, saturation })}
+    />
+    {isDefaultCameraLook(look) ? null : (
+      <MenuItem
+        selected={false}
+        onSelect={() => {
+          onLook(DEFAULT_CAMERA_LOOK);
+        }}
+      >
+        Reset
+      </MenuItem>
+    )}
+  </div>
+);
 
 const StreamFields = ({
   compact,
@@ -606,6 +824,19 @@ const StreamFields = ({
   onFit,
   onToggleCrop,
   onResetCrop,
+  look,
+  onLook,
+  cutoutOn,
+  onToggleCutout,
+  funOn,
+  accessory,
+  onAccessory,
+  laserOn,
+  onToggleLaser,
+  eyeLasersOn,
+  onToggleEyeLasers,
+  funOffset,
+  onFunOffset,
   onUnlock,
   phoneSource,
   collaborating,
@@ -636,6 +867,19 @@ const StreamFields = ({
   onFit: (next: JayrrObjectFit) => void;
   onToggleCrop: () => void;
   onResetCrop: () => void;
+  look: JayrrCameraLook;
+  onLook: (next: JayrrCameraLook) => void;
+  cutoutOn: boolean;
+  onToggleCutout: () => void;
+  funOn: boolean;
+  accessory: CameraAccessory;
+  onAccessory: (accessory: CameraAccessory) => void;
+  laserOn: boolean;
+  onToggleLaser: () => void;
+  eyeLasersOn: boolean;
+  onToggleEyeLasers: () => void;
+  funOffset: CameraFunOffset;
+  onFunOffset: (offset: CameraFunOffset) => void;
   onUnlock: () => void;
   phoneSource: string;
   collaborating: boolean;
@@ -969,6 +1213,149 @@ const StreamFields = ({
       )}
     </StreamChoice>
   ) : null;
+  const lookChoice = cameraOn ? (
+    <StreamChoice
+      title="Adjust"
+      icon={adjustIcon}
+      active={!isDefaultCameraLook(look)}
+      compact={compact}
+      disabled={false}
+    >
+      {() => <LookFields look={look} onLook={onLook} />}
+    </StreamChoice>
+  ) : null;
+  const cutoutChoice = pictureOn ? (
+    compact ? (
+      <IconButton
+        type="button"
+        icon={cutoutIcon}
+        className={cutoutOn ? "ToolIcon--checked" : undefined}
+        aria-label="Cutout"
+        title="Cutout"
+        aria-pressed={cutoutOn}
+        onClick={onToggleCutout}
+      />
+    ) : (
+      <RadioButton
+        icon={<>{cutoutIcon}</>}
+        title="Cutout"
+        active={cutoutOn}
+        onClick={onToggleCutout}
+      />
+    )
+  ) : null;
+  const funChoice = cameraOn ? (
+    <StreamChoice
+      title="Accessories"
+      icon={funIcon}
+      active={funOn || laserOn || eyeLasersOn}
+      compact={compact}
+      disabled={false}
+    >
+      {(close) => (
+        <div className="jayrr-camera-picker__accessories">
+          <MenuItem
+            selected={funOn && accessory === "glasses"}
+            onSelect={() => {
+              onAccessory("glasses");
+              close();
+            }}
+          >
+            <span className="jayrr-camera-picker__accessory">
+              Glasses
+              {glassesPreview}
+            </span>
+          </MenuItem>
+          {CAMERA_ACCESSORIES.map(({ id, name }) => (
+            <MenuItem
+              key={id}
+              selected={funOn && accessory === id}
+              onSelect={() => {
+                onAccessory(id);
+                close();
+              }}
+            >
+              <span className="jayrr-camera-picker__accessory">
+                {name}
+                <AccessoryPreview accessory={id} />
+              </span>
+            </MenuItem>
+          ))}
+          <MenuItem
+            selected={laserOn}
+            onSelect={() => {
+              onToggleLaser();
+              close();
+            }}
+          >
+            Fire Mah Lazer
+          </MenuItem>
+          <MenuItem
+            selected={eyeLasersOn}
+            onSelect={() => {
+              onToggleEyeLasers();
+              close();
+            }}
+          >
+            Eye Lasers
+          </MenuItem>
+        </div>
+      )}
+    </StreamChoice>
+  ) : null;
+  const offsetChoice =
+    funOn || laserOn || eyeLasersOn ? (
+      <StreamChoice
+        title="Accessory position"
+        icon={accessoryOffsetIcon}
+        active={
+          funOffset.x !== 0 || funOffset.y !== 0 || funScale(funOffset) !== 1
+        }
+        compact={compact}
+        disabled={false}
+      >
+        {(close) => (
+          <div className="jayrr-camera-picker__look">
+            <Range
+              label="Horizontal"
+              value={funOffset.x}
+              min={-160}
+              max={160}
+              step={1}
+              onChange={(x) => onFunOffset({ ...funOffset, x })}
+            />
+            <Range
+              label="Vertical"
+              value={funOffset.y}
+              min={-160}
+              max={160}
+              step={1}
+              onChange={(y) => onFunOffset({ ...funOffset, y })}
+            />
+            <Range
+              label="Scale"
+              value={Math.round(funScale(funOffset) * 100)}
+              min={FUN_SCALE_MIN * 100}
+              max={FUN_SCALE_MAX * 100}
+              step={5}
+              onChange={(percent) =>
+                onFunOffset({ ...funOffset, scale: percent / 100 })
+              }
+            />
+            <button
+              type="button"
+              className="jayrr-camera-picker__crop-reset"
+              onClick={() => {
+                onFunOffset({ ...DEFAULT_FUN_OFFSET });
+                close();
+              }}
+            >
+              Reset
+            </button>
+          </div>
+        )}
+      </StreamChoice>
+    ) : null;
   const choices = compact ? (
     <>
       <div className="compact-action-item">{cameraChoice}</div>
@@ -986,6 +1373,18 @@ const StreamFields = ({
       ) : null}
       {cropChoice ? (
         <div className="compact-action-item">{cropChoice}</div>
+      ) : null}
+      {lookChoice ? (
+        <div className="compact-action-item">{lookChoice}</div>
+      ) : null}
+      {cutoutChoice ? (
+        <div className="compact-action-item">{cutoutChoice}</div>
+      ) : null}
+      {funChoice ? (
+        <div className="compact-action-item">{funChoice}</div>
+      ) : null}
+      {offsetChoice ? (
+        <div className="compact-action-item">{offsetChoice}</div>
       ) : null}
     </>
   ) : (
@@ -1010,14 +1409,11 @@ const StreamFields = ({
           {framesChoice}
           {fitChoice}
           {cropChoice}
+          {lookChoice}
+          {cutoutChoice}
+          {funChoice}
+          {offsetChoice}
         </div>
-      ) : null}
-      {pictureOn ? (
-        isConvexLinked ? (
-          <LinkedCutoutSetting />
-        ) : (
-          <LocalCutoutSetting />
-        )
       ) : null}
       {error ? (
         <span className="jayrr-camera-picker__error">{error}</span>
@@ -1036,6 +1432,7 @@ const CameraPanel = ({
   frameRate,
   fit,
   crop,
+  look,
   onChange,
 }: {
   elementId: string;
@@ -1047,6 +1444,7 @@ const CameraPanel = ({
   frameRate: JayrrDisplayRate;
   fit: JayrrObjectFit;
   crop: JayrrDisplayCrop | undefined;
+  look: JayrrCameraLook;
   onChange: (next: unknown) => void;
 }) => {
   const { container } = useExcalidrawContainer();
@@ -1055,6 +1453,18 @@ const CameraPanel = ({
   const cropElementId = useAtomValue(desktopCropElementIdAtom);
   const setCropElementId = useSetAtom(desktopCropElementIdAtom);
   const collaborating = useAtomValue(isCollaboratingAtom);
+  const cutoutOn = useAtomValue(cameraCutoutOnAtom);
+  const setCutoutOn = useSetAtom(cameraCutoutOnAtom);
+  const funOn = useAtomValue(cameraFunOnAtom);
+  const accessory = useAtomValue(cameraAccessoryAtom);
+  const setAccessory = useSetAtom(cameraAccessoryAtom);
+  const laserOn = useAtomValue(cameraLaserOnAtom);
+  const eyeLasersOn = useAtomValue(cameraEyeLasersOnAtom);
+  const setLaserOn = useSetAtom(cameraLaserOnAtom);
+  const setEyeLasersOn = useSetAtom(cameraEyeLasersOnAtom);
+  const setFunOn = useSetAtom(cameraFunOnAtom);
+  const funOffset = useAtomValue(cameraFunOffsetAtom);
+  const setFunOffset = useSetAtom(cameraFunOffsetAtom);
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [screenError, setScreenError] = useState<string | null>(null);
@@ -1074,6 +1484,18 @@ const CameraPanel = ({
       }),
     [],
   );
+
+  useEffect(() => {
+    if (
+      !source ||
+      source === JAYRR_DISPLAY_SOURCE ||
+      readPhoneSource(source) ||
+      readScreenSource(source)
+    ) {
+      return;
+    }
+    setSavedCameraLook(look);
+  }, [look, source]);
 
   const unlock = async () => {
     setLoading(true);
@@ -1102,6 +1524,9 @@ const CameraPanel = ({
       kind: "camera",
       deviceId: next,
       label: device?.label || sourceLabel || undefined,
+      fit,
+      crop,
+      ...cameraLookFields(look),
     });
   };
 
@@ -1241,6 +1666,7 @@ const CameraPanel = ({
   const applyPicture = (
     nextFit: JayrrObjectFit,
     nextCrop: JayrrDisplayCrop | undefined,
+    nextLook: JayrrCameraLook = look,
   ) => {
     if (phoneSource) {
       onChange({
@@ -1274,6 +1700,7 @@ const CameraPanel = ({
         label: sourceLabel ?? undefined,
         fit: nextFit,
         crop: nextCrop,
+        ...cameraLookFields(nextLook),
       });
     }
   };
@@ -1310,6 +1737,35 @@ const CameraPanel = ({
       onResetCrop={() => {
         applyPicture(fit, undefined);
         setCropElementId(null);
+      }}
+      look={look}
+      onLook={(next) => {
+        setSavedCameraLook(next);
+        applyPicture(fit, crop, next);
+      }}
+      cutoutOn={cutoutOn}
+      onToggleCutout={() => {
+        const next = !cutoutOn;
+        setCutoutOn(next);
+        setSavedCutoutOn(next);
+      }}
+      funOn={funOn}
+      laserOn={laserOn}
+      eyeLasersOn={eyeLasersOn}
+      onToggleEyeLasers={() => setEyeLasersOn(!eyeLasersOn)}
+      onToggleLaser={() => setLaserOn(!laserOn)}
+      funOffset={funOffset}
+      onFunOffset={(next) => {
+        setFunOffset(next);
+        setSavedFunOffset(next);
+      }}
+      accessory={accessory}
+      onAccessory={(id) => {
+        const next = !funOn || accessory !== id;
+        setAccessory(id);
+        setSavedAccessory(id, container?.ownerDocument.defaultView ?? null);
+        setFunOn(next);
+        setSavedFunOn(next);
       }}
       onUnlock={() => {
         void unlock();
@@ -1386,6 +1842,7 @@ export const jayrrCameraAction: Action = {
         frameRate={readDisplayRate(camera)}
         fit={readDisplayFit(camera)}
         crop={readDisplayCrop(camera)}
+        look={readCameraLook(camera)}
         onChange={(next) => updateData(next)}
       />
     );

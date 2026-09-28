@@ -1,0 +1,16 @@
+.jayrr-bg-media {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  width: 320px;
+  height: 180px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.jayrr-bg-media__source {
+  display: block;
+  width: 320px;
+  height: 180px;
+  object-fit: cover;
+}

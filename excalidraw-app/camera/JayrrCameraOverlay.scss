@@ -16,7 +16,9 @@
   background: #111;
 }
 
-.jayrr-camera-window__cutout {
+.jayrr-camera-window__cutout,
+.jayrr-camera-window__fun,
+.jayrr-camera-window__jeeliz {
   display: none;
 }
 
@@ -50,12 +52,20 @@
   color: var(--color-gray-80, #495057);
 }
 
-.jayrr-camera-picker__cutout {
-  margin-top: 0.6rem;
-}
-
 .jayrr-camera-picker__tune {
   margin-top: 0.35rem;
+}
+
+.jayrr-camera-picker__look {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 12.5rem;
+  padding: 0.15rem 0.35rem 0.35rem;
+}
+
+.jayrr-camera-picker__look .control-label {
+  margin: 0;
 }
 
 .jayrr-camera-picker__crop {
@@ -86,5 +96,29 @@
   .jayrr-camera-picker__error,
   .jayrr-camera-picker__note {
     margin: 0.15rem 0.45rem 0.4rem;
+  }
+
+  .jayrr-camera-picker__accessory {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    gap: 0.45rem;
+  }
+
+  .jayrr-camera-picker__accessories {
+    display: flex;
+    flex-direction: column;
+    max-height: min(27rem, 60vh);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .jayrr-camera-picker__accessory-preview,
+  .jayrr-camera-picker__glasses-preview {
+    display: block;
+    width: 48px;
+    height: 32px;
+    flex-shrink: 0;
   }
 }

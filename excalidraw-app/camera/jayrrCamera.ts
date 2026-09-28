@@ -1,5 +1,9 @@
 import type { ExcalidrawElement } from "@excalidraw/element/types";
 
+import { STORAGE_KEYS } from "../app_constants";
+import { importUsernameFromLocalStorage } from "../data/localStorage";
+import { getAccountCollabName } from "../domain/profile/accountCollabIdentity";
+
 export const JAYRR_CAMERA_KEY = "jayrrCamera";
 
 export const JAYRR_DISPLAY_SOURCE = "display";
@@ -38,6 +42,22 @@ export type JayrrDisplayCrop = {
   height: number;
 };
 
+export const JAYRR_CAMERA_LOOK_MIN = 0;
+export const JAYRR_CAMERA_LOOK_MAX = 200;
+export const JAYRR_CAMERA_LOOK_DEFAULT = 100;
+
+export type JayrrCameraLook = {
+  brightness: number;
+  contrast: number;
+  saturation: number;
+};
+
+export const DEFAULT_CAMERA_LOOK: JayrrCameraLook = {
+  brightness: JAYRR_CAMERA_LOOK_DEFAULT,
+  contrast: JAYRR_CAMERA_LOOK_DEFAULT,
+  saturation: JAYRR_CAMERA_LOOK_DEFAULT,
+};
+
 export const FULL_DISPLAY_CROP: JayrrDisplayCrop = {
   x: 0,
   y: 0,
@@ -66,13 +86,19 @@ export type JayrrCamera =
       label?: string;
       /** Collaboration client that is streaming into this box. */
       ownerId?: string;
+      /** Display name of that client, stamped when the box was linked. */
+      ownerName?: string;
       fit?: JayrrObjectFit;
       crop?: JayrrDisplayCrop;
+      brightness?: number;
+      contrast?: number;
+      saturation?: number;
     }
   | {
       kind: "phone";
       userId: string;
       label?: string;
+      ownerName?: string;
       fit?: JayrrObjectFit;
       crop?: JayrrDisplayCrop;
     }
@@ -80,6 +106,7 @@ export type JayrrCamera =
       kind: "screen";
       userId: string;
       label?: string;
+      ownerName?: string;
       fit?: JayrrObjectFit;
       crop?: JayrrDisplayCrop;
     }
@@ -150,6 +177,115 @@ const isObjectFit = (value: unknown): value is JayrrObjectFit =>
 
 export const parseObjectFit = (value: unknown): JayrrObjectFit | undefined =>
   isObjectFit(value) ? value : undefined;
+
+const parseLookValue = (value: unknown): number | undefined => {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return undefined;
+  }
+  return Math.min(
+    JAYRR_CAMERA_LOOK_MAX,
+    Math.max(JAYRR_CAMERA_LOOK_MIN, Math.round(value)),
+  );
+};
+
+export const parseCameraLook = (
+  value: unknown,
+): JayrrCameraLook | undefined => {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+  const bag = value as {
+    brightness?: unknown;
+    contrast?: unknown;
+    saturation?: unknown;
+  };
+  const brightness = parseLookValue(bag.brightness);
+  const contrast = parseLookValue(bag.contrast);
+  const saturation = parseLookValue(bag.saturation);
+  if (
+    brightness === undefined &&
+    contrast === undefined &&
+    saturation === undefined
+  ) {
+    return undefined;
+  }
+  return {
+    brightness: brightness ?? JAYRR_CAMERA_LOOK_DEFAULT,
+    contrast: contrast ?? JAYRR_CAMERA_LOOK_DEFAULT,
+    saturation: saturation ?? JAYRR_CAMERA_LOOK_DEFAULT,
+  };
+};
+
+export const getSavedCameraLook = (): JayrrCameraLook => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.LOCAL_STORAGE_CAMERA_LOOK);
+    if (!raw) {
+      return DEFAULT_CAMERA_LOOK;
+    }
+    return parseCameraLook(JSON.parse(raw)) ?? DEFAULT_CAMERA_LOOK;
+  } catch {
+    return DEFAULT_CAMERA_LOOK;
+  }
+};
+
+export const setSavedCameraLook = (look: JayrrCameraLook) => {
+  try {
+    localStorage.setItem(
+      STORAGE_KEYS.LOCAL_STORAGE_CAMERA_LOOK,
+      JSON.stringify(look),
+    );
+  } catch {
+    // Private mode or a full quota. The scene copy still holds.
+  }
+};
+
+export const readCameraLook = (camera: JayrrCamera | null): JayrrCameraLook => {
+  if (
+    camera &&
+    camera.kind !== "display" &&
+    camera.kind !== "phone" &&
+    camera.kind !== "screen"
+  ) {
+    const fromCamera = parseCameraLook(camera);
+    if (fromCamera) {
+      return fromCamera;
+    }
+  }
+  if (
+    !camera ||
+    (camera.kind !== "display" &&
+      camera.kind !== "phone" &&
+      camera.kind !== "screen")
+  ) {
+    return getSavedCameraLook();
+  }
+  return DEFAULT_CAMERA_LOOK;
+};
+
+export const isDefaultCameraLook = (look: JayrrCameraLook) =>
+  look.brightness === JAYRR_CAMERA_LOOK_DEFAULT &&
+  look.contrast === JAYRR_CAMERA_LOOK_DEFAULT &&
+  look.saturation === JAYRR_CAMERA_LOOK_DEFAULT;
+
+export const cameraLookFields = (look: JayrrCameraLook) => {
+  if (isDefaultCameraLook(look)) {
+    return {};
+  }
+  return {
+    brightness: look.brightness,
+    contrast: look.contrast,
+    saturation: look.saturation,
+  };
+};
+
+export const cameraLookFilter = (look: JayrrCameraLook) => {
+  if (isDefaultCameraLook(look)) {
+    return "none";
+  }
+  return `brightness(${look.brightness / 100}) contrast(${
+    look.contrast / 100
+  }) saturate(${look.saturation / 100})`;
+};
 
 const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
 
@@ -236,6 +372,21 @@ export const canLinkJayrrCamera = (element: ExcalidrawElement) =>
   element.type === "ellipse" ||
   element.type === "diamond";
 
+export const readJayrrOwnerName = (value: unknown) => {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const name = value.trim();
+  if (!name || name === "On") {
+    return undefined;
+  }
+  return name;
+};
+
+export const jayrrLocalOwnerName = () =>
+  readJayrrOwnerName(getAccountCollabName()) ??
+  readJayrrOwnerName(importUsernameFromLocalStorage());
+
 export const readJayrrCamera = (
   element: ExcalidrawElement,
 ): JayrrCamera | null => {
@@ -248,6 +399,7 @@ export const readJayrrCamera = (
     deviceId?: unknown;
     userId?: unknown;
     ownerId?: unknown;
+    ownerName?: unknown;
     nonce?: unknown;
     label?: unknown;
     surface?: unknown;
@@ -255,8 +407,12 @@ export const readJayrrCamera = (
     frameRate?: unknown;
     fit?: unknown;
     crop?: unknown;
+    brightness?: unknown;
+    contrast?: unknown;
+    saturation?: unknown;
   };
   const label = typeof bag.label === "string" ? bag.label : undefined;
+  const ownerName = readJayrrOwnerName(bag.ownerName);
   const fit = parseObjectFit(bag.fit);
   const crop = parseDisplayCrop(bag.crop);
   if (bag.kind === "phone") {
@@ -264,14 +420,14 @@ export const readJayrrCamera = (
     if (!userId) {
       return null;
     }
-    return { kind: "phone", userId, label, fit, crop };
+    return { kind: "phone", userId, label, ownerName, fit, crop };
   }
   if (bag.kind === "screen") {
     const userId = typeof bag.userId === "string" ? bag.userId : "";
     if (!userId) {
       return null;
     }
-    return { kind: "screen", userId, label, fit, crop };
+    return { kind: "screen", userId, label, ownerName, fit, crop };
   }
   if (bag.kind === "display") {
     return {
@@ -290,7 +446,16 @@ export const readJayrrCamera = (
     return null;
   }
   const ownerId = typeof bag.ownerId === "string" ? bag.ownerId : undefined;
-  return { kind: "camera", deviceId, label, ownerId, fit, crop };
+  return {
+    kind: "camera",
+    deviceId,
+    label,
+    ownerId,
+    ownerName,
+    fit,
+    crop,
+    ...cameraLookFields(parseCameraLook(bag) ?? DEFAULT_CAMERA_LOOK),
+  };
 };
 
 /** Account that is streaming into this box, when the box is tied to one. */
@@ -308,6 +473,32 @@ export const jayrrStreamOwnerId = (camera: JayrrCamera | null) => {
     return null;
   }
   return camera.ownerId || null;
+};
+
+export const jayrrStreamOwnerLabel = (
+  camera: JayrrCamera | null,
+  people: readonly { userId: string; label: string }[] = [],
+) => {
+  if (!camera || camera.kind === "display") {
+    return null;
+  }
+  const stamped =
+    "ownerName" in camera ? readJayrrOwnerName(camera.ownerName) : undefined;
+  if (stamped) {
+    return stamped;
+  }
+  if (camera.kind === "phone" || camera.kind === "screen") {
+    const fromLabel = readJayrrOwnerName(
+      camera.label === "Screen" ? undefined : camera.label,
+    );
+    if (fromLabel) {
+      return fromLabel;
+    }
+    const person = people.find((item) => item.userId === camera.userId);
+    return readJayrrOwnerName(person?.label) ?? "Someone else";
+  }
+  const person = people.find((item) => item.userId === camera.ownerId);
+  return readJayrrOwnerName(person?.label) ?? "Someone else";
 };
 
 export const writeJayrrCamera = (

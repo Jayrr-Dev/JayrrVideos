@@ -1,6 +1,6 @@
 import { appJotaiStore } from "../../app-jotai";
 import { startJayrrCameraCutout } from "../../camera/jayrrCameraCutout";
-import { cameraCutoutAtom } from "../flags/cameraCutoutFlag";
+import { cameraCutoutEngineAtom } from "../flags/cameraCutoutFlag";
 
 const canvases = new WeakMap<HTMLVideoElement, HTMLCanvasElement>();
 const stops = new WeakMap<HTMLVideoElement, () => void>();
@@ -41,8 +41,7 @@ export const syncEditorClipCutout = (
     return;
   }
   if (!stops.has(video)) {
-    const flag = appJotaiStore.get(cameraCutoutAtom);
-    const engine = flag === "off" ? "mediapipe" : flag;
+    const engine = appJotaiStore.get(cameraCutoutEngineAtom);
     const layer = video.dataset.editorLayer ?? "base";
     const stack = video.dataset.stackIndex ?? "0";
     const elementId = video.dataset.elementId ?? "preview";

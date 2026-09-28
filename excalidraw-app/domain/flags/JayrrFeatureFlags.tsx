@@ -12,11 +12,15 @@ import { useSetAtom } from "../../app-jotai";
 import { api, isConvexLinked } from "../../convexClient";
 
 import {
+  CAMERA_CUTOUT_ENGINES,
   CAMERA_CUTOUT_FLAG,
-  CAMERA_CUTOUT_OPTIONS,
-  cameraCutoutAtom,
-  isCameraCutout,
-  type CameraCutout,
+  cameraCutoutEngineAtom,
+  cameraCutoutOnAtom,
+  hasStoredCutoutOn,
+  isCameraCutoutEngine,
+  parseCameraCutoutEngine,
+  setSavedCutoutOn,
+  type CameraCutoutEngine,
 } from "./cameraCutoutFlag";
 import {
   STT_PROVIDER_FLAG,
@@ -26,15 +30,14 @@ import {
   type SttProvider,
 } from "./sttProviderFlag";
 
-const readCutout = (flags: { key: string; value: string }[] | undefined) => {
+const readCutoutEngine = (
+  flags: { key: string; value: string }[] | undefined,
+) => {
   const row = flags?.find((flag) => flag.key === CAMERA_CUTOUT_FLAG);
   if (!row) {
-    return "off";
+    return parseCameraCutoutEngine("");
   }
-  if (!isCameraCutout(row.value)) {
-    return "off";
-  }
-  return row.value;
+  return parseCameraCutoutEngine(row.value);
 };
 
 const readStt = (flags: { key: string; value: string }[] | undefined) => {
@@ -50,17 +53,27 @@ const readStt = (flags: { key: string; value: string }[] | undefined) => {
 
 export const JayrrFeatureFlags = () => {
   const { isAuthenticated } = useConvexAuth();
-  const setCutout = useSetAtom(cameraCutoutAtom);
+  const setEngine = useSetAtom(cameraCutoutEngineAtom);
+  const setCutoutOn = useSetAtom(cameraCutoutOnAtom);
   const setStt = useSetAtom(sttProviderAtom);
   const flagArgs = isAuthenticated ? {} : "skip";
   const flags = useQuery(api.featureFlags.list, flagArgs);
   const setFlag = useMutation(api.featureFlags.set);
-  const cutout = readCutout(flags);
+  const engine = readCutoutEngine(flags);
   const stt = readStt(flags);
 
   useEffect(() => {
-    setCutout(cutout);
-  }, [cutout, setCutout]);
+    setEngine(engine);
+    const row = flags?.find((flag) => flag.key === CAMERA_CUTOUT_FLAG);
+    if (!row || hasStoredCutoutOn()) {
+      return;
+    }
+    if (!isCameraCutoutEngine(row.value)) {
+      return;
+    }
+    setCutoutOn(true);
+    setSavedCutoutOn(true);
+  }, [engine, flags, setCutoutOn, setEngine]);
 
   useEffect(() => {
     setStt(stt);
@@ -73,8 +86,8 @@ export const JayrrFeatureFlags = () => {
     return null;
   }
 
-  const onPickCutout = (value: CameraCutout) => {
-    setCutout(value);
+  const onPickCutout = (value: CameraCutoutEngine) => {
+    setEngine(value);
     void setFlag({ key: CAMERA_CUTOUT_FLAG, value });
   };
 
@@ -90,11 +103,11 @@ export const JayrrFeatureFlags = () => {
       </MainMenu.Sub.Trigger>
       <MainMenu.Sub.Content>
         <MainMenu.Group title="Camera cutout">
-          {CAMERA_CUTOUT_OPTIONS.map((option) => (
+          {CAMERA_CUTOUT_ENGINES.map((option) => (
             <MainMenu.Item
               key={option.id}
-              icon={option.id === cutout ? checkIcon : emptyIcon}
-              aria-checked={option.id === cutout}
+              icon={option.id === engine ? checkIcon : emptyIcon}
+              aria-checked={option.id === engine}
               onSelect={(event) => {
                 event.preventDefault();
                 onPickCutout(option.id);

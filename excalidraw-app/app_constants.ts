@@ -70,6 +70,9 @@ export const STORAGE_KEYS = {
   LOCAL_STORAGE_PRESENT_CUSTOM_CURSOR: "jayrr-present-custom-cursor",
   LOCAL_STORAGE_PRESENT_INTERACT: "jayrr-present-interact",
   LOCAL_STORAGE_PRESENT_MIC: "jayrr-present-mic",
+  LOCAL_STORAGE_CAMERA_LOOK: "jayrr-camera-look",
+  LOCAL_STORAGE_CAMERA_CUTOUT_ON: "jayrr-camera-cutout-on",
+  LOCAL_STORAGE_CAMERA_FUN_ON: "jayrr-camera-fun-on",
   LOCAL_STORAGE_TRANSCRIBE_API_KEY: "jayrr-transcribe-api-key",
   LOCAL_STORAGE_TRANSCRIBE_ENABLED: "jayrr-transcribe-enabled",
 

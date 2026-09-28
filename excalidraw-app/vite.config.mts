@@ -366,9 +366,9 @@ export default defineConfig(({ mode }) => {
         "dompurify",
       ],
       exclude: [
-        "@huggingface/transformers",
         "@mediapipe/tasks-vision",
         "segmo",
+        "../vendor/jeeliz-face-filter/jeelizFaceFilter.module.js",
       ],
     },
   };

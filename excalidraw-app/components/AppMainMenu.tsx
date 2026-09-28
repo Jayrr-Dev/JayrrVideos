@@ -29,7 +29,11 @@ import {
   googleDriveConnectedAtom,
   isGoogleDriveConfigured,
 } from "../data/connectGoogleDrive";
-import { openBlankCanvas, saveCanvasAsScene } from "../data/jayrrScenes";
+import {
+  convexErrorMessage,
+  openBlankCanvas,
+  saveCanvasAsScene,
+} from "../data/jayrrScenes";
 import { JayrrFeatureFlags } from "../domain/flags/JayrrFeatureFlags";
 import { setAccountCollabIdentity } from "../domain/profile/accountCollabIdentity";
 import { JAYRR_PRESENT_TAB } from "../present/buildPresentDeck";
@@ -171,9 +175,7 @@ export const AppMainMenu: React.FC<{
               })
               .catch((error: unknown) => {
                 props.onToast(
-                  error instanceof Error
-                    ? error.message
-                    : "Could not save scene",
+                  convexErrorMessage(error, "Could not save scene"),
                 );
               });
           }}

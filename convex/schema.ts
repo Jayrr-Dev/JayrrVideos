@@ -41,6 +41,17 @@ export default defineSchema({
     .index("by_userId", ["userId"])
     .index("by_folder", ["folderId"]),
 
+  sceneFiles: defineTable({
+    userId: v.id("users"),
+    sceneId: v.id("scenes"),
+    fileId: v.string(),
+    storageId: v.id("_storage"),
+    mimeType: v.string(),
+    version: v.number(),
+  })
+    .index("by_scene", ["sceneId"])
+    .index("by_scene_and_file", ["sceneId", "fileId"]),
+
   libraries: defineTable({
     ownerKey: v.string(),
     userId: v.optional(v.id("users")),

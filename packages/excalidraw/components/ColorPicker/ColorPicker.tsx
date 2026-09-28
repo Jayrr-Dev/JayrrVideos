@@ -67,6 +67,8 @@ interface ColorPickerProps {
    * from the picker popup onto it. The value names the
    * `appState.colorTopPicks` slot the customization is stored in */
   customizableTopPicks?: keyof AppState["colorTopPicks"];
+  showMediaOption?: boolean;
+  mediaActive?: boolean;
 }
 
 const ColorPickerPopupContent = ({
@@ -80,6 +82,8 @@ const ColorPickerPopupContent = ({
   getOpenPopup,
   appState,
   excludedColors,
+  showMediaOption,
+  mediaActive,
 }: Pick<
   ColorPickerProps,
   | "type"
@@ -91,6 +95,8 @@ const ColorPickerPopupContent = ({
   | "updateData"
   | "appState"
   | "excludedColors"
+  | "showMediaOption"
+  | "mediaActive"
 > & {
   getOpenPopup: () => AppState["openPopup"];
 }) => {
@@ -243,6 +249,18 @@ const ColorPickerPopupContent = ({
           updateData={updateData}
           showTitle={isCompactMode}
           showHotKey={!isMobileMode}
+          showMediaOption={showMediaOption}
+          mediaActive={mediaActive}
+          onPickMediaFile={
+            showMediaOption
+              ? (file) => updateData({ bgMediaFile: file })
+              : undefined
+          }
+          onClearMedia={
+            showMediaOption
+              ? () => updateData({ bgMediaFile: null })
+              : undefined
+          }
         >
           {colorInputJSX}
         </Picker>
@@ -268,6 +286,7 @@ const ColorPickerTrigger = ({
   mode = "background",
   onToggle,
   editingTextElement,
+  mediaActive,
 }: {
   color: string | null;
   label: string;
@@ -276,6 +295,7 @@ const ColorPickerTrigger = ({
   mode?: "background" | "stroke";
   onToggle: () => void;
   editingTextElement?: boolean;
+  mediaActive?: boolean;
 }) => {
   const app = useApp();
   const stylesPanelMode = useStylesPanelMode();
@@ -302,7 +322,8 @@ const ColorPickerTrigger = ({
     <Popover.Trigger
       type="button"
       className={clsx("color-picker__button active-color properties-trigger", {
-        "is-transparent": !color || color === "transparent",
+        "is-transparent": !mediaActive && (!color || color === "transparent"),
+        "is-bg-media": !!mediaActive,
         "has-outline":
           !color || !isColorDark(color, COLOR_OUTLINE_CONTRAST_THRESHOLD),
         "compact-sizing": isCompactMode,
@@ -355,6 +376,8 @@ const ColorPickerComponent = ({
   appState,
   excludedColors,
   customizableTopPicks,
+  showMediaOption,
+  mediaActive,
 }: ColorPickerProps) => {
   const openRef = useRef(appState.openPopup);
   useEffect(() => {
@@ -459,6 +482,7 @@ const ColorPickerComponent = ({
             theme={appState.theme}
             mode={type === "elementStroke" ? "stroke" : "background"}
             editingTextElement={!!appState.editingTextElement}
+            mediaActive={!!showMediaOption && !!mediaActive}
             onToggle={() => {
               // atomic switch: if another popup is open, close it first, then open this one next tick
               if (appState.openPopup === type) {
@@ -485,6 +509,8 @@ const ColorPickerComponent = ({
               updateData={updateData}
               getOpenPopup={() => openRef.current}
               appState={appState}
+              showMediaOption={showMediaOption}
+              mediaActive={mediaActive}
             />
           )}
         </Popover.Root>
@@ -531,6 +557,8 @@ const areColorPickerPropsEqual = (
     prev.customizableTopPicks === next.customizableTopPicks &&
     prev.appState.theme === next.appState.theme &&
     prev.appState.colorTopPicks === next.appState.colorTopPicks &&
+    prev.showMediaOption === next.showMediaOption &&
+    prev.mediaActive === next.mediaActive &&
     // the trigger tweaks its click behavior while a text element is edited
     !!prev.appState.editingTextElement === !!next.appState.editingTextElement
   );

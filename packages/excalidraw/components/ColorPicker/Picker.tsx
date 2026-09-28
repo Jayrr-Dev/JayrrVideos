@@ -15,6 +15,7 @@ import type { ColorPaletteCustom } from "@excalidraw/common";
 import { useAtom } from "../../editor-jotai";
 import { t } from "../../i18n";
 
+import { BackgroundMediaOption } from "./BackgroundMediaOption";
 import { CustomColorList } from "./CustomColorList";
 import PickerColorList from "./PickerColorList";
 import PickerHeading from "./PickerHeading";
@@ -44,6 +45,10 @@ interface PickerProps {
   onEscape: (event: React.KeyboardEvent | KeyboardEvent) => void;
   showHotKey?: boolean;
   excludedColors?: readonly string[];
+  showMediaOption?: boolean;
+  mediaActive?: boolean;
+  onPickMediaFile?: (file: File) => void;
+  onClearMedia?: () => void;
 }
 
 export const Picker = React.forwardRef(
@@ -62,6 +67,10 @@ export const Picker = React.forwardRef(
       onEscape,
       showHotKey = true,
       excludedColors,
+      showMediaOption,
+      mediaActive,
+      onPickMediaFile,
+      onClearMedia,
     }: PickerProps,
     ref,
   ) => {
@@ -202,6 +211,14 @@ export const Picker = React.forwardRef(
               excludedColors={excludedColors}
             />
           </div>
+
+          {showMediaOption && onPickMediaFile && onClearMedia ? (
+            <BackgroundMediaOption
+              active={!!mediaActive}
+              onPickFile={onPickMediaFile}
+              onClear={onClearMedia}
+            />
+          ) : null}
 
           <div>
             <PickerHeading>{t("colorPicker.shades")}</PickerHeading>

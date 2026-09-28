@@ -288,6 +288,14 @@ export const remove = mutation({
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
     const scene = await getOwnedScene(ctx, args.sceneId, user._id);
+    const files = await ctx.db
+      .query("sceneFiles")
+      .withIndex("by_scene", (q) => q.eq("sceneId", scene._id))
+      .collect();
+    for (const file of files) {
+      await ctx.storage.delete(file.storageId);
+      await ctx.db.delete(file._id);
+    }
     await bumpFolderCount(ctx, scene.folderId, -1);
     await ctx.db.delete(scene._id);
     return null;

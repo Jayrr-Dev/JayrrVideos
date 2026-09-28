@@ -16,14 +16,18 @@ import { appJotaiStore, useAtom } from "../../app-jotai";
 import { api, convexClient, isConvexLinked } from "../../convexClient";
 import {
   activeSceneIdAtom,
-  applySceneJsonToCanvas,
+  applySavedSceneToCanvas,
   buildScenePreviewDataUrl,
+  convexErrorMessage,
   nextSceneName,
   openBlankCanvas,
   openSceneFolderIdAtom,
   persistOpenSceneFolderId,
+  persistSceneFiles,
+  commitScenePreview,
   serializeCurrentCanvas,
   setActiveSceneId,
+  takeScenePreview,
 } from "../../data/jayrrScenes";
 
 import { JayrrConfirmDialog } from "./JayrrConfirmDialog";
@@ -211,6 +215,9 @@ const JayrrSceneMenuConnected = () => {
   const toast = (message: string) => {
     excalidrawAPI?.setToast({ message, closable: true });
   };
+  const failToast = (error: unknown, fallback: string) => {
+    toast(convexErrorMessage(error, fallback));
+  };
 
   const rememberSaved = (sceneId: Id<"scenes">, sceneJson: string) => {
     lastSavedIdRef.current = sceneId;
@@ -229,6 +236,7 @@ const JayrrSceneMenuConnected = () => {
       if (!elements.length && !sceneBoundRef.current) {
         return;
       }
+      await persistSceneFiles(sceneId, canvas);
       let sceneJson = serializeCurrentCanvas(canvas);
       if (
         lastSavedIdRef.current === sceneId &&
@@ -236,9 +244,12 @@ const JayrrSceneMenuConnected = () => {
       ) {
         return;
       }
-      const previewDataUrl = elements.length
-        ? await buildScenePreviewDataUrl(sceneJson)
-        : "";
+      const preview = await takeScenePreview(
+        sceneId,
+        sceneJson,
+        canvas.getFiles(),
+        elements.length > 0,
+      );
       sceneJson = serializeCurrentCanvas(canvas);
       const latestElements = canvas.getSceneElements();
       const payload: {
@@ -251,10 +262,13 @@ const JayrrSceneMenuConnected = () => {
       };
       if (!latestElements.length) {
         payload.previewDataUrl = "";
-      } else if (previewDataUrl) {
-        payload.previewDataUrl = previewDataUrl;
+      } else if (preview?.previewDataUrl) {
+        payload.previewDataUrl = preview.previewDataUrl;
       }
       await updateSceneRef.current(payload);
+      if (preview?.signature) {
+        commitScenePreview(sceneId, preview.signature);
+      }
       rememberSaved(sceneId, sceneJson);
       if (serializeCurrentCanvas(canvas) === sceneJson) {
         return;
@@ -277,8 +291,7 @@ const JayrrSceneMenuConnected = () => {
   enqueuePersistRef.current = enqueuePersist;
 
   const reportAutosaveError = (error: unknown) => {
-    const message =
-      error instanceof Error ? error.message : "Could not save scene";
+    const message = convexErrorMessage(error, "Could not save scene");
     if (lastErrorRef.current === message) {
       return;
     }
@@ -381,9 +394,13 @@ const JayrrSceneMenuConnected = () => {
     const sceneId = await createScene({
       name,
       sceneJson,
-      previewDataUrl: await buildScenePreviewDataUrl(sceneJson),
+      previewDataUrl: await buildScenePreviewDataUrl(
+        sceneJson,
+        excalidrawAPI.getFiles(),
+      ),
       folderId: openFolderId ?? undefined,
     });
+    await persistSceneFiles(sceneId, excalidrawAPI);
     rememberSaved(sceneId, sceneJson);
     setActiveSceneId(sceneId);
     setDraftName(name);
@@ -406,7 +423,7 @@ const JayrrSceneMenuConnected = () => {
       }
       toast("Scene saved");
     } catch (error) {
-      toast(error instanceof Error ? error.message : "Could not save scene");
+      failToast(error, "Could not save scene");
     } finally {
       skipAutosaveRef.current = false;
       setBusy(false);
@@ -430,9 +447,7 @@ const JayrrSceneMenuConnected = () => {
       openBlankCanvas(excalidrawAPI);
       toast("New scene");
     } catch (error) {
-      toast(
-        error instanceof Error ? error.message : "Could not start a new scene",
-      );
+      toast(convexErrorMessage(error, "Could not start a new scene"));
     } finally {
       skipAutosaveRef.current = false;
       setBusy(false);
@@ -450,7 +465,7 @@ const JayrrSceneMenuConnected = () => {
       setActiveSceneId(sceneId);
       toast("Scene updated");
     } catch (error) {
-      toast(error instanceof Error ? error.message : "Could not update scene");
+      failToast(error, "Could not update scene");
     } finally {
       setBusy(false);
     }
@@ -475,12 +490,16 @@ const JayrrSceneMenuConnected = () => {
         await enqueuePersist(activeSceneId);
       } else if (excalidrawAPI.getSceneElements().length > 0) {
         const sceneJson = serializeCurrentCanvas(excalidrawAPI);
-        await createScene({
+        const createdId = await createScene({
           name: nextSceneName(scenes?.map((scene) => scene.name) ?? []),
           sceneJson,
-          previewDataUrl: await buildScenePreviewDataUrl(sceneJson),
+          previewDataUrl: await buildScenePreviewDataUrl(
+            sceneJson,
+            excalidrawAPI.getFiles(),
+          ),
           folderId: openFolderId ?? undefined,
         });
+        await persistSceneFiles(createdId, excalidrawAPI);
         savedCurrent = true;
       }
       const scene = await convexClient.query(api.scenes.get, {
@@ -489,7 +508,7 @@ const JayrrSceneMenuConnected = () => {
       if (!scene) {
         throw new Error("Scene not found");
       }
-      applySceneJsonToCanvas(excalidrawAPI, scene.sceneJson);
+      await applySavedSceneToCanvas(excalidrawAPI, scene._id, scene.sceneJson);
       setActiveSceneId(scene._id);
       rememberSaved(scene._id, serializeCurrentCanvas(excalidrawAPI));
       toast(
@@ -498,7 +517,7 @@ const JayrrSceneMenuConnected = () => {
           : `Loaded ${scene.name}`,
       );
     } catch (error) {
-      toast(error instanceof Error ? error.message : "Could not load scene");
+      failToast(error, "Could not load scene");
     } finally {
       skipAutosaveRef.current = false;
       setBusy(false);

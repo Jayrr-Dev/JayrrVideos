@@ -1,0 +1,19 @@
+---
+description: Format edited TS/JS with ESLint --fix so Prettier never leftover
+globs: "**/*.{ts,tsx,js,jsx}"
+alwaysApply: true
+---
+
+# Format after edits
+
+After changing any `.ts`, `.tsx`, `.js`, or `.jsx` file, run ESLint `--fix` on those files before finishing:
+
+```
+yarn eslint --max-warnings=0 --ext .js,.ts,.tsx --fix <files>
+```
+
+If `yarn` is not on PATH (common on Windows), use `corepack yarn` with the same args.
+
+Do not hand-wrap lines or guess object/JSX spacing. Prettier owns spaces inside `{ }`, trailing commas, and line breaks. Hand-edited style like `style={{paddingTop: "2px" }}` fails `prettier/prettier`.
+
+Treat leftover `prettier/prettier` as a failed edit. Run the command above and re-check the file.

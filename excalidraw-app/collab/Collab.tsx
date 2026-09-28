@@ -97,6 +97,7 @@ import {
   getAccountCollabAvatar,
   getAccountCollabName,
 } from "../domain/profile/accountCollabIdentity";
+import { readJayrrBgMediaFileId } from "../domain/background/jayrrBgMedia";
 import { readCalledObjectKind } from "../domain/widgets/model";
 import { readPdfFileId } from "../domain/widgets/objects/pdfConfig";
 
@@ -490,7 +491,16 @@ class Collab extends PureComponent<CollabProps, CollabState> {
       .map((element) => readPdfFileId(element)!)
       .filter(Boolean);
 
-    const fileIds = [...new Set([...unfetchedImages, ...unfetchedPdfs])];
+    const unfetchedBgMedia = opts.elements
+      .map((element) => readJayrrBgMediaFileId(element))
+      .filter(
+        (fileId): fileId is NonNullable<typeof fileId> =>
+          !!fileId && !this.fileManager.isFileTracked(fileId),
+      );
+
+    const fileIds = [
+      ...new Set([...unfetchedImages, ...unfetchedPdfs, ...unfetchedBgMedia]),
+    ];
     return await this.fileManager.getFiles(fileIds);
   };
 

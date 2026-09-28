@@ -1,0 +1,20 @@
+.excalidraw {
+  .jayrr-camera-lock-owner {
+    position: absolute;
+    z-index: var(--zIndex-interactiveCanvas);
+    display: flex;
+    align-items: center;
+    max-width: 12rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    border-radius: 0.5rem;
+    background: var(--island-bg-color);
+    box-shadow: var(--shadow-island);
+    padding: 0.8rem 0.7rem;
+    color: var(--color-gray-80, #495057);
+    font-size: 0.75rem;
+    line-height: 1.25rem;
+    pointer-events: none;
+  }
+}

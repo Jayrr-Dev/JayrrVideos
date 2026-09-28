@@ -174,6 +174,15 @@ import {
 
 import { getShortcutKey } from "../shortcut";
 
+import { generateIdFromFile, getDataURL } from "../data/blob";
+import {
+  binaryFileForJayrrBgMedia,
+  canUseJayrrBgMedia,
+  normalizeJayrrBgMediaFile,
+  readJayrrBgMedia,
+  writeJayrrBgMedia,
+} from "../data/backgroundMedia";
+
 import {
   getColorTargetAppStateUpdates,
   resolveColorTarget,
@@ -438,13 +447,74 @@ export const actionChangeStrokeColor = register<
 });
 
 export const actionChangeBackgroundColor = register<
-  Partial<AppState> & { color?: string }
+  Partial<AppState> & { color?: string; bgMediaFile?: File | null }
 >({
   name: "changeBackgroundColor",
   label: "labels.changeBackground",
   trackEvent: false,
-  perform: (elements, appState, value, app) => {
-    const { color, ...appStateUpdates } = value ?? {};
+  perform: async (elements, appState, value, app) => {
+    const { color, bgMediaFile, ...appStateUpdates } = value ?? {};
+    if (bgMediaFile !== undefined) {
+      const selected = app.scene
+        .getSelectedElements(appState)
+        .filter(canUseJayrrBgMedia);
+      if (!selected.length) {
+        return {
+          appState: {
+            ...appState,
+            ...appStateUpdates,
+            errorMessage: t("colorPicker.mediaNeedsShape"),
+          },
+          captureUpdate: CaptureUpdateAction.EVENTUALLY,
+        };
+      }
+      const selectedIds = new Set(selected.map((el) => el.id));
+      if (bgMediaFile === null) {
+        return {
+          elements: elements.map((el) =>
+            selectedIds.has(el.id)
+              ? newElementWith(el, {
+                  customData: writeJayrrBgMedia(el, null),
+                })
+              : el,
+          ),
+          appState: { ...appState, ...appStateUpdates },
+          captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+        };
+      }
+      const normalized = normalizeJayrrBgMediaFile(bgMediaFile);
+      if (!normalized) {
+        return {
+          appState: {
+            ...appState,
+            ...appStateUpdates,
+            errorMessage: t("errors.unsupportedFileType"),
+          },
+          captureUpdate: CaptureUpdateAction.EVENTUALLY,
+        };
+      }
+      const fileId = await generateIdFromFile(normalized);
+      const dataURL = await getDataURL(normalized);
+      const mime = normalized.type || "application/octet-stream";
+      const target = resolveColorTarget(appState, elements, "backgroundColor");
+      return {
+        elements: elements.map((el) =>
+          selectedIds.has(el.id)
+            ? newElementWith(el, {
+                backgroundColor: COLOR_PALETTE.transparent,
+                customData: writeJayrrBgMedia(el, { fileId, mime }),
+              })
+            : el,
+        ),
+        files: { [fileId]: binaryFileForJayrrBgMedia(fileId, dataURL, mime) },
+        appState: {
+          ...appState,
+          ...appStateUpdates,
+          ...getColorTargetAppStateUpdates(target, COLOR_PALETTE.transparent),
+        },
+        captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+      };
+    }
     if (color === undefined) {
       return {
         appState: { ...appState, ...appStateUpdates },
@@ -465,6 +535,12 @@ export const actionChangeBackgroundColor = register<
         (el) => isLineElement(el) && canBecomePolygon(el.points),
       );
 
+    const withClearedMedia = (el: ExcalidrawElement) =>
+      newElementWith(el, {
+        ...getColorUpdate(el, "backgroundColor", color, elementsMap),
+        customData: writeJayrrBgMedia(el, null),
+      });
+
     if (shouldEnablePolygon) {
       const selectedElementsMap = arrayToMap(selectedElements);
       nextElements = elements.map((el) => {
@@ -472,6 +548,7 @@ export const actionChangeBackgroundColor = register<
           return newElementWith(el, {
             backgroundColor: color,
             ...toggleLinePolygonState(el, true),
+            customData: writeJayrrBgMedia(el, null),
           });
         }
         return el;
@@ -480,10 +557,7 @@ export const actionChangeBackgroundColor = register<
       nextElements = changeProperty(elements, appState, (el) =>
         // a note's label passes the pick on to the note (below)
         getColorTargetElement(el, "backgroundColor", elementsMap) === el
-          ? newElementWith(
-              el,
-              getColorUpdate(el, "backgroundColor", color, elementsMap),
-            )
+          ? withClearedMedia(el)
           : el,
       );
       // editing a note's label (no selection): the label has no fill, the
@@ -496,12 +570,7 @@ export const actionChangeBackgroundColor = register<
         getColorTargetElement(editingText, "backgroundColor", elementsMap);
       if (editingTarget && editingTarget !== editingText) {
         nextElements = nextElements.map((el) =>
-          el.id === editingTarget.id
-            ? newElementWith(
-                el,
-                getColorUpdate(el, "backgroundColor", color, elementsMap),
-              )
-            : el,
+          el.id === editingTarget.id ? withClearedMedia(el) : el,
         );
       }
     }
@@ -521,6 +590,12 @@ export const actionChangeBackgroundColor = register<
     const target = resolveColorTarget(appState, elements, "backgroundColor");
     // while editing a note's label the picker shows and sets the note's fill
     const elementsMap = app.scene.getNonDeletedElementsMap();
+    const mediaTargets = app.scene
+      .getSelectedElements(appState)
+      .filter(canUseJayrrBgMedia);
+    const mediaActive =
+      mediaTargets.length > 0 &&
+      mediaTargets.every((element) => !!readJayrrBgMedia(element));
 
     return (
       <>
@@ -534,6 +609,8 @@ export const actionChangeBackgroundColor = register<
           excludedColors={target.excludedColors}
           type="elementBackground"
           label={t("labels.background")}
+          showMediaOption
+          mediaActive={mediaActive}
           color={getFormValue(
             elements,
             app,

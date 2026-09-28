@@ -6,7 +6,7 @@ import { createPortal } from "react-dom";
 
 import type { NonDeletedExcalidrawElement } from "@excalidraw/element/types";
 
-import { useAtomValue } from "../app-jotai";
+import { useAtomValue, useSetAtom } from "../app-jotai";
 import {
   getJayrrPhoneClientId,
   peekJayrrPhoneStream,
@@ -37,6 +37,15 @@ import {
   type JayrrCamera,
 } from "./jayrrCamera";
 import { startJayrrCameraCutout } from "./jayrrCameraCutout";
+import {
+  cameraAccessoryAtom,
+  readStoredAccessory,
+  cameraFunOffsetAtom,
+  cameraFunOnAtom,
+  cameraLaserOnAtom,
+  cameraEyeLasersOnAtom,
+  startJayrrCameraFun,
+} from "./jayrrCameraFun";
 import { setJayrrCameraVideo } from "./jayrrCameraLive";
 import {
   acquireJayrrCamera,
@@ -77,7 +86,24 @@ const CameraVideo = ({
 }) => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const cutoutRef = useRef<HTMLCanvasElement | null>(null);
+  const funRef = useRef<HTMLCanvasElement | null>(null);
   const cutout = useAtomValue(cameraCutoutAtom);
+  const funOn = useAtomValue(cameraFunOnAtom);
+  const accessory = useAtomValue(cameraAccessoryAtom);
+  const setAccessory = useSetAtom(cameraAccessoryAtom);
+  useEffect(() => {
+    const video = videoRef.current;
+    if (video) {
+      setAccessory(readStoredAccessory(video.ownerDocument.defaultView));
+    }
+  }, [setAccessory]);
+  const laserOn = useAtomValue(cameraLaserOnAtom);
+  const eyeLasersOn = useAtomValue(cameraEyeLasersOnAtom);
+  const funOffset = useAtomValue(cameraFunOffsetAtom);
+  const funSettings = useRef({ accessory, offset: funOffset });
+  useEffect(() => {
+    funSettings.current = { accessory, offset: funOffset };
+  }, [accessory, funOffset]);
   const display = isJayrrDisplay(camera);
   const phone = isJayrrPhone(camera);
   const screen = isJayrrScreen(camera);
@@ -349,6 +375,41 @@ const CameraVideo = ({
     return startJayrrCameraCutout(elementId, video, canvas, cutout);
   }, [cutout, display, elementId, screen, streamReady]);
 
+  useEffect(() => {
+    const video = videoRef.current;
+    const canvas = funRef.current;
+    if (
+      !video ||
+      !canvas ||
+      (!funOn && !laserOn && !eyeLasersOn) ||
+      !localCamera ||
+      foreignCamera
+    ) {
+      return;
+    }
+    if (!streamReady) {
+      return;
+    }
+    return startJayrrCameraFun(
+      elementId,
+      video,
+      canvas,
+      () => funSettings.current.offset,
+      funOn,
+      laserOn,
+      eyeLasersOn,
+      () => funSettings.current.accessory,
+    );
+  }, [
+    elementId,
+    foreignCamera,
+    funOn,
+    laserOn,
+    eyeLasersOn,
+    localCamera,
+    streamReady,
+  ]);
+
   return (
     <>
       <video
@@ -359,6 +420,7 @@ const CameraVideo = ({
         playsInline
       />
       <canvas ref={cutoutRef} className="jayrr-camera-window__cutout" />
+      <canvas ref={funRef} className="jayrr-camera-window__fun" />
     </>
   );
 };
