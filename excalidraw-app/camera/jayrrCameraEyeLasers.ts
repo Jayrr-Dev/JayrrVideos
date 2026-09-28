@@ -106,9 +106,9 @@ const drawEyeLasers = (
   now: number,
   sinceIgnite: number,
   power: number,
+  width: number,
+  height: number,
 ) => {
-  const width = context.canvas.width;
-  const height = context.canvas.height;
   const left = { x: eyes.left.x * width, y: eyes.left.y * height };
   const right = { x: eyes.right.x * width, y: eyes.right.y * height };
   const separation = Math.hypot(right.x - left.x, right.y - left.y);
@@ -243,6 +243,8 @@ export const createEyeLasers = (video: HTMLVideoElement) => {
     draw: (
       context: CanvasRenderingContext2D,
       offset: Point & { scale?: number },
+      width: number,
+      height: number,
     ) => {
       const now = video.ownerDocument.defaultView?.performance.now();
       if (cancelled || !tracker || now === undefined || video.readyState < 2) {
@@ -297,7 +299,16 @@ export const createEyeLasers = (video: HTMLVideoElement) => {
         shown = power === 0 ? null : shown;
         return;
       }
-      drawEyeLasers(context, shown, offset, now, now - ignitedAt, power);
+      drawEyeLasers(
+        context,
+        shown,
+        offset,
+        now,
+        now - ignitedAt,
+        power,
+        width,
+        height,
+      );
     },
     stop: () => {
       cancelled = true;

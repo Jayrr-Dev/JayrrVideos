@@ -27,6 +27,57 @@ export const setJayrrCameraFun = (
 export const getJayrrCameraFun = (elementId: string) =>
   funs.get(elementId) ?? null;
 
+/**
+ * Lasers are painted on their own oversized canvas so they can shoot past the
+ * edge of the camera box. `margin` is the extra source-pixel border on every
+ * side; the canvas holds `scale` canvas pixels per source pixel.
+ */
+export type JayrrCameraBeams = {
+  canvas: HTMLCanvasElement;
+  margin: number;
+  scale: number;
+};
+
+const beams = new Map<string, JayrrCameraBeams>();
+
+export const getJayrrCameraBeams = (elementId: string) =>
+  beams.get(elementId) ?? null;
+
+const BEAM_MARGIN = 0.75;
+const BEAM_MAX_SIDE = 1280;
+
+const paintBeams = (
+  elementId: string,
+  canvas: HTMLCanvasElement,
+  width: number,
+  height: number,
+  draw: (context: CanvasRenderingContext2D) => void,
+) => {
+  const margin = Math.round(Math.max(width, height) * BEAM_MARGIN);
+  const totalW = width + margin * 2;
+  const totalH = height + margin * 2;
+  const scale = Math.min(1, BEAM_MAX_SIDE / Math.max(totalW, totalH));
+  const pixelsW = Math.ceil(totalW * scale);
+  const pixelsH = Math.ceil(totalH * scale);
+  if (canvas.width !== pixelsW || canvas.height !== pixelsH) {
+    canvas.width = pixelsW;
+    canvas.height = pixelsH;
+  }
+  const context = canvas.getContext("2d");
+  if (!context) {
+    return;
+  }
+  context.setTransform(1, 0, 0, 1, 0, 0);
+  context.clearRect(0, 0, pixelsW, pixelsH);
+  context.setTransform(scale, 0, 0, scale, margin * scale, margin * scale);
+  draw(context);
+  context.setTransform(1, 0, 0, 1, 0, 0);
+  const published = beams.get(elementId);
+  if (!published || published.margin !== margin || published.scale !== scale) {
+    beams.set(elementId, { canvas, margin, scale });
+  }
+};
+
 const readStoredFunOn = () => {
   try {
     return (
@@ -438,7 +489,6 @@ const paintFun = (
   canvas: HTMLCanvasElement,
   getOffset: (target: CameraFunTarget) => CameraFunOffset,
   glassesOn: boolean,
-  laserOn: boolean,
   accessory: CameraAccessory,
 ) => {
   const width = video.videoWidth;
@@ -466,9 +516,6 @@ const paintFun = (
     } else {
       drawCameraAccessory(context, accessory, face, offset);
     }
-  }
-  if (laserOn) {
-    drawMouthLaser(context, width, height, face, getOffset("laser"));
   }
   return true;
 };
@@ -554,6 +601,8 @@ export const startJayrrCameraFun = (
   let cancelled = false;
   let stopLoop: StopFun = () => undefined;
   const eyeLasers = eyeLasersOn ? createEyeLasers(video) : null;
+  const beamCanvas =
+    laserOn || eyeLasersOn ? video.ownerDocument.createElement("canvas") : null;
   const needsTracker = glassesOn || laserOn;
   if (needsTracker) {
     trackerUsers += 1;
@@ -586,15 +635,35 @@ export const startJayrrCameraFun = (
               canvas,
               getOffset,
               glassesOn,
-              laserOn,
               getAccessory(),
             )
           ) {
             return;
           }
-          const context = canvas.getContext("2d");
-          if (context) {
-            eyeLasers?.draw(context, getOffset("eyeLasers"));
+          if (beamCanvas) {
+            paintBeams(
+              elementId,
+              beamCanvas,
+              canvas.width,
+              canvas.height,
+              (context) => {
+                if (laserOn) {
+                  drawMouthLaser(
+                    context,
+                    canvas.width,
+                    canvas.height,
+                    face,
+                    getOffset("laser"),
+                  );
+                }
+                eyeLasers?.draw(
+                  context,
+                  getOffset("eyeLasers"),
+                  canvas.width,
+                  canvas.height,
+                );
+              },
+            );
           }
           if (published) {
             return;
@@ -610,6 +679,7 @@ export const startJayrrCameraFun = (
     cancelled = true;
     stopLoop();
     setJayrrCameraFun(elementId, null);
+    beams.delete(elementId);
     eyeLasers?.stop();
     if (needsTracker) {
       trackerUsers = Math.max(0, trackerUsers - 1);

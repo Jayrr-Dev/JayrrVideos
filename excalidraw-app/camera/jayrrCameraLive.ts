@@ -21,7 +21,7 @@ import {
   type JayrrObjectFit,
 } from "./jayrrCamera";
 import { getJayrrCameraCutout } from "./jayrrCameraCutout";
-import { getJayrrCameraFun } from "./jayrrCameraFun";
+import { getJayrrCameraBeams, getJayrrCameraFun } from "./jayrrCameraFun";
 import { desktopCropElementIdAtom } from "./jayrrDisplayCrop";
 
 const videos = new Map<string, HTMLVideoElement>();
@@ -78,6 +78,9 @@ const clipFill = (
   context.clip();
 };
 
+/** Where source pixel (0, 0) landed in the box, and the source-to-box scale. */
+type Placement = { scale: number; x: number; y: number };
+
 const drawFitted = (
   context: CanvasRenderingContext2D,
   source: CanvasImageSource,
@@ -90,7 +93,7 @@ const drawFitted = (
   cropY = 0,
   cropW = sourceW,
   cropH = sourceH,
-) => {
+): Placement => {
   const sx = Math.max(0, cropX);
   const sy = Math.max(0, cropY);
   const sw = Math.max(1, Math.min(cropW, sourceW - sx));
@@ -121,6 +124,11 @@ const drawFitted = (
     drawW,
     drawH,
   );
+  return {
+    scale: drawW / sw,
+    x: (width - drawW) / 2 - sx * (drawW / sw),
+    y: (height - drawH) / 2 - sy * (drawH / sh),
+  };
 };
 
 const wrapCaption = (
@@ -210,18 +218,35 @@ export const paintJayrrCameraLive = (
   const x = element.x + renderState.offset.x + appState.scrollX;
   const y = element.y + renderState.offset.y + appState.scrollY;
 
-  context.save();
-  try {
+  const mirrored = video.dataset.jayrrMirror === "1";
+  const enterBox = () => {
     context.translate(x + element.width / 2, y + element.height / 2);
     context.rotate(element.angle);
     context.translate(-element.width / 2 + pad, -element.height / 2 + pad);
-    clipFill(context, element, pad, width, height);
-    const look = readCameraLook(camera);
-    context.filter = cameraLookFilter(look);
-    if (video.dataset.jayrrMirror === "1") {
+  };
+  const enterPicture = (zoom: number) => {
+    if (mirrored) {
       context.translate(width, 0);
       context.scale(-1, 1);
     }
+    if (zoom < JAYRR_CAMERA_ZOOM_DEFAULT) {
+      const scale = zoom / JAYRR_CAMERA_ZOOM_DEFAULT;
+      context.translate(width / 2, height / 2);
+      context.scale(scale, scale);
+      context.translate(-width / 2, -height / 2);
+    }
+  };
+  let placement: Placement | null = null;
+  let zoom = JAYRR_CAMERA_ZOOM_DEFAULT;
+
+  context.save();
+  try {
+    enterBox();
+    clipFill(context, element, pad, width, height);
+    const look = readCameraLook(camera);
+    zoom = look.zoom;
+    context.filter = cameraLookFilter(look);
+    enterPicture(zoom);
     const fun = getJayrrCameraFun(element.id);
     const cutout = getJayrrCameraCutout(element.id);
     let source: CanvasImageSource = video;
@@ -250,13 +275,8 @@ export const paintJayrrCameraLive = (
       sy += (sh * (1 - scale)) / 2;
       sw *= scale;
       sh *= scale;
-    } else if (look.zoom < JAYRR_CAMERA_ZOOM_DEFAULT) {
-      const scale = look.zoom / JAYRR_CAMERA_ZOOM_DEFAULT;
-      context.translate(width / 2, height / 2);
-      context.scale(scale, scale);
-      context.translate(-width / 2, -height / 2);
     }
-    drawFitted(
+    placement = drawFitted(
       context,
       source,
       sourceW,
@@ -272,6 +292,29 @@ export const paintJayrrCameraLive = (
     paintCaption(context, readCaption(element.id), width, height);
   } catch {
     // A bad video frame must not wipe the rest of the scene.
+  }
+  context.restore();
+
+  // Lasers skip the box clip so they can shoot out past its edge.
+  const beams = getJayrrCameraBeams(element.id);
+  if (!beams || !placement) {
+    return;
+  }
+  context.save();
+  try {
+    enterBox();
+    enterPicture(zoom);
+    const k = placement.scale;
+    context.imageSmoothingEnabled = true;
+    context.drawImage(
+      beams.canvas,
+      placement.x - beams.margin * k,
+      placement.y - beams.margin * k,
+      (beams.canvas.width / beams.scale) * k,
+      (beams.canvas.height / beams.scale) * k,
+    );
+  } catch {
+    // A bad beam frame must not wipe the rest of the scene.
   }
   context.restore();
 };
