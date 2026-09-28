@@ -1,7 +1,7 @@
 import { atom } from "../app-jotai";
 import { STORAGE_KEYS } from "../app_constants";
 
-export type LibrariesView = "record" | "project" | "scene" | "parts";
+export type LibrariesView = "record" | "project" | "scene" | "parts" | "sound";
 
 export type DocsView = LibrariesView;
 
@@ -10,6 +10,7 @@ const LIBRARY_VIEWS: readonly LibrariesView[] = [
   "project",
   "scene",
   "parts",
+  "sound",
 ];
 
 const isLibrariesView = (value: string | null): value is LibrariesView =>

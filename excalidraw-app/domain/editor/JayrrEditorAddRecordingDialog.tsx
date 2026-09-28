@@ -327,7 +327,7 @@ export const JayrrEditorAddRecordingDialog = ({
   return (
     <Dialog
       className="jayrr-editor-add-recording"
-      size={560}
+      size={960}
       onCloseRequest={onClose}
       title={
         <span className="jayrr-editor-add-recording__title-row">

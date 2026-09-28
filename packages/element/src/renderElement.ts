@@ -1294,6 +1294,11 @@ const drawElement = (
           appState.theme === THEME.DARK,
         );
 
+        if (renderConfig.highlightedFrameIds?.has(element.id)) {
+          context.strokeStyle =
+            appState.theme === THEME.DARK ? "#a8a5ff" : "#6965db";
+        }
+
         // TODO change later to only affect AI frames
         if (isMagicFrameElement(element)) {
           context.strokeStyle =

@@ -50,6 +50,8 @@ import { FilledButton, Island, Switch, Tooltip } from "../components/ui";
 import "../components/ui/JayrrLibraryMenu.scss";
 import { isConvexLinked } from "../convexClient";
 
+import { STORAGE_KEYS } from "../app_constants";
+
 import {
   defaultPresentTranslation,
   isPresentMove,
@@ -119,6 +121,32 @@ import {
 } from "./presentTranslation";
 
 import "./JayrrPresentPanel.scss";
+
+const readCollapsedFrames = (): Record<string, boolean> => {
+  try {
+    const raw = localStorage.getItem(
+      STORAGE_KEYS.LOCAL_STORAGE_PRESENT_COLLAPSED_FRAMES,
+    );
+    const parsed = raw ? JSON.parse(raw) : null;
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
+const writeCollapsedFrames = (collapsed: Record<string, boolean>) => {
+  try {
+    const open = Object.fromEntries(
+      Object.entries(collapsed).filter(([, value]) => value),
+    );
+    localStorage.setItem(
+      STORAGE_KEYS.LOCAL_STORAGE_PRESENT_COLLAPSED_FRAMES,
+      JSON.stringify(open),
+    );
+  } catch {
+    // storage unavailable; collapse state just won't persist
+  }
+};
 
 type ObjectOrderMap = Record<string, string[]>;
 
@@ -1493,9 +1521,8 @@ export const JayrrPresentPanel = ({
   const [frameIds, setFrameIds] = useState<string[]>([]);
   const [objectIds, setObjectIds] = useState<ObjectOrderMap>({});
   const [activeId, setActiveId] = useState<UniqueIdentifier | null>(null);
-  const [collapsedFrameIds, setCollapsedFrameIds] = useState<
-    Record<string, boolean>
-  >({});
+  const [collapsedFrameIds, setCollapsedFrameIds] =
+    useState<Record<string, boolean>>(readCollapsedFrames);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [draftName, setDraftName] = useState("");
   const skipClickRef = useRef(false);
@@ -1935,7 +1962,7 @@ export const JayrrPresentPanel = ({
   return (
     <div className="layer-ui__library jayrr-library jayrr-present">
       <div className="jayrr-library__header">
-        <h2 className="jayrr-library__title">Present</h2>
+        <h2 className="jayrr-library__title">Slides</h2>
         <span className="jayrr-present__sr">
           Nested reveal order for frames and the shapes inside them. Drag a
           block to reorder. Right-click a row to set its transition. Text rows
@@ -2031,10 +2058,14 @@ export const JayrrPresentPanel = ({
                       zoomPercent={frame.zoomPercent}
                       onSelect={() => selectId(frame.id)}
                       onToggleCollapse={() => {
-                        setCollapsedFrameIds((current) => ({
-                          ...current,
-                          [frame.id]: !current[frame.id],
-                        }));
+                        setCollapsedFrameIds((current) => {
+                          const next = {
+                            ...current,
+                            [frame.id]: !current[frame.id],
+                          };
+                          writeCollapsedFrames(next);
+                          return next;
+                        });
                       }}
                       onStartRename={() => startRename(frame.id, frame.label)}
                       onDraftChange={setDraftName}

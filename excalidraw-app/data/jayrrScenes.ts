@@ -1,4 +1,5 @@
 import { IMAGE_MIME_TYPES, MIME_TYPES } from "@excalidraw/common";
+import { getCommonBounds } from "@excalidraw/element";
 import {
   CaptureUpdateAction,
   exportToCanvas,
@@ -6,6 +7,7 @@ import {
   restoreAppState,
   restoreElements,
   serializeAsJSON,
+  zoomToFitBounds,
 } from "@excalidraw/excalidraw";
 import { dataURLToFile, getDataURL } from "@excalidraw/excalidraw/data/blob";
 
@@ -30,6 +32,9 @@ import type { Id } from "../../convex/_generated/dataModel";
 export const activeSceneIdAtom = atom<Id<"scenes"> | null>(
   readStoredActiveSceneId(),
 );
+
+// Scene that was active when this tab started sharing; null when not hosting.
+export const collabSceneIdAtom = atom<Id<"scenes"> | null>(null);
 
 export const openSceneFolderIdAtom = atom<Id<"sceneFolders"> | null>(
   readStoredOpenSceneFolderId(),
@@ -348,10 +353,24 @@ export const applySceneJsonToCanvas = (
 
   const elements = restoreElements(data.elements, null);
   const appState = restoreAppState(data.appState, canvas.getAppState());
+  // Saved scroll/zoom can leave the viewport on empty canvas, so frame the
+  // content on load instead.
+  const visible = elements.filter((element) => !element.isDeleted);
+  const viewport = visible.length
+    ? zoomToFitBounds({
+        bounds: getCommonBounds(visible),
+        appState: { ...canvas.getAppState(), ...appState },
+      }).appState
+    : null;
   canvas.updateScene({
     elements,
     appState: {
       ...appState,
+      ...(viewport && {
+        scrollX: viewport.scrollX,
+        scrollY: viewport.scrollY,
+        zoom: viewport.zoom,
+      }),
       isLoading: false,
     },
     captureUpdate: CaptureUpdateAction.IMMEDIATELY,

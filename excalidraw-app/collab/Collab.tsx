@@ -92,6 +92,8 @@ import {
   importUsernameFromLocalStorage,
   saveUsernameToLocalStorage,
 } from "../data/localStorage";
+import { api, convexClient } from "../convexClient";
+import { activeSceneIdAtom, collabSceneIdAtom } from "../data/jayrrScenes";
 import { resetBrowserStateVersions } from "../data/tabSync";
 import {
   getAccountCollabAvatar,
@@ -318,6 +320,16 @@ class Collab extends PureComponent<CollabProps, CollabState> {
   isCollaborating = () => appJotaiStore.get(isCollaboratingAtom)!;
 
   private setIsCollaborating = (isCollaborating: boolean) => {
+    const wasCollaborating = appJotaiStore.get(isCollaboratingAtom);
+    if (isCollaborating && !wasCollaborating) {
+      // Pin the live badge to the scene that was open when sharing began.
+      appJotaiStore.set(
+        collabSceneIdAtom,
+        appJotaiStore.get(activeSceneIdAtom),
+      );
+    } else if (!isCollaborating) {
+      appJotaiStore.set(collabSceneIdAtom, null);
+    }
     appJotaiStore.set(isCollaboratingAtom, isCollaborating);
   };
 
@@ -536,6 +548,24 @@ class Collab extends PureComponent<CollabProps, CollabState> {
 
   private fallbackInitializationHandler: null | (() => any) = null;
 
+  /** Saved scenes keep one permanent room; unsaved canvases get a fresh one. */
+  private resolveHostRoom = async () => {
+    const candidate = await generateCollaborationLinkData();
+    const sceneId = appJotaiStore.get(activeSceneIdAtom);
+    if (!sceneId || !convexClient) {
+      return candidate;
+    }
+    try {
+      return await convexClient.mutation(api.scenes.ensureCollabRoom, {
+        sceneId,
+        ...candidate,
+      });
+    } catch (error) {
+      console.warn("Could not load the scene's room, using a new one", error);
+      return candidate;
+    }
+  };
+
   startCollaboration = async (
     existingRoomLinkData: null | { roomId: string; roomKey: string },
   ) => {
@@ -568,7 +598,7 @@ class Collab extends PureComponent<CollabProps, CollabState> {
     if (existingRoomLinkData) {
       ({ roomId, roomKey } = existingRoomLinkData);
     } else {
-      ({ roomId, roomKey } = await generateCollaborationLinkData());
+      ({ roomId, roomKey } = await this.resolveHostRoom());
       window.history.pushState(
         {},
         APP_NAME,

@@ -936,6 +936,26 @@ export const idsForPresentObject = (
   return ids;
 };
 
+/** Slide number (1-based, deck order) for each frame shown in Present. */
+let lastNumberedElements: readonly NonDeletedExcalidrawElement[] | null = null;
+let lastNumbers: ReadonlyMap<string, number> = new Map();
+
+export const getPresentFrameNumbers = (
+  elements: readonly NonDeletedExcalidrawElement[],
+): ReadonlyMap<string, number> => {
+  // stable result per elements array, so memoized canvases can shallow-compare
+  if (elements === lastNumberedElements) {
+    return lastNumbers;
+  }
+  const numbers = new Map<string, number>();
+  buildPresentDeck(elements).frames.forEach((frame, index) => {
+    numbers.set(frame.id, index + 1);
+  });
+  lastNumberedElements = elements;
+  lastNumbers = numbers;
+  return numbers;
+};
+
 export const buildPresentDeck = (
   elements: readonly NonDeletedExcalidrawElement[],
 ): PresentDeck => {

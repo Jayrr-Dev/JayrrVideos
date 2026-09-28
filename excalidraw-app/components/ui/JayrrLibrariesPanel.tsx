@@ -8,6 +8,7 @@ import {
 } from "../../present/docsView";
 import { JayrrPresentRecordingsPanel } from "../../present/JayrrPresentRecordingsPanel";
 
+import { JayrrSoundPanel } from "./JayrrSoundPanel";
 import { JayrrLibraryMenu } from "./JayrrLibraryMenu";
 import { JayrrSceneMenu } from "./JayrrSceneMenu";
 import { LibrariesShell } from "./librariesChrome";
@@ -18,6 +19,7 @@ const LIBRARY_TABS: { id: LibrariesView; label: string }[] = [
   { id: "record", label: "Record" },
   { id: "project", label: "Project" },
   { id: "parts", label: "Parts" },
+  { id: "sound", label: "Sound" },
 ];
 
 export const JayrrLibrariesPanel = () => {
@@ -36,6 +38,8 @@ export const JayrrLibrariesPanel = () => {
     body = <JayrrSceneMenu />;
   } else if (view === "parts") {
     body = <JayrrLibraryMenu />;
+  } else if (view === "sound") {
+    body = <JayrrSoundPanel />;
   }
 
   return (

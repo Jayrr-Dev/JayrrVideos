@@ -1,6 +1,6 @@
 .excalidraw {
   .jayrr-editor-add-recording .Dialog__content {
-    max-height: min(36rem, 78vh);
+    max-height: min(46rem, 88vh);
   }
 
   .jayrr-editor-add-recording.Dialog--fullscreen .Island {
@@ -79,7 +79,7 @@
     flex-direction: column;
     gap: 0.75rem;
     min-height: 12rem;
-    max-height: min(26rem, 52vh);
+    max-height: min(36rem, 70vh);
     overflow: auto;
   }
 
@@ -91,7 +91,7 @@
 
   .jayrr-editor-add-recording .jayrr-present__recordings-list,
   .jayrr-editor-add-recording .jayrr-scene-grid {
-    grid-template-columns: repeat(auto-fill, minmax(14.5rem, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
   }
 
   .jayrr-editor-add-recording

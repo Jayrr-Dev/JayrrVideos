@@ -451,8 +451,8 @@ export const JayrrPresentHost = ({
               <DefaultSidebar.TabTriggers>
                 <Sidebar.TabTrigger
                   tab={JAYRR_PRESENT_TAB}
-                  title="Present"
-                  aria-label="Present"
+                  title="Slides"
+                  aria-label="Slides"
                 >
                   {presentationIcon}
                 </Sidebar.TabTrigger>

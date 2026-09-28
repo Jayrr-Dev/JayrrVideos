@@ -66,6 +66,7 @@ export const STORAGE_KEYS = {
   LOCAL_STORAGE_OPEN_SCENE_FOLDER_ID: "jayrr-open-scene-folder-id",
   LOCAL_STORAGE_ACTIVE_SCENE_ID: "jayrr-active-scene-id",
   LOCAL_STORAGE_PRESENT_HIDE_FRAMES: "jayrr-present-hide-frames",
+  LOCAL_STORAGE_PRESENT_COLLAPSED_FRAMES: "jayrr-present-collapsed-frames",
   LOCAL_STORAGE_PRESENT_MOTION: "jayrr-present-motion",
   LOCAL_STORAGE_PRESENT_CUSTOM_CURSOR: "jayrr-present-custom-cursor",
   LOCAL_STORAGE_PRESENT_INTERACT: "jayrr-present-interact",

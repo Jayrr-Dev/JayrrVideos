@@ -172,6 +172,58 @@ export const get = query({
   },
 });
 
+const collabRoom = v.object({
+  roomId: v.string(),
+  roomKey: v.string(),
+});
+
+/**
+ * Returns the scene's permanent collab room, storing the candidate room the
+ * first time the scene is shared.
+ */
+export const ensureCollabRoom = mutation({
+  args: {
+    sceneId: v.id("scenes"),
+    roomId: v.string(),
+    roomKey: v.string(),
+  },
+  returns: collabRoom,
+  handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
+    const scene = await getOwnedScene(ctx, args.sceneId, user._id);
+    if (scene.collabRoomId && scene.collabRoomKey) {
+      return { roomId: scene.collabRoomId, roomKey: scene.collabRoomKey };
+    }
+    if (
+      !/^[0-9a-f]{20}$/.test(args.roomId) ||
+      !/^[a-zA-Z0-9_-]{22}$/.test(args.roomKey)
+    ) {
+      throw new Error("Invalid room link");
+    }
+    await ctx.db.patch(scene._id, {
+      collabRoomId: args.roomId,
+      collabRoomKey: args.roomKey,
+    });
+    return { roomId: args.roomId, roomKey: args.roomKey };
+  },
+});
+
+/** The current user's scene that owns this collab room, if any. */
+export const findByCollabRoom = query({
+  args: {
+    roomId: v.string(),
+  },
+  returns: v.union(v.id("scenes"), v.null()),
+  handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
+    const rows = await ctx.db
+      .query("scenes")
+      .withIndex("by_collabRoomId", (q) => q.eq("collabRoomId", args.roomId))
+      .take(10);
+    return rows.find((row) => row.userId === user._id)?._id ?? null;
+  },
+});
+
 export const create = mutation({
   args: {
     name: v.string(),

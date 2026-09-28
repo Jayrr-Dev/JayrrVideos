@@ -36,16 +36,32 @@
   }
 
   .jayrr-checkbox-embed__box:hover {
-    border-color: var(--color-primary);
+    border-color: var(--jayrr-checkbox-color, var(--color-primary));
   }
 
   .jayrr-checkbox-embed.is-checked .jayrr-checkbox-embed__box {
-    border-color: var(--color-primary);
-    background: var(--color-primary);
+    border-color: var(--jayrr-checkbox-color, var(--color-primary));
+    background: var(--jayrr-checkbox-color, var(--color-primary));
 
     svg {
       opacity: 1;
       transform: scale(1);
+    }
+  }
+
+  .jayrr-checkbox-color {
+    display: inline-flex;
+    margin-left: auto;
+    cursor: pointer;
+
+    input[type="color"] {
+      width: 24px;
+      height: 24px;
+      padding: 0;
+      border: 1px solid var(--sidebar-border-color);
+      border-radius: 0.35rem;
+      background: none;
+      cursor: pointer;
     }
   }
 

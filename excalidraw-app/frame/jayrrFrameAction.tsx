@@ -231,7 +231,7 @@ const FramePanel = ({
           onChange({ hideFromPresent: event.target.checked })
         }
       />
-      Hide from Present
+      Hide Slide
     </label>
   );
 

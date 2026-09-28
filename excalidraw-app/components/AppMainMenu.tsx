@@ -207,7 +207,7 @@ export const AppMainMenu: React.FC<{
             });
           }}
         >
-          Present
+          Slides
         </MainMenu.Item>
         <MainMenu.Item
           icon={playerPlayIcon}

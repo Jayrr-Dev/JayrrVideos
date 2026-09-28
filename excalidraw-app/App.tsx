@@ -98,6 +98,7 @@ import { JayrrSceneMenu } from "./components/ui";
 import { JayrrLibrariesPanel } from "./components/ui/JayrrLibrariesPanel";
 import CustomStats from "./CustomStats";
 import { JayrrPresentHost } from "./present/JayrrPresentHost";
+import { getPresentFrameNumbers } from "./present/buildPresentDeck";
 
 import {
   exportToBackend,
@@ -1019,6 +1020,7 @@ const ExcalidrawWrapper = () => {
         validateEmbeddable={canEmbedPastedLink}
         renderEmbeddable={renderEmbeddable}
         renderHyperlinkPopup={renderHyperlinkPopup}
+        getFrameNumbers={getPresentFrameNumbers}
         onPaste={onPaste}
         viewportStatusFrame={viewportStatusFrame}
         userToFollow={userToFollow}

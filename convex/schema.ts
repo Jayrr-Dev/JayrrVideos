@@ -35,11 +35,15 @@ export default defineSchema({
     name: v.string(),
     sceneJson: v.string(),
     previewDataUrl: v.optional(v.string()),
+    // Permanent live-collab room for this scene (created on first share).
+    collabRoomId: v.optional(v.string()),
+    collabRoomKey: v.optional(v.string()),
     updatedAt: v.number(),
   })
     .index("by_ownerKey", ["ownerKey"])
     .index("by_userId", ["userId"])
-    .index("by_folder", ["folderId"]),
+    .index("by_folder", ["folderId"])
+    .index("by_collabRoomId", ["collabRoomId"]),
 
   sceneFiles: defineTable({
     userId: v.id("users"),

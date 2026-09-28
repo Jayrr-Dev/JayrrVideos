@@ -13,11 +13,12 @@ import {
 } from "@excalidraw/excalidraw/components/icons";
 
 import { appJotaiStore, useAtom, useAtomValue } from "../../app-jotai";
-import { isCollaboratingAtom } from "../../collab/Collab";
+import { activeRoomLinkAtom, isCollaboratingAtom } from "../../collab/Collab";
 import { api, convexClient, isConvexLinked } from "../../convexClient";
 import {
   activeSceneIdAtom,
   applySavedSceneToCanvas,
+  collabSceneIdAtom,
   buildScenePreviewDataUrl,
   convexErrorMessage,
   nextSceneName,
@@ -63,6 +64,13 @@ const hex6 = (value: string) => {
 };
 
 let draggingSceneId: Id<"scenes"> | null = null;
+
+const RE_ROOM_ID = /#room=([a-zA-Z0-9_-]+),/;
+
+/** True when the canvas is a live room that isn't the active saved scene. */
+const isCanvasForeignRoom = () =>
+  appJotaiStore.get(isCollaboratingAtom) &&
+  appJotaiStore.get(activeSceneIdAtom) !== appJotaiStore.get(collabSceneIdAtom);
 
 const readDraggedSceneId = (dataTransfer: DataTransfer) => {
   const fromTransfer = dataTransfer.getData(JAYRR_SCENE_DRAG);
@@ -168,6 +176,7 @@ const JayrrSceneMenuConnected = () => {
   const lastSavedJsonRef = useRef<string | null>(null);
   const lastErrorRef = useRef<string | null>(null);
   const didHydrateActiveSceneRef = useRef(false);
+  const hydrateRunRef = useRef(0);
 
   const { isAuthenticated } = useConvexAuth();
   const folders = useQuery(
@@ -199,6 +208,7 @@ const JayrrSceneMenuConnected = () => {
     ? folders?.find((folder) => folder._id === activeScene.folderId)?.name
     : undefined;
   const isCollaborating = useAtomValue(isCollaboratingAtom);
+  const collabSceneId = useAtomValue(collabSceneIdAtom);
   const createScene = useMutation(api.scenes.create);
   const updateScene = useMutation(api.scenes.update);
   const renameScene = useMutation(api.scenes.rename);
@@ -327,7 +337,7 @@ const JayrrSceneMenuConnected = () => {
       return;
     }
     return excalidrawAPI.onChange(() => {
-      if (skipAutosaveRef.current) {
+      if (skipAutosaveRef.current || isCanvasForeignRoom()) {
         return;
       }
       const sceneId = appJotaiStore.get(activeSceneIdAtom);
@@ -349,7 +359,7 @@ const JayrrSceneMenuConnected = () => {
   useEffect(() => {
     const flush = () => {
       const sceneId = appJotaiStore.get(activeSceneIdAtom);
-      if (!sceneId || skipAutosaveRef.current) {
+      if (!sceneId || skipAutosaveRef.current || isCanvasForeignRoom()) {
         return;
       }
       if (timerRef.current !== null) {
@@ -365,7 +375,7 @@ const JayrrSceneMenuConnected = () => {
         window.clearTimeout(timerRef.current);
       }
       const sceneId = appJotaiStore.get(activeSceneIdAtom);
-      if (sceneId && !skipAutosaveRef.current) {
+      if (sceneId && !skipAutosaveRef.current && !isCanvasForeignRoom()) {
         void enqueuePersistRef.current(sceneId).catch(() => undefined);
       }
     };
@@ -379,7 +389,14 @@ const JayrrSceneMenuConnected = () => {
       return;
     }
     const client = convexClient;
-    if (!activeSceneId || !client) {
+    // In a live room the room is the source of truth; don't paint a saved
+    // scene over it.
+    if (
+      !activeSceneId ||
+      !client ||
+      appJotaiStore.get(isCollaboratingAtom) ||
+      RE_ROOM_ID.test(window.location.hash)
+    ) {
       didHydrateActiveSceneRef.current = true;
       skipAutosaveRef.current = false;
       return;
@@ -387,6 +404,8 @@ const JayrrSceneMenuConnected = () => {
 
     didHydrateActiveSceneRef.current = true;
     skipAutosaveRef.current = true;
+    hydrateRunRef.current += 1;
+    const run = hydrateRunRef.current;
     let cancelled = false;
 
     const hydrate = async () => {
@@ -419,7 +438,9 @@ const JayrrSceneMenuConnected = () => {
           });
         }
       } finally {
-        if (!cancelled) {
+        // A cancelled run must still release the autosave lock unless a newer
+        // run took over; otherwise edits are never saved and revert on reload.
+        if (run === hydrateRunRef.current) {
           skipAutosaveRef.current = false;
         }
       }
@@ -433,6 +454,44 @@ const JayrrSceneMenuConnected = () => {
       }
     };
   }, [activeSceneId, excalidrawAPI, isAuthenticated]);
+
+  // After a reload into a room link, rebind the room to the scene that owns it
+  // so the host keeps saving into their scene.
+  const activeRoomLink = useAtomValue(activeRoomLinkAtom);
+  useEffect(() => {
+    const client = convexClient;
+    if (!client || !isAuthenticated || !isCollaborating || collabSceneId) {
+      return;
+    }
+    const roomId = (activeRoomLink ?? window.location.href).match(
+      RE_ROOM_ID,
+    )?.[1];
+    if (!roomId) {
+      return;
+    }
+    let cancelled = false;
+    void client
+      .query(api.scenes.findByCollabRoom, { roomId })
+      .then((sceneId) => {
+        if (cancelled || !sceneId || !appJotaiStore.get(isCollaboratingAtom)) {
+          return;
+        }
+        appJotaiStore.set(collabSceneIdAtom, sceneId);
+        setActiveSceneId(sceneId);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [activeRoomLink, collabSceneId, isAuthenticated, isCollaborating]);
+
+  const blockSceneSwitchWhileLive = () => {
+    if (!appJotaiStore.get(isCollaboratingAtom)) {
+      return false;
+    }
+    toast("Stop the live session to switch scenes");
+    return true;
+  };
 
   const clearPendingAutosave = () => {
     if (timerRef.current !== null) {
@@ -519,7 +578,7 @@ const JayrrSceneMenuConnected = () => {
   };
 
   const onNewScene = async () => {
-    if (!excalidrawAPI || busy) {
+    if (!excalidrawAPI || busy || blockSceneSwitchWhileLive()) {
       return;
     }
     setBusy(true);
@@ -566,7 +625,7 @@ const JayrrSceneMenuConnected = () => {
     if (sceneId === activeSceneId && sceneBoundRef.current) {
       return;
     }
-    if (!convexClient) {
+    if (!convexClient || blockSceneSwitchWhileLive()) {
       return;
     }
     clearPendingAutosave();
@@ -740,12 +799,15 @@ const JayrrSceneMenuConnected = () => {
     }, 50);
   };
 
+  const guestInRoom = isCollaborating && activeSceneId !== collabSceneId;
+
   const sceneStatus = (
     <SceneStatus
-      sceneName={activeScene?.name}
+      sceneName={guestInRoom ? undefined : activeScene?.name}
+      emptyLabel={guestInRoom ? "Joined live room" : undefined}
       folderName={activeFolderName}
       collaborating={isCollaborating}
-      onJump={activeScene ? jumpToActiveScene : undefined}
+      onJump={activeScene && !guestInRoom ? jumpToActiveScene : undefined}
     />
   );
 
@@ -845,7 +907,7 @@ const JayrrSceneMenuConnected = () => {
             <SceneGrid
               scenes={scenes}
               activeSceneId={activeSceneId}
-              collaborating={isCollaborating}
+              liveSceneId={isCollaborating ? collabSceneId : null}
               busy={busy}
               folders={folders}
               renameInputRef={renameInputRef}
@@ -926,7 +988,7 @@ const JayrrSceneMenuConnected = () => {
                 key={scene._id}
                 scene={scene}
                 active={scene._id === activeSceneId}
-                live={isCollaborating && scene._id === activeSceneId}
+                live={isCollaborating && scene._id === collabSceneId}
                 busy={busy}
                 folders={folders}
                 renameInputRef={renameInputRef}
@@ -1020,11 +1082,13 @@ const SceneHeaderActions = ({
 
 const SceneStatus = ({
   sceneName,
+  emptyLabel = "Unsaved canvas",
   folderName,
   collaborating,
   onJump,
 }: {
   sceneName?: string;
+  emptyLabel?: string;
   folderName?: string;
   collaborating: boolean;
   onJump?: () => void;
@@ -1054,7 +1118,7 @@ const SceneStatus = ({
             : "jayrr-scene-status__name is-empty"
         }
       >
-        {sceneName ?? "Unsaved canvas"}
+        {sceneName ?? emptyLabel}
         {sceneName && folderName ? (
           <span className="jayrr-scene-status__folder">{` in ${folderName}`}</span>
         ) : null}
@@ -1098,7 +1162,7 @@ type FolderRow = {
 const SceneGrid = ({
   scenes,
   activeSceneId,
-  collaborating,
+  liveSceneId,
   busy,
   folders,
   renameInputRef,
@@ -1116,7 +1180,7 @@ const SceneGrid = ({
 }: {
   scenes: SceneRow[];
   activeSceneId: Id<"scenes"> | null;
-  collaborating: boolean;
+  liveSceneId: Id<"scenes"> | null;
   busy: boolean;
   folders: FolderRow[];
   renameInputRef: RefObject<HTMLInputElement | null>;
@@ -1141,7 +1205,7 @@ const SceneGrid = ({
         key={scene._id}
         scene={scene}
         active={scene._id === activeSceneId}
-        live={collaborating && scene._id === activeSceneId}
+        live={scene._id === liveSceneId}
         busy={busy}
         folders={folders}
         renameInputRef={renameInputRef}

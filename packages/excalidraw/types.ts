@@ -1056,6 +1056,13 @@ export interface ExcalidrawProps {
   aiEnabled?: boolean;
   showDeprecatedFonts?: boolean;
   renderScrollbars?: boolean;
+  /**
+   * Maps frame ids to a number shown before the frame's name on the canvas
+   * (e.g. its slide position). Frames missing from the map get no number.
+   */
+  getFrameNumbers?: (
+    elements: readonly NonDeletedExcalidrawElement[],
+  ) => ReadonlyMap<string, number>;
   viewportStatusFrame?: ViewportStatusFrame | null;
   /**
    * Rendered inside the UserList "who's here" dropdown (desktop) and inline

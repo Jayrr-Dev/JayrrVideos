@@ -42,6 +42,8 @@ export type StaticCanvasRenderConfig = {
   pendingFlowchartNodes: PendingExcalidrawElements | null;
   theme: AppState["theme"];
   elementRenderOverrides?: ElementRenderOverrides;
+  /** frames listed here get their outline drawn in the primary color */
+  highlightedFrameIds?: ReadonlyMap<string, number>;
   paintLiveMedia?: (
     element: NonDeletedExcalidrawElement,
     context: CanvasRenderingContext2D,

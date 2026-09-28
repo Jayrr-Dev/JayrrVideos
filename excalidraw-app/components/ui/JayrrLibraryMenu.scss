@@ -456,8 +456,8 @@
 
   .jayrr-libraries__views {
     display: flex;
-    flex-wrap: wrap;
-    gap: 0.35rem;
+    flex-wrap: nowrap;
+    gap: 0.25rem;
     padding: 0 0.75rem 0.65rem;
   }
 
@@ -467,7 +467,9 @@
     color: var(--text-primary-color);
     border-radius: var(--border-radius-md);
     font-size: 0.75rem;
-    padding: 0.28rem 0.65rem;
+    padding: 0.28rem 0.4rem;
+    flex: 1 1 auto;
+    min-width: 0;
     cursor: pointer;
   }
 
@@ -640,5 +642,89 @@
   .jayrr-library__asset-delete svg {
     width: 0.85rem;
     height: 0.85rem;
+  }
+
+  .jayrr-sound-panel {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    gap: 0.5rem;
+    padding: 0 0.75rem;
+  }
+
+  .jayrr-sound-panel__bar {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+  }
+
+  .jayrr-sound-panel__title {
+    flex: 1;
+    min-width: 0;
+    font-weight: 700;
+    color: var(--color-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .jayrr-sound-panel__search {
+    padding: 0.35rem 0.5rem;
+    border: 1px solid var(--default-border-color);
+    border-radius: var(--border-radius-md);
+    background: var(--color-surface-low);
+    color: var(--text-primary-color);
+  }
+
+  .jayrr-sound-panel__body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+  }
+
+  .jayrr-sound-panel__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+  }
+
+  .jayrr-sound-panel__row {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.25rem 0.35rem;
+    border-radius: var(--border-radius-md);
+    background: var(--color-surface-low);
+    font-size: 0.8rem;
+  }
+
+  .jayrr-sound-panel__name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .jayrr-sound-panel__time {
+    color: var(--color-gray-60);
+    font-size: 0.72rem;
+  }
+
+  .jayrr-sound-panel__play,
+  .jayrr-sound-panel__add {
+    border: none;
+    background: transparent;
+    color: var(--color-primary);
+    cursor: pointer;
+    min-width: 1.4rem;
+    font-size: 0.85rem;
   }
 }

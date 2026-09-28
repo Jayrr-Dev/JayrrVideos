@@ -2303,6 +2303,9 @@ class App extends React.Component<AppProps, AppState> {
     this.setState({ editingFrame: null });
   };
 
+  private getFrameNumbers = () =>
+    this.props.getFrameNumbers?.(this.scene.getNonDeletedElements());
+
   private renderFrameNames = () => {
     if (!this.state.frameRendering.enabled || !this.state.frameRendering.name) {
       if (this.state.editingFrame) {
@@ -2323,6 +2326,8 @@ class App extends React.Component<AppProps, AppState> {
           ? this.state.searchMatches.matches.find((sm) => sm.focus)
           : null
         : null;
+
+    const frameNumbers = this.getFrameNumbers();
 
     return nonDeletedFramesLikes.map((f) => {
       // The name is a decoration that follows the frame's render overrides,
@@ -2424,7 +2429,11 @@ class App extends React.Component<AppProps, AppState> {
           />
         );
       } else {
-        frameNameJSX = frameName;
+        const frameNumber = frameNumbers?.get(f.id);
+        frameNameJSX =
+          frameNumber === undefined
+            ? frameName
+            : `${frameNumber}. ${frameName}`;
       }
 
       return (
@@ -2811,6 +2820,7 @@ class App extends React.Component<AppProps, AppState> {
                               pendingFlowchartNodes:
                                 this.flowchart.pendingNodes,
                               theme: this.state.theme,
+                              highlightedFrameIds: this.getFrameNumbers(),
                               ...this.getRenderOverrideConfig(),
                             }}
                           />
