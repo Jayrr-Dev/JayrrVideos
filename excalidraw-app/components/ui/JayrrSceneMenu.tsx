@@ -360,7 +360,8 @@ const JayrrSceneMenuConnected = () => {
     if (didHydrateActiveSceneRef.current) {
       return;
     }
-    if (!activeSceneId || !convexClient) {
+    const client = convexClient;
+    if (!activeSceneId || !client) {
       didHydrateActiveSceneRef.current = true;
       skipAutosaveRef.current = false;
       return;
@@ -372,7 +373,7 @@ const JayrrSceneMenuConnected = () => {
 
     const hydrate = async () => {
       try {
-        const scene = await convexClient.query(api.scenes.get, {
+        const scene = await client.query(api.scenes.get, {
           sceneId: activeSceneId,
         });
         if (cancelled) {
@@ -382,7 +383,11 @@ const JayrrSceneMenuConnected = () => {
           setActiveSceneId(null);
           return;
         }
-        applySceneJsonToCanvas(excalidrawAPI, scene.sceneJson);
+        await applySavedSceneToCanvas(
+          excalidrawAPI,
+          scene._id,
+          scene.sceneJson,
+        );
         rememberSavedRef.current(
           scene._id,
           serializeCurrentCanvas(excalidrawAPI),
