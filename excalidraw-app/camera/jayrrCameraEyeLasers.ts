@@ -108,6 +108,7 @@ const drawEyeLasers = (
   power: number,
   width: number,
   height: number,
+  aim: Point | null,
 ) => {
   const left = { x: eyes.left.x * width, y: eyes.left.y * height };
   const right = { x: eyes.right.x * width, y: eyes.right.y * height };
@@ -127,7 +128,9 @@ const drawEyeLasers = (
     const side = index === 0 ? -1 : 1;
     const seed = index * 2.3;
     const f = flicker(now, seed) * power * flash;
-    const beamAngle = faceAngle + Math.PI / 2 - side * BEAM_DOWN_TILT;
+    const beamAngle = aim
+      ? Math.atan2(aim.y - (eye.y + offset.y), aim.x - (eye.x + offset.x))
+      : faceAngle + Math.PI / 2 - side * BEAM_DOWN_TILT;
 
     context.save();
     context.translate(eye.x + offset.x, eye.y + offset.y);
@@ -245,6 +248,7 @@ export const createEyeLasers = (video: HTMLVideoElement) => {
       offset: Point & { scale?: number },
       width: number,
       height: number,
+      aim: Point | null,
     ) => {
       const now = video.ownerDocument.defaultView?.performance.now();
       if (cancelled || !tracker || now === undefined || video.readyState < 2) {
@@ -308,6 +312,7 @@ export const createEyeLasers = (video: HTMLVideoElement) => {
         power,
         width,
         height,
+        aim,
       );
     },
     stop: () => {

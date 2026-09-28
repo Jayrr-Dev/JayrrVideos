@@ -40,6 +40,22 @@ export type JayrrCameraBeams = {
 
 const beams = new Map<string, JayrrCameraBeams>();
 
+/** Where lasers should point, in camera-picture pixels; null aims by pose. */
+export type JayrrCameraAim = { x: number; y: number };
+
+const aims = new Map<string, JayrrCameraAim>();
+
+export const setJayrrCameraAim = (
+  elementId: string,
+  aim: JayrrCameraAim | null,
+) => {
+  if (aim) {
+    aims.set(elementId, aim);
+    return;
+  }
+  aims.delete(elementId);
+};
+
 export const getJayrrCameraBeams = (elementId: string) =>
   beams.get(elementId) ?? null;
 
@@ -399,6 +415,7 @@ const drawMouthLaser = (
   height: number,
   pose: FacePose,
   offset: CameraFunOffset,
+  aim: JayrrCameraAim | null,
 ) => {
   if (!pose.ok || !pose.firing) {
     return;
@@ -410,14 +427,25 @@ const drawMouthLaser = (
   const length = Math.hypot(width, height) * 2;
   const radius = size * 0.19 * pulse;
   context.save();
-  context.translate(
-    (0.5 + 0.5 * pose.x) * width + offset.x,
-    (0.5 - 0.5 * pose.y) * height + offset.y,
-  );
-  context.rotate(-pose.rz);
-  context.translate(0, size * 0.42);
-  context.scale(funScale(offset), funScale(offset));
-  context.rotate(0.16);
+  const mouthX = (0.5 + 0.5 * pose.x) * width + offset.x;
+  const mouthY = (0.5 - 0.5 * pose.y) * height + offset.y;
+  context.translate(mouthX, mouthY);
+  if (aim) {
+    // Fire from the mouth straight at the pointer.
+    context.translate(
+      size * 0.42 * Math.sin(pose.rz),
+      size * 0.42 * Math.cos(pose.rz),
+    );
+    context.scale(funScale(offset), funScale(offset));
+    const originX = mouthX + size * 0.42 * Math.sin(pose.rz);
+    const originY = mouthY + size * 0.42 * Math.cos(pose.rz);
+    context.rotate(Math.atan2(aim.y - originY, aim.x - originX));
+  } else {
+    context.rotate(-pose.rz);
+    context.translate(0, size * 0.42);
+    context.scale(funScale(offset), funScale(offset));
+    context.rotate(0.16);
+  }
   context.globalCompositeOperation = "source-over";
 
   // Layer soft, widening cyan shells around a hot yellow-white core.
@@ -654,6 +682,7 @@ export const startJayrrCameraFun = (
                     canvas.height,
                     face,
                     getOffset("laser"),
+                    aims.get(elementId) ?? null,
                   );
                 }
                 eyeLasers?.draw(
@@ -661,6 +690,7 @@ export const startJayrrCameraFun = (
                   getOffset("eyeLasers"),
                   canvas.width,
                   canvas.height,
+                  aims.get(elementId) ?? null,
                 );
               },
             );
@@ -680,6 +710,7 @@ export const startJayrrCameraFun = (
     stopLoop();
     setJayrrCameraFun(elementId, null);
     beams.delete(elementId);
+    aims.delete(elementId);
     eyeLasers?.stop();
     if (needsTracker) {
       trackerUsers = Math.max(0, trackerUsers - 1);

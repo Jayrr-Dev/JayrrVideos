@@ -21,10 +21,26 @@ import {
   type JayrrObjectFit,
 } from "./jayrrCamera";
 import { getJayrrCameraCutout } from "./jayrrCameraCutout";
-import { getJayrrCameraBeams, getJayrrCameraFun } from "./jayrrCameraFun";
+import {
+  getJayrrCameraBeams,
+  getJayrrCameraFun,
+  setJayrrCameraAim,
+} from "./jayrrCameraFun";
 import { desktopCropElementIdAtom } from "./jayrrDisplayCrop";
 
 const videos = new Map<string, HTMLVideoElement>();
+
+// Last known pointer position, so lasers can aim at the cursor.
+let pointer: { x: number; y: number } | null = null;
+if (typeof window !== "undefined") {
+  window.addEventListener(
+    "pointermove",
+    (event) => {
+      pointer = { x: event.clientX, y: event.clientY };
+    },
+    { passive: true },
+  );
+}
 
 export const setJayrrCameraVideo = (
   elementId: string,
@@ -299,6 +315,31 @@ export const paintJayrrCameraLive = (
   const beams = getJayrrCameraBeams(element.id);
   if (!beams || !placement) {
     return;
+  }
+  if (pointer) {
+    // Pointer -> box space -> undo the picture's mirror/zoom -> picture pixels.
+    const zoomValue = appState.zoom.value;
+    const dx =
+      (pointer.x - appState.offsetLeft) / zoomValue - (x + element.width / 2);
+    const dy =
+      (pointer.y - appState.offsetTop) / zoomValue - (y + element.height / 2);
+    const cos = Math.cos(element.angle);
+    const sin = Math.sin(element.angle);
+    let px = dx * cos + dy * sin + element.width / 2 - pad;
+    const py0 = -dx * sin + dy * cos + element.height / 2 - pad;
+    let py = py0;
+    if (mirrored) {
+      px = width - px;
+    }
+    if (zoom < JAYRR_CAMERA_ZOOM_DEFAULT) {
+      const shrink = zoom / JAYRR_CAMERA_ZOOM_DEFAULT;
+      px = (px - width / 2) / shrink + width / 2;
+      py = (py - height / 2) / shrink + height / 2;
+    }
+    setJayrrCameraAim(element.id, {
+      x: (px - placement.x) / placement.scale,
+      y: (py - placement.y) / placement.scale,
+    });
   }
   context.save();
   try {
