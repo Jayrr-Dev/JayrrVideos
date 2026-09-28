@@ -1,0 +1,137 @@
+.excalidraw {
+  // No card chrome: the player sits directly on the canvas.
+  .jayrr-called-embed.jayrr-sound-embed {
+    align-items: stretch;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0;
+    background: transparent;
+    border: 0;
+    color: var(--text-primary-color);
+  }
+
+  .jayrr-sound-embed__file {
+    display: none;
+  }
+
+  .jayrr-sound-embed__head {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    min-width: 0;
+  }
+
+  .jayrr-sound-embed__play,
+  .jayrr-sound-embed__loop {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 0;
+    cursor: pointer;
+
+    svg {
+      width: 55%;
+      height: 55%;
+    }
+
+    &:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
+  }
+
+  .jayrr-sound-embed__play {
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 50%;
+    background: var(--color-primary);
+    color: var(--color-surface-lowest, #fff);
+
+    svg {
+      fill: currentColor;
+    }
+  }
+
+  .jayrr-sound-embed__loop {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 0.5rem;
+    background: transparent;
+    color: var(--color-gray-50);
+
+    svg {
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    &.is-on {
+      background: var(--color-primary-light);
+      color: var(--color-primary);
+    }
+  }
+
+  .jayrr-sound-embed__meta {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    line-height: 1.2;
+  }
+
+  .jayrr-sound-embed__title {
+    font-weight: 700;
+    font-size: 0.9rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .jayrr-sound-embed__time {
+    font-size: 0.75rem;
+    color: var(--color-gray-50);
+    font-variant-numeric: tabular-nums;
+  }
+
+  // Collapses at the compact default size; shows when resized taller.
+  .jayrr-sound-embed__wave {
+    flex: 1 1 auto;
+    min-height: 0;
+    position: relative;
+    cursor: pointer;
+  }
+
+  .jayrr-sound-embed__wave-canvas {
+    position: absolute;
+    inset: 0;
+
+    canvas {
+      display: block;
+    }
+  }
+
+  .jayrr-sound-embed__empty,
+  .jayrr-sound-embed__status {
+    flex: 1 1 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--color-gray-60);
+    font: inherit;
+    font-size: 0.85rem;
+    text-align: center;
+    cursor: pointer;
+  }
+
+  .jayrr-sound-embed__status {
+    cursor: default;
+  }
+}

@@ -21,6 +21,10 @@ import {
   VERTEX_SHADER,
 } from "./shaders";
 
+// Spatial falloff in mask texels. The kernel only reaches 2 texels, so a
+// sigma of 3 weighted every tap almost equally; 1.5 favours the nearest ones.
+const BILATERAL_SPATIAL_SIGMA = 1.5;
+
 export interface PipelineOptions {
   /** Camera frame width */
   width: number;
@@ -140,8 +144,11 @@ export class PostProcessingPipeline {
 
     this.canvas = new OffscreenCanvas(this.opts.width, this.opts.height);
     const wantsAlpha = this.opts.backgroundMode === "transparent";
+    // Straight alpha keeps full 8-bit RGB on faint edge pixels. A premultiplied
+    // buffer would be un-premultiplied again by the next WebGL upload, which
+    // quantizes colour to ~20% steps where alpha is small.
     const gl = this.canvas.getContext("webgl2", {
-      premultipliedAlpha: wantsAlpha,
+      premultipliedAlpha: false,
       preserveDrawingBuffer: true,
       alpha: wantsAlpha,
       antialias: false,
@@ -207,6 +214,7 @@ export class PostProcessingPipeline {
         "u_guide",
         "u_maskSize",
         "u_guideSize",
+        "u_guideLod",
         "u_spatialSigma",
         "u_rangeSigma",
       ],
@@ -289,6 +297,12 @@ export class PostProcessingPipeline {
 
     // Create input textures
     this.cameraTexture = this.createTexture();
+    // Mipmaps give the bilateral upsample a block-averaged guide colour.
+    gl.texParameteri(
+      gl.TEXTURE_2D,
+      gl.TEXTURE_MIN_FILTER,
+      gl.LINEAR_MIPMAP_LINEAR,
+    );
     this.maskTexture = this.createTexture();
     this.motionTexture = this.createTexture();
     this.backgroundTexture = this.createTexture();
@@ -332,16 +346,7 @@ export class PostProcessingPipeline {
     const gl = this.gl;
     const { width, height, maskWidth, maskHeight } = this.opts;
 
-    // Upload camera frame to GPU
-    gl.bindTexture(gl.TEXTURE_2D, this.cameraTexture);
-    gl.texImage2D(
-      gl.TEXTURE_2D,
-      0,
-      gl.RGBA,
-      gl.RGBA,
-      gl.UNSIGNED_BYTE,
-      cameraFrame,
-    );
+    this.uploadCamera(cameraFrame);
 
     // Extend mask at frame edges: copy row 2-in from each edge to the outer 2 rows.
     // Prevents boundary artifacts from model low-confidence at truncated body edges,
@@ -415,7 +420,13 @@ export class PostProcessingPipeline {
         this.isFirstFrame ? 1.0 : this.opts.disappearRate,
       );
       gl.uniform1f(this.temporalProg.uniforms["u_threshold"], 0.5);
-      gl.uniform1f(this.temporalProg.uniforms["u_softness"], 0.25);
+      // Transparent cutouts keep the raw confidence here: it carries the
+      // sub-texel edge position. The composite thresholds after the guided
+      // upsample instead, once the edge has snapped to the camera image.
+      gl.uniform1f(
+        this.temporalProg.uniforms["u_softness"],
+        this.opts.backgroundMode === "transparent" ? 0.5 : 0.25,
+      );
       gl.uniform1f(
         this.temporalProg.uniforms["u_hasMotionMap"],
         hasMotionMap ? 1.0 : 0.0,
@@ -473,7 +484,11 @@ export class PostProcessingPipeline {
         maskHeight,
       );
       gl.uniform2f(this.bilateralProg.uniforms["u_guideSize"], width, height);
-      gl.uniform1f(this.bilateralProg.uniforms["u_spatialSigma"], 3.0);
+      gl.uniform1f(this.bilateralProg.uniforms["u_guideLod"], this.guideLod());
+      gl.uniform1f(
+        this.bilateralProg.uniforms["u_spatialSigma"],
+        BILATERAL_SPATIAL_SIGMA,
+      );
       gl.uniform1f(
         this.bilateralProg.uniforms["u_rangeSigma"],
         Math.max(this.opts.rangeSigma, 0.01),
@@ -497,17 +512,8 @@ export class PostProcessingPipeline {
     });
 
     // --- Stage 3.5: Final mask erosion (anti-halo) ---
-    // Erode 1px at full resolution to pull mask inward and cut off contaminated edge pixels
-    this.renderToFBO(this.bilateralFBO, this.morphologyProg, () => {
-      this.bindTexture(0, this.featherFBO.texture, "u_mask");
-      gl.uniform2f(
-        this.morphologyProg.uniforms["u_texelSize"],
-        1.0 / width,
-        1.0 / height,
-      );
-      gl.uniform1f(this.morphologyProg.uniforms["u_operation"], 1.0); // erode
-      gl.uniform1f(this.morphologyProg.uniforms["u_radius"], this.opts.erosionRadius);
-    });
+    // Erode at full resolution to pull mask inward and cut off contaminated edge pixels
+    const finalMask = this.erodeFinalMask(width, height);
 
     // --- Generate background ---
     let backgroundTex: WebGLTexture;
@@ -539,7 +545,7 @@ export class PostProcessingPipeline {
 
     renderComposite(() => {
       this.bindTexture(0, this.cameraTexture, "u_camera");
-      this.bindTexture(1, this.bilateralFBO.texture, "u_mask"); // eroded mask
+      this.bindTexture(1, finalMask, "u_mask");
       this.bindTexture(2, backgroundTex, "u_background");
       gl.uniform1i(
         this.compositeProg.uniforms["u_backgroundMode"],
@@ -581,16 +587,7 @@ export class PostProcessingPipeline {
     const gl = this.gl;
     const { width, height } = this.opts;
 
-    // Upload camera frame
-    gl.bindTexture(gl.TEXTURE_2D, this.cameraTexture);
-    gl.texImage2D(
-      gl.TEXTURE_2D,
-      0,
-      gl.RGBA,
-      gl.RGBA,
-      gl.UNSIGNED_BYTE,
-      cameraFrame,
-    );
+    this.uploadCamera(cameraFrame);
 
     // Motion compensation: shift mask to predicted position before bilateral.
     // On interpolated frames, the mask is stale — this shifts it toward where
@@ -621,7 +618,11 @@ export class PostProcessingPipeline {
         this.opts.maskHeight,
       );
       gl.uniform2f(this.bilateralProg.uniforms["u_guideSize"], width, height);
-      gl.uniform1f(this.bilateralProg.uniforms["u_spatialSigma"], 3.0);
+      gl.uniform1f(this.bilateralProg.uniforms["u_guideLod"], this.guideLod());
+      gl.uniform1f(
+        this.bilateralProg.uniforms["u_spatialSigma"],
+        BILATERAL_SPATIAL_SIGMA,
+      );
       gl.uniform1f(
         this.bilateralProg.uniforms["u_rangeSigma"],
         Math.max(this.opts.rangeSigma, 0.01),
@@ -644,16 +645,7 @@ export class PostProcessingPipeline {
     });
 
     // Final mask erosion (anti-halo)
-    this.renderToFBO(this.bilateralFBO, this.morphologyProg, () => {
-      this.bindTexture(0, this.featherFBO.texture, "u_mask");
-      gl.uniform2f(
-        this.morphologyProg.uniforms["u_texelSize"],
-        1.0 / width,
-        1.0 / height,
-      );
-      gl.uniform1f(this.morphologyProg.uniforms["u_operation"], 1.0); // erode
-      gl.uniform1f(this.morphologyProg.uniforms["u_radius"], this.opts.erosionRadius);
-    });
+    const finalMask = this.erodeFinalMask(width, height);
 
     let backgroundTex: WebGLTexture;
     if (this.opts.backgroundMode === "blur") {
@@ -681,7 +673,7 @@ export class PostProcessingPipeline {
 
     renderComposite(() => {
       this.bindTexture(0, this.cameraTexture, "u_camera");
-      this.bindTexture(1, this.bilateralFBO.texture, "u_mask"); // eroded mask
+      this.bindTexture(1, finalMask, "u_mask");
       this.bindTexture(2, backgroundTex, "u_background");
       gl.uniform1i(
         this.compositeProg.uniforms["u_backgroundMode"],
@@ -1050,6 +1042,46 @@ export class PostProcessingPipeline {
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     return { fbo, texture, width, height };
+  }
+
+  /** Upload the camera frame and rebuild its mip chain (the texture is incomplete otherwise). */
+  private uploadCamera(cameraFrame: TexImageSource): void {
+    const gl = this.gl;
+    gl.bindTexture(gl.TEXTURE_2D, this.cameraTexture);
+    gl.texImage2D(
+      gl.TEXTURE_2D,
+      0,
+      gl.RGBA,
+      gl.RGBA,
+      gl.UNSIGNED_BYTE,
+      cameraFrame,
+    );
+    gl.generateMipmap(gl.TEXTURE_2D);
+  }
+
+  /** Guide mip level whose texels match one mask texel. */
+  private guideLod(): number {
+    const { width, height, maskWidth, maskHeight } = this.opts;
+    return Math.max(0, Math.log2(Math.max(width / maskWidth, height / maskHeight)));
+  }
+
+  /** Final anti-halo erosion; skipped entirely when the radius is zero. */
+  private erodeFinalMask(width: number, height: number): WebGLTexture {
+    if (this.opts.erosionRadius <= 0) {
+      return this.featherFBO.texture;
+    }
+    const gl = this.gl;
+    this.renderToFBO(this.bilateralFBO, this.morphologyProg, () => {
+      this.bindTexture(0, this.featherFBO.texture, "u_mask");
+      gl.uniform2f(
+        this.morphologyProg.uniforms["u_texelSize"],
+        1.0 / width,
+        1.0 / height,
+      );
+      gl.uniform1f(this.morphologyProg.uniforms["u_operation"], 1.0); // erode
+      gl.uniform1f(this.morphologyProg.uniforms["u_radius"], this.opts.erosionRadius);
+    });
+    return this.bilateralFBO.texture;
   }
 
   private createTexture(): WebGLTexture {

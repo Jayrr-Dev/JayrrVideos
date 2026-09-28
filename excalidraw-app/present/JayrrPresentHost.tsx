@@ -41,14 +41,19 @@ import {
 import {
   JAYRR_CALLED_OBJECTS_TAB,
   JAYRR_CALLED_OBJECT_DRAG,
+  JAYRR_SOUND_LIBRARY_DRAG,
   JayrrCalledObjectsPanel,
   dataTransferHasMarkdownFile,
   dataTransferHasPdfFile,
+  dataTransferHasSoundFile,
   defForCalledObjectKind,
   insertCalledObjectAt,
+  insertLibrarySound,
   parseCalledObjectDrag,
+  parseLibrarySoundDrag,
   tryDropMarkdownFiles,
   tryDropPdfFiles,
+  tryDropSoundFiles,
 } from "../domain/widgets";
 
 import { JayrrCameraHost } from "../camera/JayrrCameraHost";
@@ -314,8 +319,10 @@ export const JayrrPresentHost = ({
       if (
         !types?.includes(JAYRR_RECORDING_DRAG) &&
         !types?.includes(JAYRR_CALLED_OBJECT_DRAG) &&
+        !types?.includes(JAYRR_SOUND_LIBRARY_DRAG) &&
         !dataTransferHasMarkdownFile(event.dataTransfer) &&
-        !dataTransferHasPdfFile(event.dataTransfer)
+        !dataTransferHasPdfFile(event.dataTransfer) &&
+        !dataTransferHasSoundFile(event.dataTransfer)
       ) {
         return;
       }
@@ -338,8 +345,27 @@ export const JayrrPresentHost = ({
         insertCalledObjectAt(api, def, point.x, point.y);
         return;
       }
+      const librarySoundRaw = event.dataTransfer?.getData(
+        JAYRR_SOUND_LIBRARY_DRAG,
+      );
+      if (librarySoundRaw) {
+        const sound = parseLibrarySoundDrag(librarySoundRaw);
+        if (!sound) {
+          return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        const point = scenePointFromClient(api, event.clientX, event.clientY);
+        void insertLibrarySound(api, sound, point);
+        return;
+      }
       if (dataTransferHasPdfFile(event.dataTransfer)) {
         void tryDropPdfFiles(api, event);
+        return;
+      }
+      if (dataTransferHasSoundFile(event.dataTransfer)) {
+        const point = scenePointFromClient(api, event.clientX, event.clientY);
+        void tryDropSoundFiles(api, event, point);
         return;
       }
       if (dataTransferHasMarkdownFile(event.dataTransfer)) {

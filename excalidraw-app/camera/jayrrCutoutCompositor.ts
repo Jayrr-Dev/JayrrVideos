@@ -46,7 +46,7 @@ void main() {
     float prevA = previous.a;
     float edge = 1.0 - abs(alpha * 2.0 - 1.0);
     // Small changes are usually edge noise. Large changes must follow hands
-    // immediately, rather than accumulating a second trail after Segmo's EMA.
+    // immediately, rather than lagging behind Segmo's own low-res EMA too.
     float change = smoothstep(0.04, 0.18, abs(alpha - prevA));
     // Reject history when RGB changes even if coverage is similar: a moving
     // finger should not inherit the previous surface's fractional silhouette.

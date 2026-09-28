@@ -9,3 +9,4 @@ packages/excalidraw/types
 examples/**/public
 excalidraw-app/vendor
 excalidraw-app/vendor/**
+.kilo/

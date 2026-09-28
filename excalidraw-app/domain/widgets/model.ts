@@ -15,6 +15,8 @@ export const CALLED_OBJECT_KINDS = [
   "caption",
   "markdown",
   "pdf",
+  "checkbox",
+  "sound",
 ] as const;
 
 export type CalledObjectKind = typeof CALLED_OBJECT_KINDS[number];
@@ -69,6 +71,20 @@ export const CALLED_OBJECTS: readonly CalledObjectDef[] = [
     hint: "Paste or drop a PDF",
     width: 480,
     height: 640,
+  },
+  {
+    kind: "checkbox",
+    name: "Checkbox",
+    hint: "Click to tick",
+    width: 40,
+    height: 40,
+  },
+  {
+    kind: "sound",
+    name: "Sound",
+    hint: "Paste or drop an audio file",
+    width: 240,
+    height: 40,
   },
 ];
 

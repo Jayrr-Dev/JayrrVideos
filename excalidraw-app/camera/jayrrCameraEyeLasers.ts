@@ -66,28 +66,137 @@ export const isEyeLaserGesture = (
   return raisedBrows > (firing ? 0.06 : 0.2) || wide > (firing ? 0.06 : 0.16);
 };
 
+// Irises are tracked whenever a face is visible so beams keep following the
+// head while they hold and fade after the gesture ends.
 const readEyes = (
   result: FaceLandmarkerResult,
   firing: boolean,
-): EyePose | null => {
+): { irises: EyePose | null; gesture: boolean } => {
   const landmarks = result.faceLandmarks[0];
   const categories = result.faceBlendshapes[0]?.categories;
-  if (
-    !landmarks ||
-    !categories ||
-    !isEyeLaserGesture(
+  // Iris centers in the 478-point face mesh.
+  const left = landmarks?.[468];
+  const right = landmarks?.[473];
+  const irises = left && right ? { left, right } : null;
+  const gesture =
+    !!irises &&
+    !!categories &&
+    isEyeLaserGesture(
       new Map(
         categories.map(({ categoryName, score }) => [categoryName, score]),
       ),
       firing,
-    )
-  ) {
-    return null;
-  }
-  // Iris centers in the 478-point face mesh.
-  const left = landmarks[468];
-  const right = landmarks[473];
-  return left && right ? { left, right } : null;
+    );
+  return { irises, gesture };
+};
+
+const FADE_IN_MS = 90;
+const FADE_OUT_MS = 220;
+const EXTEND_MS = 180;
+// Beams fire down and slightly outward from the face, like a heat-vision stare.
+const BEAM_DOWN_TILT = 0.12;
+
+const flicker = (t: number, seed: number) =>
+  0.9 + 0.06 * Math.sin(t / 37 + seed) + 0.04 * Math.sin(t / 13 + seed * 3.1);
+
+const drawEyeLasers = (
+  context: CanvasRenderingContext2D,
+  eyes: EyePose,
+  offset: Point & { scale?: number },
+  now: number,
+  sinceIgnite: number,
+  power: number,
+) => {
+  const width = context.canvas.width;
+  const height = context.canvas.height;
+  const left = { x: eyes.left.x * width, y: eyes.left.y * height };
+  const right = { x: eyes.right.x * width, y: eyes.right.y * height };
+  const separation = Math.hypot(right.x - left.x, right.y - left.y);
+  const faceAngle = Math.atan2(right.y - left.y, right.x - left.x);
+  const scale = offset.scale ?? 1;
+  const unit = separation * scale;
+  const extend = 1 - (1 - Math.min(1, sinceIgnite / EXTEND_MS)) ** 3;
+  const length = Math.hypot(width, height) * 1.6 * extend;
+  // Ignition flash: a brief overdrive that settles.
+  const flash = 1 + 0.6 * Math.max(0, 1 - sinceIgnite / 260);
+
+  context.save();
+  context.globalCompositeOperation = "lighter";
+
+  [left, right].forEach((eye, index) => {
+    const side = index === 0 ? -1 : 1;
+    const seed = index * 2.3;
+    const f = flicker(now, seed) * power * flash;
+    const beamAngle = faceAngle + Math.PI / 2 - side * BEAM_DOWN_TILT;
+
+    context.save();
+    context.translate(eye.x + offset.x, eye.y + offset.y);
+
+    // Red haze bleeding onto the face around the eye.
+    const hazeR = unit * 0.9 * f;
+    const haze = context.createRadialGradient(0, 0, 0, 0, 0, hazeR);
+    haze.addColorStop(0, "rgba(255, 40, 30, 0.35)");
+    haze.addColorStop(1, "rgba(255, 0, 20, 0)");
+    context.fillStyle = haze;
+    context.fillRect(-hazeR, -hazeR, hazeR * 2, hazeR * 2);
+
+    // Beam: tapered layers from wide soft glow to white-hot core.
+    context.rotate(beamAngle);
+    for (const [start, end, color, alpha] of [
+      [0.2, 0.55, "255, 20, 30", 0.18],
+      [0.09, 0.22, "255, 45, 35", 0.55],
+      [0.045, 0.1, "255, 140, 110", 0.85],
+      [0.018, 0.04, "255, 250, 240", 1],
+    ] as const) {
+      const w0 = unit * start * f;
+      const w1 = unit * end * f;
+      const grad = context.createLinearGradient(0, 0, length, 0);
+      grad.addColorStop(0, `rgba(${color}, ${alpha * power})`);
+      grad.addColorStop(0.7, `rgba(${color}, ${alpha * 0.8 * power})`);
+      grad.addColorStop(1, `rgba(${color}, 0)`);
+      context.fillStyle = grad;
+      context.beginPath();
+      context.moveTo(0, -w0 / 2);
+      context.lineTo(length, -w1 / 2);
+      context.lineTo(length, w1 / 2);
+      context.lineTo(0, w0 / 2);
+      context.arc(0, 0, w0 / 2, Math.PI / 2, -Math.PI / 2);
+      context.fill();
+    }
+    context.rotate(-beamAngle);
+
+    // Anamorphic lens flare streak along the eye line.
+    context.rotate(faceAngle);
+    const streakW = unit * 1.3 * f;
+    const streakH = unit * 0.05 * f;
+    const streak = context.createRadialGradient(0, 0, 0, 0, 0, streakW);
+    streak.addColorStop(0, `rgba(255, 235, 225, ${0.9 * power})`);
+    streak.addColorStop(0.25, `rgba(255, 60, 50, ${0.5 * power})`);
+    streak.addColorStop(1, "rgba(255, 0, 20, 0)");
+    context.fillStyle = streak;
+    context.save();
+    context.scale(1, streakH / streakW);
+    context.beginPath();
+    context.arc(0, 0, streakW, 0, Math.PI * 2);
+    context.fill();
+    context.restore();
+
+    // Hot core at the iris.
+    const coreR = Math.max(3, unit * 0.22 * f);
+    const core = context.createRadialGradient(0, 0, 0, 0, 0, coreR);
+    core.addColorStop(0, "rgba(255, 255, 255, 1)");
+    core.addColorStop(0.2, "rgba(255, 220, 205, 0.95)");
+    core.addColorStop(0.5, "rgba(255, 30, 30, 0.6)");
+    core.addColorStop(1, "rgba(255, 0, 20, 0)");
+    context.fillStyle = core;
+    context.beginPath();
+    context.arc(0, 0, coreR, 0, Math.PI * 2);
+    context.fill();
+
+    context.restore();
+  });
+
+  context.restore();
 };
 
 export const createEyeLasers = (video: HTMLVideoElement) => {
@@ -97,6 +206,11 @@ export const createEyeLasers = (video: HTMLVideoElement) => {
   let lastTime = -Infinity;
   let lastGoodAt = -Infinity;
   let lastFrame = -1;
+  let shown: EyePose | null = null;
+  let tracked: EyePose | null = null;
+  let power = 0;
+  let ignitedAt = 0;
+  let lastDraw = -1;
 
   void import("@mediapipe/tasks-vision")
     .then(async ({ FaceLandmarker, FilesetResolver }) => {
@@ -139,9 +253,16 @@ export const createEyeLasers = (video: HTMLVideoElement) => {
         lastTime = now;
         lastFrame = video.currentTime;
         try {
+          const face = readEyes(
+            tracker.detectForVideo(video, now),
+            eyes !== null,
+          );
+          if (face.irises) {
+            tracked = tracked ? mixEyePose(tracked, face.irises) : face.irises;
+          }
           const held = holdEyePose(
             eyes,
-            readEyes(tracker.detectForVideo(video, now), eyes !== null),
+            face.gesture ? face.irises : null,
             now,
             lastGoodAt,
           );
@@ -149,6 +270,7 @@ export const createEyeLasers = (video: HTMLVideoElement) => {
           lastGoodAt = held.lastGoodAt;
         } catch (error) {
           eyes = null;
+          tracked = null;
           lastGoodAt = -Infinity;
           tracker.close();
           tracker = null;
@@ -158,58 +280,29 @@ export const createEyeLasers = (video: HTMLVideoElement) => {
       if (eyes && now - lastGoodAt > EYE_LASER_HOLD_MS) {
         eyes = null;
       }
-      if (!eyes) {
+      const dt = Math.min(100, lastDraw < 0 ? 16 : now - lastDraw);
+      lastDraw = now;
+      if (eyes) {
+        if (power === 0) {
+          ignitedAt = now;
+        }
+        power = Math.min(1, power + dt / FADE_IN_MS);
+      } else {
+        power = Math.max(0, power - dt / FADE_OUT_MS);
+      }
+      if (power > 0) {
+        shown = tracked ?? eyes ?? shown;
+      }
+      if (!shown || power === 0) {
+        shown = power === 0 ? null : shown;
         return;
       }
-      const width = context.canvas.width;
-      const height = context.canvas.height;
-      const left = { x: eyes.left.x * width, y: eyes.left.y * height };
-      const right = { x: eyes.right.x * width, y: eyes.right.y * height };
-      const separation = Math.hypot(right.x - left.x, right.y - left.y);
-      const angle = Math.atan2(right.y - left.y, right.x - left.x);
-      const length = Math.hypot(width, height) * 2;
-      const pulse = 1 + 0.03 * Math.sin(now / 90);
-      const scale = offset.scale ?? 1;
-      context.save();
-      context.lineCap = "round";
-      context.shadowColor = "#ff123b";
-      for (const eye of [left, right]) {
-        context.save();
-        context.translate(eye.x + offset.x, eye.y + offset.y);
-        context.rotate(angle + 0.3);
-        for (const [color, thickness, blur] of [
-          ["rgba(255, 0, 45, 0.25)", 0.24, 0.5],
-          ["#ff1537", 0.1, 0.25],
-          ["#fff2ed", 0.025, 0.1],
-        ] as const) {
-          context.strokeStyle = color;
-          context.lineWidth = Math.max(
-            1,
-            separation * thickness * pulse * scale,
-          );
-          context.shadowBlur = separation * blur * scale;
-          context.beginPath();
-          context.moveTo(0, 0);
-          context.lineTo(length, 0);
-          context.stroke();
-        }
-        const radius = Math.max(3, separation * 0.23 * pulse * scale);
-        const glow = context.createRadialGradient(0, 0, 0, 0, 0, radius);
-        glow.addColorStop(0, "#ffffff");
-        glow.addColorStop(0.18, "#ffb5b5");
-        glow.addColorStop(0.4, "rgba(255, 0, 35, 0.85)");
-        glow.addColorStop(1, "rgba(255, 0, 35, 0)");
-        context.fillStyle = glow;
-        context.beginPath();
-        context.arc(0, 0, radius, 0, Math.PI * 2);
-        context.fill();
-        context.restore();
-      }
-      context.restore();
+      drawEyeLasers(context, shown, offset, now, now - ignitedAt, power);
     },
     stop: () => {
       cancelled = true;
       eyes = null;
+      tracked = null;
       tracker?.close();
       tracker = null;
     },

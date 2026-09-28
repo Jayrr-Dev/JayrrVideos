@@ -624,6 +624,9 @@ let invalidateContextMenu = false;
 /**
  * Map of youtube embed video states
  */
+/** Screen-px band around live embeds that stays with the canvas. */
+const LIVE_EMBEDDABLE_EDGE_PX = 10;
+
 const YOUTUBE_VIDEO_STATES = new Map<
   ExcalidrawElement["id"],
   ValueOf<typeof YOUTUBE_STATES>
@@ -1616,7 +1619,26 @@ class App extends React.Component<AppProps, AppState> {
   }): boolean => {
     if (
       hitElement &&
+      this.isLiveEmbeddable(hitElement) &&
+      (this.state.viewModeEnabled ||
+        oneOf(this.state.activeTool.type, ["laser", "selection", "lasso"])) &&
+      this.isLiveEmbeddableInterior(
+        hitElement,
+        moveEvent,
+        scenePointer.x,
+        scenePointer.y,
+      )
+    ) {
+      // Live widgets take clicks directly; only the edge band selects.
+      this.setState({
+        activeEmbeddable: { element: hitElement, state: "hover" },
+      });
+      return true;
+    }
+    if (
+      hitElement &&
       isIframeLikeElement(hitElement) &&
+      !this.isLiveEmbeddable(hitElement) &&
       this.isIframeLikeInteractive(hitElement) &&
       (this.state.viewModeEnabled ||
         this.state.activeTool.type === "laser" ||
@@ -1811,6 +1833,38 @@ class App extends React.Component<AppProps, AppState> {
         TAP_TWICE_TIMEOUT
     );
   };
+
+  /** Host-rendered React embeds (not iframes) that behave like live UI. */
+  private isLiveEmbeddable(
+    el: NonDeleted<ExcalidrawElement>,
+  ): el is NonDeleted<ExcalidrawEmbeddableElement> {
+    return (
+      isEmbeddableElement(el) &&
+      this.isIframeLikeInteractive(el) &&
+      !!this.props.renderEmbeddable?.(el, this.state)
+    );
+  }
+
+  private isLiveEmbeddableInterior(
+    el: ExcalidrawIframeLikeElement,
+    event: React.PointerEvent<HTMLElement> | PointerEvent,
+    sceneX: number,
+    sceneY: number,
+  ) {
+    if (event.altKey || event.shiftKey || event.metaKey || event.ctrlKey) {
+      return false;
+    }
+    const edge = Math.min(
+      LIVE_EMBEDDABLE_EDGE_PX / this.state.zoom.value,
+      Math.min(el.width, el.height) / 4,
+    );
+    return (
+      sceneX >= el.x + edge &&
+      sceneX <= el.x + el.width - edge &&
+      sceneY >= el.y + edge &&
+      sceneY <= el.y + el.height - edge
+    );
+  }
 
   private isIframeLikeElementCenter(
     el: ExcalidrawIframeLikeElement | null,
@@ -2043,6 +2097,7 @@ class App extends React.Component<AppProps, AppState> {
           const customEmbed = isEmbeddableElement(el)
             ? this.props.renderEmbeddable?.(el, this.state)
             : null;
+          const isLive = !!customEmbed && this.isIframeLikeInteractive(el);
           const shouldScaleEmbeddableViewport = src?.type === "video";
           const embeddableViewportScale = clamp(
             shouldScaleEmbeddableViewport ? scale : 1,
@@ -2104,12 +2159,36 @@ class App extends React.Component<AppProps, AppState> {
                   width: isVisible ? `${el.width}px` : 0,
                   height: isVisible ? `${el.height}px` : 0,
                   transform: isVisible ? `rotate(${el.angle}rad)` : "none",
-                  pointerEvents: isActive
-                    ? POINTER_EVENTS.enabled
-                    : POINTER_EVENTS.disabled,
+                  pointerEvents:
+                    isActive || (isLive && isHovered)
+                      ? POINTER_EVENTS.enabled
+                      : POINTER_EVENTS.disabled,
                 }}
+                onPointerMove={
+                  isLive && isHovered
+                    ? (event) => {
+                        // Hand the edge band back to the canvas so it can
+                        // select / drag the widget.
+                        if (event.buttons !== 0) {
+                          return;
+                        }
+                        const { x, y } = viewportCoordsToSceneCoords(
+                          event,
+                          this.state,
+                        );
+                        if (!this.isLiveEmbeddableInterior(el, event, x, y)) {
+                          this.setState({ activeEmbeddable: null });
+                        }
+                      }
+                    : undefined
+                }
+                onPointerLeave={
+                  isLive && isHovered
+                    ? () => this.setState({ activeEmbeddable: null })
+                    : undefined
+                }
               >
-                {isHovered && (
+                {isHovered && !isLive && (
                   <div className="excalidraw__embeddable-hint">
                     {t("buttons.embeddableInteractionButton")}
                   </div>
@@ -6919,7 +6998,18 @@ class App extends React.Component<AppProps, AppState> {
       frameNameBound: isFrameLikeElement(element)
         ? this.frameNameBoundsCache.get(element)
         : null,
+      overrideShouldTestInside: this.isSelectableFromInside(element),
     });
+  }
+
+  /** closed shapes are hoverable/selectable from inside even when unfilled
+   * (upstream only hits their outline) */
+  private isSelectableFromInside(element: ExcalidrawElement) {
+    return (
+      element.type === "rectangle" ||
+      element.type === "diamond" ||
+      element.type === "ellipse"
+    );
   }
 
   getTextBindableContainerAtPosition(x: number, y: number) {
@@ -12679,6 +12769,7 @@ class App extends React.Component<AppProps, AppState> {
               frameNameBound: isFrameLikeElement(hitElement)
                 ? this.frameNameBoundsCache.get(hitElement)
                 : null,
+              overrideShouldTestInside: this.isSelectableFromInside(hitElement),
             },
             elementsMap,
           )) ||

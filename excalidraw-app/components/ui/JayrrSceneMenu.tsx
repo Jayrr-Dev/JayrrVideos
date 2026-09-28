@@ -12,7 +12,8 @@ import {
   chevronLeftIcon,
 } from "@excalidraw/excalidraw/components/icons";
 
-import { appJotaiStore, useAtom } from "../../app-jotai";
+import { appJotaiStore, useAtom, useAtomValue } from "../../app-jotai";
+import { isCollaboratingAtom } from "../../collab/Collab";
 import { api, convexClient, isConvexLinked } from "../../convexClient";
 import {
   activeSceneIdAtom,
@@ -181,6 +182,23 @@ const JayrrSceneMenuConnected = () => {
     api.scenes.list,
     isAuthenticated ? { folderId: openFolderId ?? null } : "skip",
   );
+  const activeInView = activeSceneId
+    ? scenes?.find((scene) => scene._id === activeSceneId)
+    : undefined;
+  // Only fetch every scene when the active one lives outside the open folder.
+  const allScenes = useQuery(
+    api.scenes.list,
+    isAuthenticated && activeSceneId && scenes && !activeInView ? {} : "skip",
+  );
+  const activeScene =
+    activeInView ??
+    (activeSceneId
+      ? allScenes?.find((scene) => scene._id === activeSceneId)
+      : undefined);
+  const activeFolderName = activeScene?.folderId
+    ? folders?.find((folder) => folder._id === activeScene.folderId)?.name
+    : undefined;
+  const isCollaborating = useAtomValue(isCollaboratingAtom);
   const createScene = useMutation(api.scenes.create);
   const updateScene = useMutation(api.scenes.update);
   const renameScene = useMutation(api.scenes.rename);
@@ -708,6 +726,29 @@ const JayrrSceneMenuConnected = () => {
     />
   );
 
+  const jumpToActiveScene = () => {
+    if (!activeScene) {
+      return;
+    }
+    setOpenMenu(null);
+    setRenaming(null);
+    setOpenFolderIdAtom(activeScene.folderId ?? null);
+    window.setTimeout(() => {
+      document
+        .querySelector(".jayrr-scene-card--active")
+        ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }, 50);
+  };
+
+  const sceneStatus = (
+    <SceneStatus
+      sceneName={activeScene?.name}
+      folderName={activeFolderName}
+      collaborating={isCollaborating}
+      onJump={activeScene ? jumpToActiveScene : undefined}
+    />
+  );
+
   if (folders === undefined || scenes === undefined) {
     return (
       <LibrariesPane fallbackTitle="Scenes">
@@ -791,6 +832,7 @@ const JayrrSceneMenuConnected = () => {
         }
       >
         <div className="jayrr-library__body">
+          {sceneStatus}
           {scenes.length === 0 ? (
             <div className="library-menu-items__no-items">
               <div className="library-menu-items__no-items__label">
@@ -844,6 +886,7 @@ const JayrrSceneMenuConnected = () => {
   return (
     <LibrariesPane fallbackTitle="Scenes" actions={headerActions}>
       <div className="jayrr-library__body">
+        {sceneStatus}
         {!hasContent ? (
           <div className="library-menu-items__no-items">
             <div className="library-menu-items__no-items__label">
@@ -971,6 +1014,69 @@ const SceneHeaderActions = ({
         {DeviceFloppyIcon}
       </button>
     </>
+  );
+};
+
+const SceneStatus = ({
+  sceneName,
+  folderName,
+  collaborating,
+  onJump,
+}: {
+  sceneName?: string;
+  folderName?: string;
+  collaborating: boolean;
+  onJump?: () => void;
+}) => {
+  const content = (
+    <>
+      <span className="jayrr-scene-status__row">
+        <span className="jayrr-scene-status__label">Current scene</span>
+        <span
+          className={
+            collaborating
+              ? "jayrr-scene-status__collab is-on"
+              : "jayrr-scene-status__collab"
+          }
+          title={
+            collaborating ? "Live collaboration is on" : "Not collaborating"
+          }
+        >
+          <span className="jayrr-scene-status__dot" aria-hidden="true" />
+          {collaborating ? "Collab on" : "Collab off"}
+        </span>
+      </span>
+      <span
+        className={
+          sceneName
+            ? "jayrr-scene-status__name"
+            : "jayrr-scene-status__name is-empty"
+        }
+      >
+        {sceneName ?? "Unsaved canvas"}
+        {sceneName && folderName ? (
+          <span className="jayrr-scene-status__folder">{` in ${folderName}`}</span>
+        ) : null}
+      </span>
+    </>
+  );
+
+  if (onJump) {
+    return (
+      <button
+        type="button"
+        className="jayrr-scene-status jayrr-scene-status--jump"
+        title={`Jump to ${sceneName}`}
+        onClick={onJump}
+      >
+        {content}
+      </button>
+    );
+  }
+  return (
+    <div className="jayrr-scene-status" role="status">
+      {content}
+    </div>
   );
 };
 

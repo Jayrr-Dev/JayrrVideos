@@ -59,8 +59,10 @@ const formatDuration = (sec: number) => {
 
 export const JayrrSoundLibraryVoiceTab = ({
   onUse,
+  useLabel = "Use sound",
 }: {
   onUse?: (sound: JayrrSoundPick) => void;
+  useLabel?: string;
 }) => {
   const { isAuthenticated } = useConvexAuth();
   const listModels = useAction(api.editorAi.generateVoice.listModels);
@@ -293,7 +295,7 @@ export const JayrrSoundLibraryVoiceTab = ({
                 onUse(result);
               }}
             >
-              Use sound
+              {useLabel}
             </Button>
           ) : null}
         </div>

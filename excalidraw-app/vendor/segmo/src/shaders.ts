@@ -49,10 +49,13 @@ void main() {
   float current = texture(u_currentMask, v_texCoord).r;
   float previous = texture(u_previousMask, v_texCoord).r;
 
-  // Soft threshold: maps raw model output to cleaner 0-1 range
-  float lo = u_threshold - u_softness;
-  float hi = u_threshold + u_softness;
-  current = smoothstep(lo, hi, current);
+  // Soft threshold: maps raw model output to cleaner 0-1 range.
+  // A softness of 0.5 or more passes the raw confidence through unchanged.
+  if (u_softness < 0.5) {
+    float lo = u_threshold - u_softness;
+    float hi = u_threshold + u_softness;
+    current = smoothstep(lo, hi, current);
+  }
 
   // Base hysteresis rates
   float appearRate = u_appearRate;
@@ -131,6 +134,7 @@ uniform sampler2D u_mask;          // Low-res smoothed mask
 uniform sampler2D u_guide;         // Full-res camera frame (RGB guide)
 uniform vec2 u_maskSize;           // Mask texture dimensions
 uniform vec2 u_guideSize;          // Guide texture dimensions
+uniform float u_guideLod;          // Guide mip level matching one mask texel
 uniform float u_spatialSigma;      // Spatial kernel sigma (pixels)
 uniform float u_rangeSigma;        // Color similarity sigma (0.05-0.15)
 
@@ -170,7 +174,9 @@ void main() {
 
     // Perceptual distance: separate luminance and chroma components
     // White bg vs light skin have similar luminance but very different chroma
-    vec3 sampleColor = texture(u_guide, sampleCoord).rgb;
+    // Each mask texel covers a block of camera pixels. Compare against that
+    // block's average (a mip level) rather than one noisy camera pixel.
+    vec3 sampleColor = textureLod(u_guide, sampleCoord, u_guideLod).rgb;
     vec3 colorDiff = centerColor - sampleColor;
     float lumDiff = dot(colorDiff, lumW);
     vec3 chromaDiff = colorDiff - lumDiff; // pure chroma difference
@@ -302,12 +308,55 @@ void main() {
   float mask = smoothstep(lo, hi, rawMask);
 
   // Preserve the matte across WebGL -> canvas -> WebGL/2D. The drawing buffer
-  // is configured for premultiplied alpha; no synthetic plate belongs in RGB.
+  // holds straight alpha; no synthetic plate belongs in RGB.
   if (u_backgroundMode == 3) {
-    // A fixed, gentle transfer avoids making alpha change whenever camera
-    // texture/noise changes the RGB-gradient sharpening strength above.
-    float coverage = smoothstep(0.05, 0.95, rawMask);
-    outColor = vec4(I * coverage, coverage);
+    // This is the only threshold on the cutout path: the temporal stage keeps
+    // raw confidence, so edges are decided after snapping to the camera image.
+    // A fixed transfer avoids alpha changing whenever camera texture/noise
+    // changes the RGB-gradient sharpening strength above.
+    float coverage = smoothstep(0.2, 0.8, rawMask);
+    vec3 F = I;
+    // Wider than the coverage ramp: pixels just inside it are opaque but can
+    // still carry the room's colour.
+    if (rawMask > 0.02 && rawMask < 0.98) {
+      // Edge pixels mix the person with the room behind them:
+      //   I = F * a + B * (1 - a)
+      // Estimate F and B from confidently-inside / outside neighbours, then
+      // solve for F so the room's colour does not ride along on the fringe.
+      vec3 fgSum = vec3(0.0);
+      vec3 bgSum = vec3(0.0);
+      float fgW = 0.0;
+      float bgW = 0.0;
+      vec2 sampleStep = u_texelSize * 4.0;
+      for (int i = 1; i < 13; i++) {
+        vec2 sc = v_texCoord + mOff[i] * sampleStep;
+        float m = texture(u_mask, sc).r;
+        vec3 col = texture(u_camera, sc).rgb;
+        float proximity = 1.0 / (1.0 + length(mOff[i]));
+        float fw = smoothstep(0.6, 0.9, m) * proximity;
+        float bw = smoothstep(0.4, 0.1, m) * proximity;
+        fgSum += col * fw;
+        fgW += fw;
+        bgSum += col * bw;
+        bgW += bw;
+      }
+      if (fgW > 0.01 && bgW > 0.01) {
+        vec3 Fn = fgSum / fgW;
+        vec3 B = bgSum / bgW;
+        vec3 FB = Fn - B;
+        float fbLum = dot(FB, vec3(0.299, 0.587, 0.114));
+        vec3 fbChroma = FB - fbLum;
+        // Only decontaminate where person and room colours actually differ.
+        float separation = smoothstep(0.02, 0.08, fbLum * fbLum + dot(fbChroma, fbChroma) * 3.0);
+        float a = clamp(dot(I - B, FB) / max(dot(FB, FB), 0.01), 0.0, 1.0);
+        vec3 solved = (I - B * (1.0 - a)) / max(a, 0.05);
+        // Dividing by a small alpha amplifies noise; lean on the neighbour
+        // foreground colour there instead.
+        vec3 recovered = mix(Fn, solved, smoothstep(0.1, 0.5, a));
+        F = mix(I, clamp(recovered, 0.0, 1.0), separation);
+      }
+    }
+    outColor = vec4(F, coverage);
     return;
   }
 

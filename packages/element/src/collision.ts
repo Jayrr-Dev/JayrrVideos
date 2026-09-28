@@ -79,6 +79,14 @@ import type {
   Ordered,
 } from "./types";
 
+const JAYRR_CAMERA_KEY = "jayrrCamera";
+
+/** A shape linked to a live camera/screen stream paints video over its fill. */
+const hasLiveStreamFill = (element: ExcalidrawElement) => {
+  const data = element.customData?.[JAYRR_CAMERA_KEY];
+  return !!data && typeof data === "object";
+};
+
 export const shouldTestInside = (element: ExcalidrawElement) => {
   if (element.type === "arrow") {
     return false;
@@ -86,6 +94,7 @@ export const shouldTestInside = (element: ExcalidrawElement) => {
 
   const isDraggableFromInside =
     (hasBackground(element.type) && !isTransparent(element.backgroundColor)) ||
+    (hasBackground(element.type) && hasLiveStreamFill(element)) ||
     hasBoundTextElement(element) ||
     isIframeLikeElement(element) ||
     isTextElement(element);

@@ -152,6 +152,7 @@ import {
   renderJayrrCalledHyperlinkPopup,
   tryPasteMarkdown,
   tryPastePdf,
+  tryPasteSound,
 } from "./domain/widgets";
 import { ShareDialog, shareDialogStateAtom } from "./share/ShareDialog";
 import { useHandleAppTheme } from "./useHandleAppTheme";
@@ -899,6 +900,9 @@ const ExcalidrawWrapper = () => {
         return true;
       }
       if (await tryPastePdf(excalidrawAPI, data, event)) {
+        return false;
+      }
+      if (await tryPasteSound(excalidrawAPI, data, event)) {
         return false;
       }
       if (await tryPasteMarkdown(excalidrawAPI, data, event)) {

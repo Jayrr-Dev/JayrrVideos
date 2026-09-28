@@ -100,6 +100,7 @@ import {
 import { readJayrrBgMediaFileId } from "../domain/background/jayrrBgMedia";
 import { readCalledObjectKind } from "../domain/widgets/model";
 import { readPdfFileId } from "../domain/widgets/objects/pdfConfig";
+import { readSoundFileId } from "../domain/widgets/objects/soundConfig";
 
 import { collabErrorIndicatorAtom } from "./CollabError";
 import {
@@ -481,15 +482,23 @@ class Collab extends PureComponent<CollabProps, CollabState> {
       .map((element) => (element as InitializedExcalidrawImageElement).fileId);
 
     const unfetchedPdfs = opts.elements
-      .filter((element) => {
-        if (element.isDeleted || readCalledObjectKind(element) !== "pdf") {
-          return false;
+      .map((element) => {
+        if (element.isDeleted) {
+          return null;
         }
-        const fileId = readPdfFileId(element);
-        return !!fileId && !this.fileManager.isFileTracked(fileId);
+        const kind = readCalledObjectKind(element);
+        if (kind === "pdf") {
+          return readPdfFileId(element);
+        }
+        if (kind === "sound") {
+          return readSoundFileId(element);
+        }
+        return null;
       })
-      .map((element) => readPdfFileId(element)!)
-      .filter(Boolean);
+      .filter(
+        (fileId): fileId is NonNullable<typeof fileId> =>
+          !!fileId && !this.fileManager.isFileTracked(fileId),
+      );
 
     const unfetchedBgMedia = opts.elements
       .map((element) => readJayrrBgMediaFileId(element))

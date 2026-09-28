@@ -14,9 +14,9 @@ import { LibrariesShell } from "./librariesChrome";
 import "./JayrrLibraryMenu.scss";
 
 const LIBRARY_TABS: { id: LibrariesView; label: string }[] = [
+  { id: "scene", label: "Scene" },
   { id: "record", label: "Record" },
   { id: "project", label: "Project" },
-  { id: "scene", label: "Scene" },
   { id: "parts", label: "Parts" },
 ];
 

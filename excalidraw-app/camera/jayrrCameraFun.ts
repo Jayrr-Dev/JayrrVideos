@@ -111,32 +111,54 @@ export const funScale = (offset: CameraFunOffset) => {
   return Math.min(FUN_SCALE_MAX, Math.max(FUN_SCALE_MIN, scale));
 };
 
-const readStoredOffset = (): CameraFunOffset => {
+export type CameraFunTarget = CameraAccessory | "laser" | "eyeLasers";
+
+export type CameraFunOffsets = Partial<
+  Record<CameraFunTarget, CameraFunOffset>
+>;
+
+const OFFSETS_KEY = "jayrr-camera-accessory-offsets";
+
+const parseOffset = (value: any): CameraFunOffset | null => {
+  if (!Number.isFinite(value?.x) || !Number.isFinite(value?.y)) {
+    return null;
+  }
+  return {
+    x: value.x,
+    y: value.y,
+    scale: funScale({ x: 0, y: 0, scale: value.scale }),
+  };
+};
+
+export const funOffsetFor = (
+  offsets: CameraFunOffsets,
+  target: CameraFunTarget,
+): CameraFunOffset => offsets[target] ?? DEFAULT_FUN_OFFSET;
+
+const readStoredOffsets = (): CameraFunOffsets => {
   try {
-    const value = JSON.parse(
-      localStorage.getItem("jayrr-camera-accessory-offset") || "null",
-    );
-    if (!Number.isFinite(value?.x) || !Number.isFinite(value?.y)) {
-      return { ...DEFAULT_FUN_OFFSET };
+    const value = JSON.parse(localStorage.getItem(OFFSETS_KEY) || "null");
+    if (!value || typeof value !== "object") {
+      return {};
     }
-    return {
-      x: value.x,
-      y: value.y,
-      scale: funScale({ x: 0, y: 0, scale: value.scale }),
-    };
+    const offsets: CameraFunOffsets = {};
+    for (const [key, entry] of Object.entries(value)) {
+      const offset = parseOffset(entry);
+      if (offset) {
+        offsets[key as CameraFunTarget] = offset;
+      }
+    }
+    return offsets;
   } catch {
-    return { ...DEFAULT_FUN_OFFSET };
+    return {};
   }
 };
 
-export const cameraFunOffsetAtom = atom<CameraFunOffset>(readStoredOffset());
+export const cameraFunOffsetsAtom = atom<CameraFunOffsets>(readStoredOffsets());
 
-export const setSavedFunOffset = (offset: CameraFunOffset) => {
+export const setSavedFunOffsets = (offsets: CameraFunOffsets) => {
   try {
-    localStorage.setItem(
-      "jayrr-camera-accessory-offset",
-      JSON.stringify(offset),
-    );
+    localStorage.setItem(OFFSETS_KEY, JSON.stringify(offsets));
   } catch {
     /* private mode */
   }
@@ -414,7 +436,7 @@ const paintFun = (
   elementId: string,
   video: HTMLVideoElement,
   canvas: HTMLCanvasElement,
-  offset: CameraFunOffset,
+  getOffset: (target: CameraFunTarget) => CameraFunOffset,
   glassesOn: boolean,
   laserOn: boolean,
   accessory: CameraAccessory,
@@ -438,6 +460,7 @@ const paintFun = (
   context.clearRect(0, 0, width, height);
   context.drawImage(source, 0, 0, width, height);
   if (glassesOn) {
+    const offset = getOffset(accessory);
     if (accessory === "glasses") {
       drawRoundGlasses(context, width, height, face, offset);
     } else {
@@ -445,7 +468,7 @@ const paintFun = (
     }
   }
   if (laserOn) {
-    drawMouthLaser(context, width, height, face, offset);
+    drawMouthLaser(context, width, height, face, getOffset("laser"));
   }
   return true;
 };
@@ -522,7 +545,7 @@ export const startJayrrCameraFun = (
   elementId: string,
   video: HTMLVideoElement,
   canvas: HTMLCanvasElement,
-  getOffset: () => CameraFunOffset,
+  getOffset: (target: CameraFunTarget) => CameraFunOffset,
   glassesOn: boolean,
   laserOn: boolean,
   eyeLasersOn: boolean,
@@ -561,7 +584,7 @@ export const startJayrrCameraFun = (
               elementId,
               video,
               canvas,
-              getOffset(),
+              getOffset,
               glassesOn,
               laserOn,
               getAccessory(),
@@ -571,7 +594,7 @@ export const startJayrrCameraFun = (
           }
           const context = canvas.getContext("2d");
           if (context) {
-            eyeLasers?.draw(context, getOffset());
+            eyeLasers?.draw(context, getOffset("eyeLasers"));
           }
           if (published) {
             return;

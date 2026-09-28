@@ -1,9 +1,11 @@
 import { TopErrorBoundary } from "../../../components/TopErrorBoundary";
 
 import { CaptionWidget } from "../objects/CaptionWidget";
+import { CheckboxWidget } from "../objects/CheckboxWidget";
 import { ClassifierWidget } from "../objects/ClassifierWidget";
 import { MarkdownWidget } from "../objects/MarkdownWidget";
 import { PdfWidget } from "../objects/PdfWidget";
+import { SoundWidget } from "../objects/SoundWidget";
 import { TranscribeWidget } from "../objects/TranscribeWidget";
 import { TranscriptionWidget } from "../objects/TranscriptionWidget";
 
@@ -36,6 +38,12 @@ export const JayrrCalledObjectEmbed = ({
   }
   if (kind === "pdf") {
     return <PdfWidget elementId={elementId} />;
+  }
+  if (kind === "checkbox") {
+    return <CheckboxWidget elementId={elementId} />;
+  }
+  if (kind === "sound") {
+    return <SoundWidget elementId={elementId} />;
   }
   return (
     <TopErrorBoundary compact key={elementId}>

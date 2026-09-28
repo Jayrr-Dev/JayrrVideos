@@ -8,6 +8,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 
 import type { ExcalidrawElement, FileId } from "@excalidraw/element/types";
+import type { BinaryFiles } from "@excalidraw/excalidraw/types";
 
 import { useAtom } from "../../../app-jotai";
 import { isPdfFile } from "../insertPdf";
@@ -29,6 +30,8 @@ export const PdfWidget = ({ elementId }: { elementId: string }) => {
   const [config, setConfig] = useState<PdfConfig>(DEFAULT_PDF);
   const [src, setSrc] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Collaborators receive the element before its bytes; reload once they land.
+  const [fileReady, setFileReady] = useState(false);
   const objectUrlRef = useRef<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -36,15 +39,20 @@ export const PdfWidget = ({ elementId }: { elementId: string }) => {
     if (!api) {
       return;
     }
-    const sync = (elements: readonly ExcalidrawElement[]) => {
+    const sync = (
+      elements: readonly ExcalidrawElement[],
+      files: BinaryFiles,
+    ) => {
       const element = elements.find((el) => el.id === elementId);
       if (!element) {
         return;
       }
-      setConfig(readPdfConfig(element));
+      const next = readPdfConfig(element);
+      setConfig(next);
+      setFileReady(!!next.fileId && !!files[next.fileId]?.dataURL);
     };
-    sync(api.getSceneElements());
-    return api.onChange((elements) => sync(elements));
+    sync(api.getSceneElements(), api.getFiles());
+    return api.onChange((elements, _appState, files) => sync(elements, files));
   }, [api, elementId]);
 
   useEffect(() => {
@@ -74,7 +82,6 @@ export const PdfWidget = ({ elementId }: { elementId: string }) => {
       }
       const file = api.getFiles()[config.fileId];
       if (!file?.dataURL) {
-        setError("PDF file is still loading…");
         return;
       }
       try {
@@ -105,7 +112,7 @@ export const PdfWidget = ({ elementId }: { elementId: string }) => {
       cancelled = true;
       clearObjectUrl();
     };
-  }, [api, config.fileId]);
+  }, [api, config.fileId, fileReady]);
 
   const attachFile = async (fileList: FileList | null) => {
     const file = fileList?.[0];

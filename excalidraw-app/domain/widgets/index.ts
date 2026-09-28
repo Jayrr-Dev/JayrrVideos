@@ -8,6 +8,14 @@ export {
 } from "./insertCalledObject";
 export { insertMarkdownEmbed } from "./insertMarkdown";
 export { insertPdfEmbed, isPdfFile } from "./insertPdf";
+export {
+  insertLibrarySound,
+  JAYRR_SOUND_LIBRARY_DRAG,
+  parseLibrarySoundDrag,
+  serializeLibrarySoundDrag,
+} from "./insertLibrarySound";
+export type { LibrarySoundRef } from "./insertLibrarySound";
+export { insertSoundEmbed, isAudioFile } from "./insertSound";
 export { isLikelyMarkdown, isMarkdownFile } from "./isLikelyMarkdown";
 export {
   CALLED_OBJECT_KINDS,
@@ -32,6 +40,11 @@ export {
   tryDropPdfFiles,
   tryPastePdf,
 } from "./pastePdf";
+export {
+  dataTransferHasSoundFile,
+  tryDropSoundFiles,
+  tryPasteSound,
+} from "./pasteSound";
 export { renderJayrrCalledHyperlinkPopup } from "./ui/JayrrCalledHyperlinkPopup";
 export { JayrrCalledObjectEmbed } from "./ui/JayrrCalledObjectEmbed";
 export { JayrrCalledObjectsPanel } from "./ui/JayrrCalledObjectsPanel";

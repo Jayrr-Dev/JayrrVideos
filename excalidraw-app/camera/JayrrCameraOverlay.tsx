@@ -17,7 +17,11 @@ import {
   retainJayrrScreenSelf,
   subscribeJayrrPhone,
 } from "../collab/jayrrCollabVideoSession";
-import { cameraCutoutAtom } from "../domain/flags/cameraCutoutFlag";
+import {
+  cameraCutoutAtom,
+  cameraCutoutEngineAtom,
+  type CameraCutout,
+} from "../domain/flags/cameraCutoutFlag";
 import {
   getTranscribeEnabled,
   listenDisplayAudio,
@@ -40,8 +44,9 @@ import { startJayrrCameraCutout } from "./jayrrCameraCutout";
 import {
   cameraAccessoryAtom,
   readStoredAccessory,
-  cameraFunOffsetAtom,
+  cameraFunOffsetsAtom,
   cameraFunOnAtom,
+  funOffsetFor,
   cameraLaserOnAtom,
   cameraEyeLasersOnAtom,
   startJayrrCameraFun,
@@ -87,7 +92,16 @@ const CameraVideo = ({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const cutoutRef = useRef<HTMLCanvasElement | null>(null);
   const funRef = useRef<HTMLCanvasElement | null>(null);
-  const cutout = useAtomValue(cameraCutoutAtom);
+  const defaultCutout = useAtomValue(cameraCutoutAtom);
+  const cutoutEngine = useAtomValue(cameraCutoutEngineAtom);
+  // The box carries the on/off choice so collaborators see the same cutout.
+  // Each viewer segments the stream they receive with their own engine.
+  const cutout: CameraCutout =
+    camera.cutout === undefined
+      ? defaultCutout
+      : camera.cutout
+      ? cutoutEngine
+      : "off";
   const funOn = useAtomValue(cameraFunOnAtom);
   const accessory = useAtomValue(cameraAccessoryAtom);
   const setAccessory = useSetAtom(cameraAccessoryAtom);
@@ -99,11 +113,11 @@ const CameraVideo = ({
   }, [setAccessory]);
   const laserOn = useAtomValue(cameraLaserOnAtom);
   const eyeLasersOn = useAtomValue(cameraEyeLasersOnAtom);
-  const funOffset = useAtomValue(cameraFunOffsetAtom);
-  const funSettings = useRef({ accessory, offset: funOffset });
+  const funOffsets = useAtomValue(cameraFunOffsetsAtom);
+  const funSettings = useRef({ accessory, offsets: funOffsets });
   useEffect(() => {
-    funSettings.current = { accessory, offset: funOffset };
-  }, [accessory, funOffset]);
+    funSettings.current = { accessory, offsets: funOffsets };
+  }, [accessory, funOffsets]);
   const display = isJayrrDisplay(camera);
   const phone = isJayrrPhone(camera);
   const screen = isJayrrScreen(camera);
@@ -394,7 +408,7 @@ const CameraVideo = ({
       elementId,
       video,
       canvas,
-      () => funSettings.current.offset,
+      (target) => funOffsetFor(funSettings.current.offsets, target),
       funOn,
       laserOn,
       eyeLasersOn,

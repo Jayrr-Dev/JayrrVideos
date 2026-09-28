@@ -1,4 +1,8 @@
 .excalidraw {
+  .Modal.jayrr-sound-library .Island {
+    padding: 1.25rem;
+  }
+
   .jayrr-sound-library__title-row {
     display: inline-flex;
     align-items: center;
@@ -319,7 +323,7 @@
   }
 
   .jayrr-sound-library__col--sounds {
-    --jayrr-sound-scroll: 8px;
+    --jayrr-sound-scroll: 10px;
   }
 
   .jayrr-sound-library__cols {
@@ -370,19 +374,20 @@
     justify-content: flex-start;
   }
 
-  .jayrr-sound-library__folders::-webkit-scrollbar,
-  .jayrr-sound-library__sounds::-webkit-scrollbar {
+  .jayrr-sound-library.Modal .jayrr-sound-library__folders::-webkit-scrollbar,
+  .jayrr-sound-library.Modal .jayrr-sound-library__sounds::-webkit-scrollbar {
     width: 8px;
   }
 
   .jayrr-sound-library__folders button,
   .jayrr-sound-library__row {
     display: flex;
+    box-sizing: border-box;
     width: 100%;
     min-width: 0;
     align-items: center;
     gap: 0.5rem;
-    padding: 0.4rem 0.5rem;
+    padding: 0.4rem calc(0.5rem + var(--jayrr-sound-scroll, 0px)) 0.4rem 0.5rem;
     border: 0;
     border-bottom: 1px solid var(--dialog-border-color);
     background: transparent;
@@ -628,4 +633,78 @@
   .jayrr-sound-library__generate .jayrr-sound-library__error {
     margin: 0;
   }
+
+  .jayrr-sound-library__notice {
+    margin: 0.45rem 0 0;
+    color: var(--color-primary);
+    font-size: 0.8rem;
+  }
+
+  .jayrr-sound-library__row[draggable="true"] {
+    cursor: grab;
+  }
+
+  .jayrr-sound-library__row:has(.jayrr-sound-library__add:hover) {
+    background: var(--color-surface-low, var(--button-hover-bg));
+  }
+
+  .jayrr-sound-library__cols-add {
+    flex: 0 0 1.9rem;
+    width: 1.9rem;
+  }
+
+  .jayrr-sound-library__add {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    width: 1.9rem;
+    height: 1.9rem;
+    padding: 0;
+    border: 1px solid var(--dialog-border-color);
+    border-radius: 0.4rem;
+    background: var(--input-bg-color, var(--island-bg-color));
+    color: inherit;
+    cursor: pointer;
+    opacity: 0.55;
+    transition: opacity 0.12s, color 0.12s, border-color 0.12s;
+
+    svg {
+      width: 0.8rem;
+      height: 0.8rem;
+    }
+  }
+
+  .jayrr-sound-library__row:hover .jayrr-sound-library__add,
+  .jayrr-sound-library__add:focus-visible {
+    opacity: 1;
+  }
+
+  .jayrr-sound-library__add:hover {
+    color: var(--color-primary);
+    border-color: var(--color-primary);
+  }
+
+  .jayrr-sound-library__add.is-busy {
+    cursor: progress;
+    opacity: 1;
+    animation: jayrr-sound-library-busy 0.9s ease-in-out infinite alternate;
+  }
+}
+
+@keyframes jayrr-sound-library-busy {
+  from {
+    opacity: 0.35;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+// Fade the library while a row is dragged so the canvas behind gets the drop.
+body.jayrr-sound-library-dragging .Modal.jayrr-sound-library {
+  pointer-events: none;
+  opacity: 0.2;
+  transition: opacity 0.15s;
 }

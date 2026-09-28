@@ -6,8 +6,9 @@ import { readJayrrBgMediaFileId } from "../background/jayrrBgMedia";
 
 import { readCalledObjectKind } from "./model";
 import { readPdfFileId } from "./objects/pdfConfig";
+import { readSoundFileId } from "./objects/soundConfig";
 
-/** Image + Jayrr PDF embed + fill-media file ids referenced by the scene. */
+/** Image + Jayrr PDF/sound embed + fill-media file ids referenced by the scene. */
 export const collectSceneFileIds = (
   elements: readonly ExcalidrawElement[],
   opts?: { onlyMissing?: Readonly<Record<string, unknown>> },
@@ -28,8 +29,12 @@ export const collectSceneFileIds = (
     if (isInitializedImageElement(element)) {
       push(element.fileId);
     }
-    if (readCalledObjectKind(element) === "pdf") {
+    const kind = readCalledObjectKind(element);
+    if (kind === "pdf") {
       push(readPdfFileId(element));
+    }
+    if (kind === "sound") {
+      push(readSoundFileId(element));
     }
     push(readJayrrBgMediaFileId(element));
   }

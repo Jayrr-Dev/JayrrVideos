@@ -28,8 +28,10 @@ type SoundModelRow = {
 
 export const JayrrSoundLibraryGenerateTab = ({
   onUse,
+  useLabel = "Use sound",
 }: {
   onUse?: (sound: JayrrSoundPick) => void;
+  useLabel?: string;
 }) => {
   const { isAuthenticated } = useConvexAuth();
   const listModels = useAction(api.editorAi.generateSound.listModels);
@@ -205,7 +207,7 @@ export const JayrrSoundLibraryGenerateTab = ({
                 onUse(result);
               }}
             >
-              Use sound
+              {useLabel}
             </Button>
           ) : null}
         </div>

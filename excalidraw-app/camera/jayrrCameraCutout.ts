@@ -22,6 +22,10 @@ const MEDIAPIPE_WASM =
   "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.32/wasm";
 const MEDIAPIPE_MODEL =
   "https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/latest/selfie_segmenter.tflite";
+// Hair/skin/clothes classes give Segmo cleaner edges than the binary selfie
+// model. Segmo turns it into a person mask as 1 - background.
+const SEGMO_MODEL =
+  "https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_multiclass_256x256/float32/latest/selfie_multiclass_256x256.tflite";
 
 type StopCutout = () => void;
 
@@ -218,6 +222,11 @@ const startSegmo = async (
     modelFps: 60,
     useWorker: false,
     outputFps: 30,
+    // A self-derived ROI crop can lock in a wrong mask after fast head
+    // motion (a band missing across the forehead that never recovers). The
+    // full frame gives the same edge quality at this model size.
+    roiCrop: false,
+    modelConfig: { modelAssetPath: SEGMO_MODEL },
   });
   await processor.init(width, height);
   if (cancelled()) {
@@ -233,8 +242,14 @@ const startSegmo = async (
     featherRadius: 0.75,
     erosionRadius: 0,
     rangeSigma: 0.08,
-    appearRate: 0.3,
-    disappearRate: 0.3,
+    // Damps per-frame model noise (lighting flicker, exposure jumps) while
+    // it's still cheap, at 256x144. A real edge change is not slowed by
+    // this: both this stage and the cutout key jump to full adoption the
+    // instant a pixel's mask value moves by more than ~0.12-0.4, so this
+    // only holds back jitter, not motion. Disabling it entirely (rate 1)
+    // removed that noise floor and showed up as flicker.
+    appearRate: 0.7,
+    disappearRate: 0.5,
   });
   const key = createCutoutKey(video.ownerDocument);
   if (!key) {

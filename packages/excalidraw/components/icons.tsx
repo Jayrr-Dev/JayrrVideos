@@ -1834,6 +1834,8 @@ export const widgetTranscriptionIcon = handdrawnUIIcon("widgetTranscription");
 export const widgetCaptionIcon = handdrawnUIIcon("widgetCaption");
 export const widgetMarkdownIcon = handdrawnUIIcon("widgetMarkdown");
 export const widgetPdfIcon = handdrawnUIIcon("widgetPdf");
+export const widgetCheckboxIcon = handdrawnUIIcon("widgetCheckbox");
+export const widgetSoundIcon = handdrawnUIIcon("widgetSound");
 
 export const copyIcon = createIcon(
   <>

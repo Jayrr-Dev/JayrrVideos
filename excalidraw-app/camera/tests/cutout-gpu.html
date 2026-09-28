@@ -234,6 +234,71 @@
           `appearing=${appearing}, disappearing=${disappearing}`,
         );
         pipeline.destroy();
+
+        // Read the pipeline's own straight-alpha buffer: going through a 2D
+        // canvas would premultiply again and hide the precision under test.
+        const readStraight = (target, x, y) => {
+          const gl = target.gl;
+          const out = new Uint8Array(4);
+          gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+          gl.readPixels(x, 63 - y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, out);
+          return [...out];
+        };
+        const straightOptions = {
+          width: 64,
+          height: 64,
+          maskWidth: 16,
+          maskHeight: 16,
+          backgroundMode: "transparent",
+          lightWrap: false,
+          morphology: false,
+          erosionRadius: 0,
+          featherRadius: 0.75,
+          rangeSigma: 0.08,
+          appearRate: 1,
+          disappearRate: 1,
+        };
+        const faintPipeline = new PostProcessingPipeline(straightOptions);
+        faintPipeline.process(
+          frame(64, 64, "#d69875"),
+          new Float32Array(256).fill(0.3),
+        );
+        const faint = readStraight(faintPipeline, 32, 32);
+        faintPipeline.destroy();
+        check(
+          "Faint edge alpha keeps exact colour",
+          faint[3] > 5 &&
+            faint[3] < 40 &&
+            Math.abs(faint[0] - 214) <= 2 &&
+            Math.abs(faint[1] - 152) <= 2 &&
+            Math.abs(faint[2] - 117) <= 2,
+          faint,
+        );
+
+        const edgePipeline = new PostProcessingPipeline(straightOptions);
+        const blended = frame(64, 64, "#000000");
+        const blendedCtx = blended.getContext("2d");
+        const ramp = blendedCtx.createLinearGradient(28, 0, 36, 0);
+        ramp.addColorStop(0, "#d69875");
+        ramp.addColorStop(1, "#2050e0");
+        blendedCtx.fillStyle = ramp;
+        blendedCtx.fillRect(0, 0, 64, 64);
+        mask.fill(0);
+        for (let y = 0; y < 16; y++) {
+          for (let x = 0; x < 7; x++) mask[y * 16 + x] = 1;
+          mask[y * 16 + 7] = 0.75;
+          mask[y * 16 + 8] = 0.25;
+        }
+        edgePipeline.process(blended, mask);
+        const fringe = [31, 32].map((x) => readStraight(edgePipeline, x, 32));
+        edgePipeline.destroy();
+        check(
+          "Edge pixels shed the room's colour",
+          fringe.every(
+            (p) => p[3] > 20 && p[3] < 235 && p[0] > 195 && p[2] < 135,
+          ),
+          fringe.map((p) => p.join(",")).join(" | "),
+        );
         key.destroy();
         results.textContent += `\n\n${checks.filter((c) => c.passed).length}/${
           checks.length

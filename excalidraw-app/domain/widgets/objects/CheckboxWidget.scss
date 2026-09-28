@@ -1,0 +1,57 @@
+.excalidraw {
+  .jayrr-called-embed.jayrr-checkbox-embed {
+    padding: 0;
+    gap: 0;
+    background: transparent;
+    border: 0;
+  }
+
+  .jayrr-checkbox-embed__box {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    max-width: 100%;
+    aspect-ratio: 1;
+    margin: 0;
+    padding: 0;
+    border: 2px solid var(--color-gray-60);
+    border-radius: 18%;
+    background: transparent;
+    color: #fff;
+    cursor: pointer;
+
+    svg {
+      width: 75%;
+      height: 75%;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 3;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      opacity: 0;
+      transform: scale(0.6);
+      transition: opacity 0.12s ease, transform 0.12s ease;
+    }
+  }
+
+  .jayrr-checkbox-embed__box:hover {
+    border-color: var(--color-primary);
+  }
+
+  .jayrr-checkbox-embed.is-checked .jayrr-checkbox-embed__box {
+    border-color: var(--color-primary);
+    background: var(--color-primary);
+
+    svg {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .jayrr-checkbox-embed__box svg {
+      transition: none;
+    }
+  }
+}

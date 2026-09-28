@@ -90,6 +90,8 @@ export type JayrrCamera =
       ownerName?: string;
       fit?: JayrrObjectFit;
       crop?: JayrrDisplayCrop;
+      /** Background removal, shared with everyone viewing this box. */
+      cutout?: boolean;
       brightness?: number;
       contrast?: number;
       saturation?: number;
@@ -101,6 +103,8 @@ export type JayrrCamera =
       ownerName?: string;
       fit?: JayrrObjectFit;
       crop?: JayrrDisplayCrop;
+      /** Background removal, shared with everyone viewing this box. */
+      cutout?: boolean;
     }
   | {
       kind: "screen";
@@ -109,6 +113,8 @@ export type JayrrCamera =
       ownerName?: string;
       fit?: JayrrObjectFit;
       crop?: JayrrDisplayCrop;
+      /** Background removal, shared with everyone viewing this box. */
+      cutout?: boolean;
     }
   | {
       kind: "display";
@@ -119,6 +125,8 @@ export type JayrrCamera =
       frameRate?: JayrrDisplayRate;
       fit?: JayrrObjectFit;
       crop?: JayrrDisplayCrop;
+      /** Background removal, shared with everyone viewing this box. */
+      cutout?: boolean;
     };
 
 export const jayrrDisplaySurfaceLabel = (surface?: JayrrDisplaySurface) => {
@@ -407,6 +415,7 @@ export const readJayrrCamera = (
     frameRate?: unknown;
     fit?: unknown;
     crop?: unknown;
+    cutout?: unknown;
     brightness?: unknown;
     contrast?: unknown;
     saturation?: unknown;
@@ -415,19 +424,20 @@ export const readJayrrCamera = (
   const ownerName = readJayrrOwnerName(bag.ownerName);
   const fit = parseObjectFit(bag.fit);
   const crop = parseDisplayCrop(bag.crop);
+  const cutout = typeof bag.cutout === "boolean" ? bag.cutout : undefined;
   if (bag.kind === "phone") {
     const userId = typeof bag.userId === "string" ? bag.userId : "";
     if (!userId) {
       return null;
     }
-    return { kind: "phone", userId, label, ownerName, fit, crop };
+    return { kind: "phone", userId, label, ownerName, fit, crop, cutout };
   }
   if (bag.kind === "screen") {
     const userId = typeof bag.userId === "string" ? bag.userId : "";
     if (!userId) {
       return null;
     }
-    return { kind: "screen", userId, label, ownerName, fit, crop };
+    return { kind: "screen", userId, label, ownerName, fit, crop, cutout };
   }
   if (bag.kind === "display") {
     return {
@@ -438,6 +448,7 @@ export const readJayrrCamera = (
       frameRate: isDisplayRate(bag.frameRate) ? bag.frameRate : undefined,
       fit,
       crop,
+      cutout,
       label,
     };
   }
@@ -454,6 +465,7 @@ export const readJayrrCamera = (
     ownerName,
     fit,
     crop,
+    cutout,
     ...cameraLookFields(parseCameraLook(bag) ?? DEFAULT_CAMERA_LOOK),
   };
 };

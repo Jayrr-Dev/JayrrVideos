@@ -3,9 +3,11 @@ import {
   helpIcon,
   messageCircleIcon,
   widgetCaptionIcon,
+  widgetCheckboxIcon,
   widgetClassifierIcon,
   widgetMarkdownIcon,
   widgetPdfIcon,
+  widgetSoundIcon,
   widgetTranscriptionIcon,
 } from "@excalidraw/excalidraw/components/icons";
 import { useRef } from "react";
@@ -36,6 +38,10 @@ const widgetIcon = (kind: typeof CALLED_OBJECTS[number]["kind"]) => {
       return widgetMarkdownIcon;
     case "pdf":
       return widgetPdfIcon;
+    case "checkbox":
+      return widgetCheckboxIcon;
+    case "sound":
+      return widgetSoundIcon;
   }
 };
 

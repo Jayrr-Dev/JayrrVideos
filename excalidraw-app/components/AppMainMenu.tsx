@@ -35,6 +35,7 @@ import {
   saveCanvasAsScene,
 } from "../data/jayrrScenes";
 import { JayrrFeatureFlags } from "../domain/flags/JayrrFeatureFlags";
+import { insertLibrarySound } from "../domain/widgets/insertLibrarySound";
 import { setAccountCollabIdentity } from "../domain/profile/accountCollabIdentity";
 import { JAYRR_PRESENT_TAB } from "../present/buildPresentDeck";
 import { docsViewAtom, persistDocsView } from "../present/docsView";
@@ -281,6 +282,11 @@ export const AppMainMenu: React.FC<{
           onClose={() => {
             setSoundLibraryOpen(false);
           }}
+          onAddToCanvas={
+            excalidrawAPI
+              ? (sound) => insertLibrarySound(excalidrawAPI, sound)
+              : undefined
+          }
         />
       ) : null}
     </>

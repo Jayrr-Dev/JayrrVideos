@@ -13,6 +13,7 @@ import {
   writeMarkdownConfig,
 } from "../objects/markdownConfig";
 import { readPdfConfig, writePdfConfig } from "../objects/pdfConfig";
+import { readSoundConfig, writeSoundConfig } from "../objects/soundConfig";
 import { pdfReplaceRequestAtom } from "../pdfReplaceAtom";
 import { useWidgetToolbar } from "../widgetToolbarRegistry";
 
@@ -46,7 +47,7 @@ const JayrrCalledHyperlinkPopup = ({
   const isEditing = editingId === elementId;
   const label =
     CALLED_OBJECTS.find((object) => object.kind === kind)?.name ?? kind;
-  const isDoc = kind === "markdown" || kind === "pdf";
+  const isDoc = kind === "markdown" || kind === "pdf" || kind === "sound";
 
   useEffect(() => {
     if (!api || !isDoc) {
@@ -59,6 +60,8 @@ const JayrrCalledHyperlinkPopup = ({
       }
       if (kind === "markdown") {
         setTitle(readMarkdownConfig(element).title);
+      } else if (kind === "sound") {
+        setTitle(readSoundConfig(element).title);
       } else {
         setTitle(readPdfConfig(element).title);
       }
@@ -83,6 +86,21 @@ const JayrrCalledHyperlinkPopup = ({
           el.id === elementId
             ? newElementWith(el, {
                 customData: writeMarkdownConfig(element, {
+                  ...config,
+                  title: trimmed,
+                }),
+              })
+            : el,
+        ),
+        captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+      });
+    } else if (kind === "sound") {
+      const config = readSoundConfig(element);
+      api.updateScene({
+        elements: api.getSceneElements().map((el) =>
+          el.id === elementId
+            ? newElementWith(el, {
+                customData: writeSoundConfig(element, {
                   ...config,
                   title: trimmed,
                 }),
@@ -142,7 +160,7 @@ const JayrrCalledHyperlinkPopup = ({
           {isEditing ? "Done" : "Edit"}
         </button>
       ) : null}
-      {kind === "pdf" ? (
+      {kind === "pdf" || kind === "sound" ? (
         <button
           type="button"
           className="jayrr-called-hyperlink__action"

@@ -51,6 +51,96 @@
     gap: 0.75rem;
   }
 
+  .jayrr-scene-status {
+    padding: 0.5rem 0.65rem;
+    border: 1px solid var(--default-border-color);
+    border-radius: var(--border-radius-lg, 8px);
+    background: var(--island-bg-color);
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    min-width: 0;
+    flex-shrink: 0;
+    width: 100%;
+    font: inherit;
+    text-align: left;
+    color: inherit;
+  }
+
+  .jayrr-scene-status--jump {
+    cursor: pointer;
+
+    &:hover {
+      border-color: var(--color-primary);
+      background: var(--color-primary-light, var(--island-bg-color));
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--color-primary);
+      outline-offset: 1px;
+    }
+  }
+
+  .jayrr-scene-status__row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+
+  .jayrr-scene-status__label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-gray-50, #868e96);
+  }
+
+  .jayrr-scene-status__collab {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.72rem;
+    color: var(--color-gray-50, #868e96);
+
+    &.is-on {
+      color: var(--color-success-text, #2b8a3e);
+      font-weight: 600;
+    }
+  }
+
+  .jayrr-scene-status__dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background: var(--color-gray-40, #adb5bd);
+  }
+
+  .jayrr-scene-status__collab.is-on .jayrr-scene-status__dot {
+    background: #2f9e44;
+    box-shadow: 0 0 0 3px rgba(47, 158, 68, 0.2);
+  }
+
+  .jayrr-scene-status__name {
+    display: block;
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--color-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+
+    &.is-empty {
+      color: var(--color-gray-50, #868e96);
+      font-weight: 500;
+      font-style: italic;
+    }
+  }
+
+  .jayrr-scene-status__folder {
+    font-weight: 400;
+    color: var(--color-gray-50, #868e96);
+  }
+
   .jayrr-scene-grid {
     list-style: none;
     margin: 0;

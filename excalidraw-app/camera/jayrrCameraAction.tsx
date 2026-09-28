@@ -35,17 +35,20 @@ import {
 import {
   cameraAccessoryAtom,
   setSavedAccessory,
-  cameraFunOffsetAtom,
+  cameraFunOffsetsAtom,
   DEFAULT_FUN_OFFSET,
   FUN_SCALE_MAX,
   FUN_SCALE_MIN,
+  funOffsetFor,
   funScale,
   cameraFunOnAtom,
   cameraLaserOnAtom,
   cameraEyeLasersOnAtom,
-  setSavedFunOffset,
+  setSavedFunOffsets,
   setSavedFunOn,
   type CameraFunOffset,
+  type CameraFunOffsets,
+  type CameraFunTarget,
 } from "./jayrrCameraFun";
 import {
   CAMERA_ACCESSORIES,
@@ -584,6 +587,9 @@ const sourceValue = (camera: JayrrCamera | null) => {
   return camera.deviceId;
 };
 
+const readCutoutValue = (bag: object) =>
+  "cutout" in bag && typeof bag.cutout === "boolean" ? bag.cutout : undefined;
+
 const cameraFromValue = (
   value: unknown,
   devices: readonly MediaDeviceInfo[] = [],
@@ -638,12 +644,14 @@ const cameraFromValue = (
         frameRate,
         fit,
         crop: parseDisplayCrop("crop" in bag ? bag.crop : undefined),
+        cutout: readCutoutValue(bag),
         label: jayrrCameraLabel(bag) ?? jayrrDisplaySurfaceLabel(surface),
       };
     }
     const picture = {
       fit: parseObjectFit("fit" in bag ? bag.fit : undefined),
       crop: parseDisplayCrop("crop" in bag ? bag.crop : undefined),
+      cutout: readCutoutValue(bag),
     };
     if (bag.kind === "screen" && typeof bag.userId === "string" && bag.userId) {
       const userId =
@@ -835,8 +843,8 @@ const StreamFields = ({
   onToggleLaser,
   eyeLasersOn,
   onToggleEyeLasers,
-  funOffset,
-  onFunOffset,
+  funOffsets,
+  onFunOffsets,
   onUnlock,
   phoneSource,
   collaborating,
@@ -878,8 +886,8 @@ const StreamFields = ({
   onToggleLaser: () => void;
   eyeLasersOn: boolean;
   onToggleEyeLasers: () => void;
-  funOffset: CameraFunOffset;
-  onFunOffset: (offset: CameraFunOffset) => void;
+  funOffsets: CameraFunOffsets;
+  onFunOffsets: (offsets: CameraFunOffsets) => void;
   onUnlock: () => void;
   phoneSource: string;
   collaborating: boolean;
@@ -898,6 +906,9 @@ const StreamFields = ({
       : source;
   const desktopOn = source === JAYRR_DISPLAY_SOURCE;
   const cameraOn = Boolean(cameraSource);
+  const [offsetTarget, setOffsetTarget] = useState<CameraFunTarget | null>(
+    null,
+  );
   const phoneOn = Boolean(phoneSource);
   const screenOn = Boolean(screenSource);
   const linkedMissing = Boolean(
@@ -1244,6 +1255,26 @@ const StreamFields = ({
       />
     )
   ) : null;
+  const accessoryName =
+    accessory === "glasses"
+      ? "Glasses"
+      : CAMERA_ACCESSORIES.find(({ id }) => id === accessory)?.name ??
+        accessory;
+  const funTargets: Array<{ id: CameraFunTarget; label: string }> = [
+    ...(funOn ? [{ id: accessory, label: accessoryName }] : []),
+    ...(laserOn ? [{ id: "laser" as const, label: "Lazer" }] : []),
+    ...(eyeLasersOn ? [{ id: "eyeLasers" as const, label: "Eye Lasers" }] : []),
+  ];
+  const funTarget =
+    funTargets.find(({ id }) => id === offsetTarget)?.id ?? funTargets[0]?.id;
+  const funOffset = funTarget
+    ? funOffsetFor(funOffsets, funTarget)
+    : DEFAULT_FUN_OFFSET;
+  const onFunOffset = (offset: CameraFunOffset) => {
+    if (funTarget) {
+      onFunOffsets({ ...funOffsets, [funTarget]: offset });
+    }
+  };
   const funChoice = cameraOn ? (
     <StreamChoice
       title="Accessories"
@@ -1316,6 +1347,19 @@ const StreamFields = ({
       >
         {(close) => (
           <div className="jayrr-camera-picker__look">
+            {funTargets.length > 1 ? (
+              <div className="jayrr-camera-picker__offset-targets">
+                {funTargets.map(({ id, label }) => (
+                  <MenuItem
+                    key={id}
+                    selected={id === funTarget}
+                    onSelect={() => setOffsetTarget(id)}
+                  >
+                    {label}
+                  </MenuItem>
+                ))}
+              </div>
+            ) : null}
             <Range
               label="Horizontal"
               value={funOffset.x}
@@ -1432,6 +1476,7 @@ const CameraPanel = ({
   frameRate,
   fit,
   crop,
+  cutout,
   look,
   onChange,
 }: {
@@ -1444,6 +1489,8 @@ const CameraPanel = ({
   frameRate: JayrrDisplayRate;
   fit: JayrrObjectFit;
   crop: JayrrDisplayCrop | undefined;
+  /** The box's own cutout setting; unset boxes follow this browser's default. */
+  cutout: boolean | undefined;
   look: JayrrCameraLook;
   onChange: (next: unknown) => void;
 }) => {
@@ -1453,8 +1500,9 @@ const CameraPanel = ({
   const cropElementId = useAtomValue(desktopCropElementIdAtom);
   const setCropElementId = useSetAtom(desktopCropElementIdAtom);
   const collaborating = useAtomValue(isCollaboratingAtom);
-  const cutoutOn = useAtomValue(cameraCutoutOnAtom);
+  const defaultCutoutOn = useAtomValue(cameraCutoutOnAtom);
   const setCutoutOn = useSetAtom(cameraCutoutOnAtom);
+  const cutoutOn = cutout ?? defaultCutoutOn;
   const funOn = useAtomValue(cameraFunOnAtom);
   const accessory = useAtomValue(cameraAccessoryAtom);
   const setAccessory = useSetAtom(cameraAccessoryAtom);
@@ -1463,8 +1511,8 @@ const CameraPanel = ({
   const setLaserOn = useSetAtom(cameraLaserOnAtom);
   const setEyeLasersOn = useSetAtom(cameraEyeLasersOnAtom);
   const setFunOn = useSetAtom(cameraFunOnAtom);
-  const funOffset = useAtomValue(cameraFunOffsetAtom);
-  const setFunOffset = useSetAtom(cameraFunOffsetAtom);
+  const funOffsets = useAtomValue(cameraFunOffsetsAtom);
+  const setFunOffsets = useSetAtom(cameraFunOffsetsAtom);
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [screenError, setScreenError] = useState<string | null>(null);
@@ -1650,6 +1698,7 @@ const CameraPanel = ({
     nextRate: JayrrDisplayRate,
     nextFit: JayrrObjectFit = fit,
     nextCrop: JayrrDisplayCrop | undefined = crop,
+    nextCutout: boolean | undefined = cutout,
   ) => {
     onChange({
       kind: "display",
@@ -1659,6 +1708,7 @@ const CameraPanel = ({
       frameRate: nextRate,
       fit: nextFit,
       crop: nextCrop,
+      cutout: nextCutout,
       label: sourceLabel || jayrrDisplaySurfaceLabel(displaySurface),
     });
   };
@@ -1667,6 +1717,7 @@ const CameraPanel = ({
     nextFit: JayrrObjectFit,
     nextCrop: JayrrDisplayCrop | undefined,
     nextLook: JayrrCameraLook = look,
+    nextCutout: boolean | undefined = cutout,
   ) => {
     if (phoneSource) {
       onChange({
@@ -1675,6 +1726,7 @@ const CameraPanel = ({
         label: sourceLabel ?? undefined,
         fit: nextFit,
         crop: nextCrop,
+        cutout: nextCutout,
       });
       return;
     }
@@ -1686,11 +1738,12 @@ const CameraPanel = ({
         label: sourceLabel || "Screen",
         fit: nextFit,
         crop: nextCrop,
+        cutout: nextCutout,
       });
       return;
     }
     if (source === JAYRR_DISPLAY_SOURCE) {
-      keepDisplay(quality, frameRate, nextFit, nextCrop);
+      keepDisplay(quality, frameRate, nextFit, nextCrop, nextCutout);
       return;
     }
     if (source) {
@@ -1700,6 +1753,7 @@ const CameraPanel = ({
         label: sourceLabel ?? undefined,
         fit: nextFit,
         crop: nextCrop,
+        cutout: nextCutout,
         ...cameraLookFields(nextLook),
       });
     }
@@ -1746,6 +1800,9 @@ const CameraPanel = ({
       cutoutOn={cutoutOn}
       onToggleCutout={() => {
         const next = !cutoutOn;
+        // Stored on the box so every collaborator cuts it out too. The local
+        // default still follows, so the next new box starts the same way.
+        applyPicture(fit, crop, look, next);
         setCutoutOn(next);
         setSavedCutoutOn(next);
       }}
@@ -1754,10 +1811,10 @@ const CameraPanel = ({
       eyeLasersOn={eyeLasersOn}
       onToggleEyeLasers={() => setEyeLasersOn(!eyeLasersOn)}
       onToggleLaser={() => setLaserOn(!laserOn)}
-      funOffset={funOffset}
-      onFunOffset={(next) => {
-        setFunOffset(next);
-        setSavedFunOffset(next);
+      funOffsets={funOffsets}
+      onFunOffsets={(next) => {
+        setFunOffsets(next);
+        setSavedFunOffsets(next);
       }}
       accessory={accessory}
       onAccessory={(id) => {
@@ -1842,6 +1899,7 @@ export const jayrrCameraAction: Action = {
         frameRate={readDisplayRate(camera)}
         fit={readDisplayFit(camera)}
         crop={readDisplayCrop(camera)}
+        cutout={camera?.cutout}
         look={readCameraLook(camera)}
         onChange={(next) => updateData(next)}
       />

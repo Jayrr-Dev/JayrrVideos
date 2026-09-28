@@ -4,6 +4,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { api, convexClient, isConvexLinked } from "../../convexClient";
 import {
+  JAYRR_SOUND_LIBRARY_DRAG,
+  serializeLibrarySoundDrag,
+} from "../../domain/widgets/insertLibrarySound";
+import {
   peekLoudnessDb,
   subscribeLoudnessCache,
   subscribeLoudnessDb,
@@ -47,7 +51,12 @@ type JayrrSoundLibraryDialogProps = {
   onClose: () => void;
   selectedId?: string | null;
   onSelect?: (sound: JayrrSoundPick | null) => void;
+  /** Browse mode: puts a sound on the canvas (button, drag, or generated clip). */
+  onAddToCanvas?: (sound: JayrrSoundPick) => Promise<unknown>;
 };
+
+/** While a row is dragged, let the canvas behind the dialog take the drop. */
+const DRAGGING_CLASS = "jayrr-sound-library-dragging";
 
 const TABS = [
   { id: "library", label: "Library" },
@@ -58,7 +67,7 @@ const TABS = [
 type SoundLibraryTab = typeof TABS[number]["id"];
 
 const INFO_BROWSE =
-  "Browse Flatten sounds stored in Convex. Pitch is spectral centroid in Hz. Loudness is RMS dB from the catalog, or a decode of the preview.";
+  "Browse Flatten sounds stored in Convex. Click + to add a sound to the canvas, or drag a row onto it. Pitch is spectral centroid in Hz. Loudness is RMS dB from the catalog, or a decode of the preview.";
 
 const INFO_PICK =
   "Pick a sound for this present cue. Preview with play, then click a row. Pitch is spectral centroid. Loudness is RMS dB.";
@@ -82,6 +91,18 @@ const formatClock = (durationSec: number) => {
 const playIcon = (
   <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
     <path d="M4 2.5v11l10-5.5z" fill="currentColor" />
+  </svg>
+);
+
+const addIcon = (
+  <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+    <path
+      d="M8 3v10M3 8h10"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      fill="none"
+    />
   </svg>
 );
 
@@ -355,6 +376,7 @@ export const JayrrSoundLibraryDialog = ({
   onClose,
   selectedId = null,
   onSelect,
+  onAddToCanvas,
 }: JayrrSoundLibraryDialogProps) => {
   const [folder, setFolder] = useState("");
   const [search, setSearch] = useState("");
@@ -410,6 +432,7 @@ export const JayrrSoundLibraryDialog = ({
       info={info}
       onClose={onClose}
       onSelect={onSelect}
+      onAddToCanvas={pickMode ? undefined : onAddToCanvas}
       isPlaying={isPlaying}
       pickMode={pickMode}
       playError={playError}
@@ -469,6 +492,7 @@ const JayrrSoundLibraryDialogConnected = ({
   isPlaying,
   onClose,
   onSelect,
+  onAddToCanvas,
   pickMode,
   playError,
   playingPath,
@@ -490,6 +514,7 @@ const JayrrSoundLibraryDialogConnected = ({
   isPlaying: boolean;
   onClose: () => void;
   onSelect?: (sound: JayrrSoundPick | null) => void;
+  onAddToCanvas?: JayrrSoundLibraryDialogProps["onAddToCanvas"];
   pickMode: boolean;
   playError: string | null;
   playingPath: string | null;
@@ -517,6 +542,47 @@ const JayrrSoundLibraryDialogConnected = ({
   const [sortKey, setSortKey] = useState<SoundSortKey>("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const playGenRef = useRef(0);
+  const [addingIds, setAddingIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const [addNotice, setAddNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!addNotice) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setAddNotice(null);
+    }, 2500);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [addNotice]);
+
+  useEffect(() => {
+    return () => {
+      document.body.classList.remove(DRAGGING_CLASS);
+    };
+  }, []);
+
+  const addToCanvas = async (sound: JayrrSoundPick) => {
+    if (!onAddToCanvas || addingIds.has(sound.id)) {
+      return;
+    }
+    setAddingIds((current) => new Set(current).add(sound.id));
+    try {
+      const added = await onAddToCanvas(sound);
+      if (added) {
+        setAddNotice(`Added “${sound.name}” to the canvas.`);
+      }
+    } finally {
+      setAddingIds((current) => {
+        const next = new Set(current);
+        next.delete(sound.id);
+        return next;
+      });
+    }
+  };
 
   useEffect(() => {
     if (dbFilter === 0 && sortKey !== "db") {
@@ -748,11 +814,20 @@ const JayrrSoundLibraryDialogConnected = ({
       />
       {tab === "generate" ? (
         <JayrrSoundLibraryGenerateTab
-          onUse={pickMode ? pickSound : undefined}
+          onUse={pickMode ? pickSound : onAddToCanvas ? addToCanvas : undefined}
+          useLabel={pickMode ? "Use sound" : "Add to canvas"}
         />
       ) : null}
       {tab === "voice" ? (
-        <JayrrSoundLibraryVoiceTab onUse={pickMode ? pickSound : undefined} />
+        <JayrrSoundLibraryVoiceTab
+          onUse={pickMode ? pickSound : onAddToCanvas ? addToCanvas : undefined}
+          useLabel={pickMode ? "Use sound" : "Add to canvas"}
+        />
+      ) : null}
+      {addNotice && tab !== "library" ? (
+        <p className="jayrr-sound-library__notice" role="status">
+          {addNotice}
+        </p>
       ) : null}
       {tab === "library" ? (
         <div className="jayrr-sound-library__body">
@@ -836,6 +911,11 @@ const JayrrSoundLibraryDialogConnected = ({
               {playError ? (
                 <p className="jayrr-sound-library__error">{playError}</p>
               ) : null}
+              {addNotice ? (
+                <p className="jayrr-sound-library__notice" role="status">
+                  {addNotice}
+                </p>
+              ) : null}
             </div>
             <div className="jayrr-sound-library__cols" role="row">
               <span
@@ -879,6 +959,12 @@ const JayrrSoundLibraryDialogConnected = ({
                   className="jayrr-sound-library__clock"
                 />
               </span>
+              {onAddToCanvas ? (
+                <span
+                  className="jayrr-sound-library__cols-add"
+                  aria-hidden="true"
+                />
+              ) : null}
             </div>
             <ul className="jayrr-sound-library__sounds">
               {visibleSounds.map((row) => {
@@ -956,44 +1042,101 @@ const JayrrSoundLibraryDialogConnected = ({
                   );
                 }
 
+                const pick: JayrrSoundPick = {
+                  id: row._id,
+                  name: row.name,
+                  path: row.path,
+                  durationSec: row.durationSec,
+                  url: row.url,
+                };
+                const adding = addingIds.has(row._id);
+
                 return (
                   <li key={row._id}>
-                    <button
+                    <div
                       className={rowClass}
-                      onClick={() => {
-                        void playSound(row.url, row.path, row._id);
-                      }}
-                      type="button"
-                      aria-label={
-                        playing ? `Pause ${row.name}` : `Play ${row.name}`
+                      draggable={Boolean(onAddToCanvas)}
+                      title={
+                        onAddToCanvas
+                          ? "Drag onto the canvas to place it"
+                          : undefined
                       }
+                      onDragStart={(event) => {
+                        if (!onAddToCanvas) {
+                          return;
+                        }
+                        event.dataTransfer.effectAllowed = "copy";
+                        event.dataTransfer.setData(
+                          JAYRR_SOUND_LIBRARY_DRAG,
+                          serializeLibrarySoundDrag(pick),
+                        );
+                        event.dataTransfer.setData("text/plain", row.name);
+                        // After the drag image is captured, fade the dialog so
+                        // the canvas underneath receives the drop.
+                        window.setTimeout(() => {
+                          document.body.classList.add(DRAGGING_CLASS);
+                        }, 0);
+                      }}
+                      onDragEnd={() => {
+                        document.body.classList.remove(DRAGGING_CLASS);
+                      }}
                     >
-                      <PlayMark
-                        playing={playing}
-                        progress={active ? progress : 0}
-                      />
-                      <span className="jayrr-sound-library__meta">
-                        <span className="jayrr-sound-library__name">
-                          {row.name}
+                      <button
+                        className="jayrr-sound-library__pick"
+                        onClick={() => {
+                          void playSound(row.url, row.path, row._id);
+                        }}
+                        type="button"
+                        aria-label={
+                          playing ? `Pause ${row.name}` : `Play ${row.name}`
+                        }
+                      >
+                        <PlayMark
+                          playing={playing}
+                          progress={active ? progress : 0}
+                        />
+                        <span className="jayrr-sound-library__meta">
+                          <span className="jayrr-sound-library__name">
+                            {row.name}
+                          </span>
+                          <span className="jayrr-sound-library__path">
+                            {row.folderPath}
+                          </span>
                         </span>
-                        <span className="jayrr-sound-library__path">
-                          {row.folderPath}
-                        </span>
-                      </span>
-                      <SoundWave
-                        path={row.path}
-                        url={row.url}
-                        playing={playing}
-                        progress={active ? progress : 0}
-                      />
-                      <SoundStats
-                        clock={formatClock(remain)}
-                        centroidHz={row.centroidHz}
-                        loudnessDb={row.loudnessDb}
-                        path={row.path}
-                        url={row.url}
-                      />
-                    </button>
+                        <SoundWave
+                          path={row.path}
+                          url={row.url}
+                          playing={playing}
+                          progress={active ? progress : 0}
+                        />
+                        <SoundStats
+                          clock={formatClock(remain)}
+                          centroidHz={row.centroidHz}
+                          loudnessDb={row.loudnessDb}
+                          path={row.path}
+                          url={row.url}
+                        />
+                      </button>
+                      {onAddToCanvas ? (
+                        <button
+                          type="button"
+                          className={
+                            adding
+                              ? "jayrr-sound-library__add is-busy"
+                              : "jayrr-sound-library__add"
+                          }
+                          title="Add to canvas"
+                          aria-label={`Add ${row.name} to canvas`}
+                          aria-busy={adding}
+                          disabled={adding}
+                          onClick={() => {
+                            void addToCanvas(pick);
+                          }}
+                        >
+                          {addIcon}
+                        </button>
+                      ) : null}
+                    </div>
                   </li>
                 );
               })}

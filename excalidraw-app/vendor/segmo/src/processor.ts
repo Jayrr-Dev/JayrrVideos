@@ -162,6 +162,13 @@ export interface SegmentationProcessorOptions {
   autoFrame?: AutoFrameConfig;
   /** Run model inference in a Web Worker (frees main thread, default: false) */
   useWorker?: boolean;
+  /**
+   * Feed the model a crop around last frame's person bbox (default: true).
+   * The crop is derived from the model's own output and held by a dead zone,
+   * so a mask that goes wrong during fast motion can pick a crop that keeps
+   * reproducing the same wrong mask once the scene is still.
+   */
+  roiCrop?: boolean;
   /** Keep background fixed in screen space during auto-frame (default: false) */
   backgroundFixed?: boolean;
   /** Diagnostics callback — receives periodic summary and init events */
@@ -406,6 +413,7 @@ export class SegmentationProcessor {
       adaptiveConfig: {},
       autoFrame: {},
       useWorker: false,
+      roiCrop: true,
       backgroundFixed: false,
       onDiagnostic: () => { },
       diagnosticsLevel: 'off',
@@ -1355,7 +1363,7 @@ export class SegmentationProcessor {
 
   /** Apply dead-zone smoothing to a candidate ROI crop */
   private updateROICropFromBBox(rawBBox: import('./model').CropRegion | null): void {
-    if (!rawBBox) return;
+    if (!rawBBox || !this.opts.roiCrop) return;
     if (this.personCropRegion) {
       const posShift = Math.max(
         Math.abs(rawBBox.x - this.personCropRegion.x),

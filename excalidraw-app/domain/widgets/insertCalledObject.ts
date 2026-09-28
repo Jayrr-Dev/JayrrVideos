@@ -17,9 +17,11 @@ import {
   DEFAULT_CAPTION,
   newCaptionOverlayElement,
 } from "./objects/captionConfig";
+import { DEFAULT_CHECKBOX } from "./objects/checkboxConfig";
 import { DEFAULT_CLASSIFIER } from "./objects/classifierConfig";
 import { DEFAULT_MARKDOWN } from "./objects/markdownConfig";
 import { DEFAULT_PDF } from "./objects/pdfConfig";
+import { DEFAULT_SOUND } from "./objects/soundConfig";
 import { DEFAULT_TRANSCRIBE } from "./objects/transcribeConfig";
 import {
   DEFAULT_TRANSCRIPTION,
@@ -43,6 +45,12 @@ const payloadFor = (def: CalledObjectDef) => {
   }
   if (def.kind === "pdf") {
     return { kind: def.kind, ...DEFAULT_PDF };
+  }
+  if (def.kind === "checkbox") {
+    return { kind: def.kind, ...DEFAULT_CHECKBOX };
+  }
+  if (def.kind === "sound") {
+    return { kind: def.kind, ...DEFAULT_SOUND };
   }
   return { kind: def.kind, ...DEFAULT_TRANSCRIBE };
 };

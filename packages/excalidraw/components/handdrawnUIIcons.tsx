@@ -424,6 +424,40 @@ const drawings = {
       strokeWidth: 0.9,
     },
   ],
+  widgetCheckbox: [
+    {
+      d: "M5 5 19 4 20 19 4 20Z",
+      fill: "#f4ce19",
+      stroke: "none",
+    },
+    {
+      d: "M5 5 19 4 20 19 4 20Z",
+      fill: "none",
+      strokeWidth: 2.1,
+    },
+    {
+      d: "M8 12.5 11 15.5 16.5 8.5",
+      fill: "none",
+      strokeWidth: 1.9,
+    },
+  ],
+  widgetSound: [
+    {
+      d: "M4 9 8 9 13 5 13 19 8 15 4 15Z",
+      fill: "#f4ce19",
+      stroke: "none",
+    },
+    {
+      d: "M4 9 8 9 13 5 13 19 8 15 4 15Z",
+      fill: "none",
+      strokeWidth: 2.1,
+    },
+    {
+      d: "M16 9.5Q17.6 12 16 14.5M18.5 7Q21.6 12 18.5 17",
+      fill: "none",
+      strokeWidth: 1.6,
+    },
+  ],
   desktop: [
     {
       d: "M4 15 20 14 20 18 4 18Z",

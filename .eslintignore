@@ -13,3 +13,4 @@ excalidraw-app/vendor
 excalidraw-app/vendor/**
 vendor
 vendor/**
+.kilo/
