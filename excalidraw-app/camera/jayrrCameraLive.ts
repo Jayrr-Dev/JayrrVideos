@@ -10,6 +10,7 @@ import { appJotaiStore } from "../app-jotai";
 import { readCaption } from "../domain/transcription";
 
 import {
+  JAYRR_CAMERA_ZOOM_MIN,
   cameraLookFilter,
   canLinkJayrrCamera,
   isFullDisplayCrop,
@@ -215,7 +216,8 @@ export const paintJayrrCameraLive = (
     context.rotate(element.angle);
     context.translate(-element.width / 2 + pad, -element.height / 2 + pad);
     clipFill(context, element, pad, width, height);
-    context.filter = cameraLookFilter(readCameraLook(camera));
+    const look = readCameraLook(camera);
+    context.filter = cameraLookFilter(look);
     if (video.dataset.jayrrMirror === "1") {
       context.translate(width, 0);
       context.scale(-1, 1);
@@ -238,6 +240,17 @@ export const paintJayrrCameraLive = (
       appJotaiStore.get(desktopCropElementIdAtom) === element.id;
     const crop = editingCrop ? undefined : readDisplayCrop(camera);
     const useCrop = crop && !isFullDisplayCrop(crop);
+    let sx = useCrop ? crop.x * sourceW : 0;
+    let sy = useCrop ? crop.y * sourceH : 0;
+    let sw = useCrop ? crop.width * sourceW : sourceW;
+    let sh = useCrop ? crop.height * sourceH : sourceH;
+    if (look.zoom > JAYRR_CAMERA_ZOOM_MIN) {
+      const scale = JAYRR_CAMERA_ZOOM_MIN / look.zoom;
+      sx += (sw * (1 - scale)) / 2;
+      sy += (sh * (1 - scale)) / 2;
+      sw *= scale;
+      sh *= scale;
+    }
     drawFitted(
       context,
       source,
@@ -246,10 +259,10 @@ export const paintJayrrCameraLive = (
       width,
       height,
       readDisplayFit(camera),
-      useCrop ? crop.x * sourceW : 0,
-      useCrop ? crop.y * sourceH : 0,
-      useCrop ? crop.width * sourceW : sourceW,
-      useCrop ? crop.height * sourceH : sourceH,
+      sx,
+      sy,
+      sw,
+      sh,
     );
     paintCaption(context, readCaption(element.id), width, height);
   } catch {

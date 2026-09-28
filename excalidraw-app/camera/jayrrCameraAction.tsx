@@ -66,6 +66,8 @@ import {
   JAYRR_DISPLAY_SURFACES,
   JAYRR_OBJECT_FITS,
   JAYRR_PHONE_SELF,
+  JAYRR_CAMERA_ZOOM_MAX,
+  JAYRR_CAMERA_ZOOM_MIN,
   cameraLookFields,
   canLinkJayrrCamera,
   isDefaultCameraLook,
@@ -797,6 +799,14 @@ const LookFields = ({
       max={JAYRR_CAMERA_LOOK_MAX}
       step={1}
       onChange={(saturation) => onLook({ ...look, saturation })}
+    />
+    <Range
+      label="Zoom"
+      value={look.zoom}
+      min={JAYRR_CAMERA_ZOOM_MIN}
+      max={JAYRR_CAMERA_ZOOM_MAX}
+      step={5}
+      onChange={(zoom) => onLook({ ...look, zoom })}
     />
     {isDefaultCameraLook(look) ? null : (
       <MenuItem

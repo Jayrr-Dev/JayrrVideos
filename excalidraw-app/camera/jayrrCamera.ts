@@ -45,17 +45,22 @@ export type JayrrDisplayCrop = {
 export const JAYRR_CAMERA_LOOK_MIN = 0;
 export const JAYRR_CAMERA_LOOK_MAX = 200;
 export const JAYRR_CAMERA_LOOK_DEFAULT = 100;
+export const JAYRR_CAMERA_ZOOM_MIN = 100;
+export const JAYRR_CAMERA_ZOOM_MAX = 400;
 
 export type JayrrCameraLook = {
   brightness: number;
   contrast: number;
   saturation: number;
+  /** Percent; 100 shows the whole picture, higher crops in on the center. */
+  zoom: number;
 };
 
 export const DEFAULT_CAMERA_LOOK: JayrrCameraLook = {
   brightness: JAYRR_CAMERA_LOOK_DEFAULT,
   contrast: JAYRR_CAMERA_LOOK_DEFAULT,
   saturation: JAYRR_CAMERA_LOOK_DEFAULT,
+  zoom: JAYRR_CAMERA_ZOOM_MIN,
 };
 
 export const FULL_DISPLAY_CROP: JayrrDisplayCrop = {
@@ -95,6 +100,7 @@ export type JayrrCamera =
       brightness?: number;
       contrast?: number;
       saturation?: number;
+      zoom?: number;
     }
   | {
       kind: "phone";
@@ -196,6 +202,16 @@ const parseLookValue = (value: unknown): number | undefined => {
   );
 };
 
+const parseZoomValue = (value: unknown): number | undefined => {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return undefined;
+  }
+  return Math.min(
+    JAYRR_CAMERA_ZOOM_MAX,
+    Math.max(JAYRR_CAMERA_ZOOM_MIN, Math.round(value)),
+  );
+};
+
 export const parseCameraLook = (
   value: unknown,
 ): JayrrCameraLook | undefined => {
@@ -206,14 +222,17 @@ export const parseCameraLook = (
     brightness?: unknown;
     contrast?: unknown;
     saturation?: unknown;
+    zoom?: unknown;
   };
+  const zoom = parseZoomValue(bag.zoom);
   const brightness = parseLookValue(bag.brightness);
   const contrast = parseLookValue(bag.contrast);
   const saturation = parseLookValue(bag.saturation);
   if (
     brightness === undefined &&
     contrast === undefined &&
-    saturation === undefined
+    saturation === undefined &&
+    zoom === undefined
   ) {
     return undefined;
   }
@@ -221,6 +240,7 @@ export const parseCameraLook = (
     brightness: brightness ?? JAYRR_CAMERA_LOOK_DEFAULT,
     contrast: contrast ?? JAYRR_CAMERA_LOOK_DEFAULT,
     saturation: saturation ?? JAYRR_CAMERA_LOOK_DEFAULT,
+    zoom: zoom ?? JAYRR_CAMERA_ZOOM_MIN,
   };
 };
 
@@ -273,7 +293,8 @@ export const readCameraLook = (camera: JayrrCamera | null): JayrrCameraLook => {
 export const isDefaultCameraLook = (look: JayrrCameraLook) =>
   look.brightness === JAYRR_CAMERA_LOOK_DEFAULT &&
   look.contrast === JAYRR_CAMERA_LOOK_DEFAULT &&
-  look.saturation === JAYRR_CAMERA_LOOK_DEFAULT;
+  look.saturation === JAYRR_CAMERA_LOOK_DEFAULT &&
+  look.zoom === JAYRR_CAMERA_ZOOM_MIN;
 
 export const cameraLookFields = (look: JayrrCameraLook) => {
   if (isDefaultCameraLook(look)) {
@@ -283,11 +304,16 @@ export const cameraLookFields = (look: JayrrCameraLook) => {
     brightness: look.brightness,
     contrast: look.contrast,
     saturation: look.saturation,
+    zoom: look.zoom,
   };
 };
 
 export const cameraLookFilter = (look: JayrrCameraLook) => {
-  if (isDefaultCameraLook(look)) {
+  if (
+    look.brightness === JAYRR_CAMERA_LOOK_DEFAULT &&
+    look.contrast === JAYRR_CAMERA_LOOK_DEFAULT &&
+    look.saturation === JAYRR_CAMERA_LOOK_DEFAULT
+  ) {
     return "none";
   }
   return `brightness(${look.brightness / 100}) contrast(${
@@ -419,6 +445,7 @@ export const readJayrrCamera = (
     brightness?: unknown;
     contrast?: unknown;
     saturation?: unknown;
+    zoom?: unknown;
   };
   const label = typeof bag.label === "string" ? bag.label : undefined;
   const ownerName = readJayrrOwnerName(bag.ownerName);
