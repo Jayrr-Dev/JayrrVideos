@@ -1,5 +1,12 @@
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
-import { Component, useEffect, useRef, useState } from "react";
+import {
+  Component,
+  Fragment,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
 import { useExcalidrawAPI } from "@excalidraw/excalidraw";
 import DropdownMenu from "@excalidraw/excalidraw/components/dropdownMenu/DropdownMenu";
@@ -98,14 +105,23 @@ type PendingDelete = MenuTarget & { name: string };
 
 class SceneMenuErrorBoundary extends Component<
   { children: ReactNode },
-  { message: string | null }
+  { message: string | null; attempt: number }
 > {
-  state = { message: null as string | null };
+  state = { message: null as string | null, attempt: 0 };
 
   static getDerivedStateFromError(error: unknown) {
     return {
       message: error instanceof Error ? error.message : "Scenes failed to load",
     };
+  }
+
+  componentDidCatch() {
+    if (this.state.attempt >= 1) {
+      return;
+    }
+    window.setTimeout(() => {
+      this.setState({ message: null, attempt: 1 });
+    }, 400);
   }
 
   render() {
@@ -123,9 +139,57 @@ class SceneMenuErrorBoundary extends Component<
         </div>
       );
     }
+    return <Fragment key={this.state.attempt}>{this.props.children}</Fragment>;
+  }
+}
+
+type OpenFolderDoc = {
+  _id: Id<"sceneFolders">;
+  name: string;
+  fillColor?: string;
+  sceneCount: number;
+  updatedAt: number;
+};
+
+class IdQueryErrorBoundary extends Component<
+  { children: ReactNode; onError: () => void },
+  { failed: boolean }
+> {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  componentDidCatch() {
+    this.props.onError();
+  }
+
+  render() {
+    if (this.state.failed) {
+      return null;
+    }
     return this.props.children;
   }
 }
+
+const OpenFolderSubscription = ({
+  folderId,
+  onChange,
+}: {
+  folderId: Id<"sceneFolders">;
+  onChange: (folder: OpenFolderDoc | null) => void;
+}) => {
+  const folder = useQuery(api.sceneFolders.get, { folderId });
+
+  useEffect(() => {
+    if (folder !== undefined) {
+      onChange(folder);
+    }
+  }, [folder, onChange]);
+
+  return null;
+};
 
 export const JayrrSceneMenu = () => {
   if (!isConvexLinked) {
@@ -178,14 +242,27 @@ const JayrrSceneMenuConnected = () => {
   const didHydrateActiveSceneRef = useRef(false);
   const hydrateRunRef = useRef(0);
 
-  const { isAuthenticated } = useConvexAuth();
+  const { isAuthenticated, isLoading } = useConvexAuth();
+  const [openFolder, setOpenFolder] = useState<
+    OpenFolderDoc | null | undefined
+  >(undefined);
   const folders = useQuery(
     api.sceneFolders.list,
     isAuthenticated ? {} : "skip",
   );
-  const openFolder = useQuery(
-    api.sceneFolders.get,
-    openFolderId ? { folderId: openFolderId } : "skip",
+  const dropOpenFolder = useCallback(() => {
+    setOpenFolder(null);
+    setOpenFolderIdAtom(null);
+  }, [setOpenFolderIdAtom]);
+  const onOpenFolder = useCallback(
+    (folder: OpenFolderDoc | null) => {
+      if (!folder) {
+        dropOpenFolder();
+        return;
+      }
+      setOpenFolder(folder);
+    },
+    [dropOpenFolder],
   );
   const scenes = useQuery(
     api.scenes.list,
@@ -229,10 +306,8 @@ const JayrrSceneMenuConnected = () => {
   }, [openFolderId]);
 
   useEffect(() => {
-    if (openFolderId && openFolder === null) {
-      setOpenFolderIdAtom(null);
-    }
-  }, [openFolder, openFolderId, setOpenFolderIdAtom]);
+    setOpenFolder(undefined);
+  }, [openFolderId]);
 
   useEffect(() => {
     if (renaming) {
@@ -431,9 +506,9 @@ const JayrrSceneMenuConnected = () => {
         );
       } catch (error) {
         if (!cancelled) {
+          setActiveSceneId(null);
           excalidrawAPI.setToast({
-            message:
-              error instanceof Error ? error.message : "Could not load scene",
+            message: convexErrorMessage(error, "Could not load scene"),
             closable: true,
           });
         }
@@ -811,9 +886,41 @@ const JayrrSceneMenuConnected = () => {
     />
   );
 
+  const trackedFolderId = isAuthenticated ? openFolderId : null;
+  const folderSubscription = trackedFolderId ? (
+    <IdQueryErrorBoundary key={trackedFolderId} onError={dropOpenFolder}>
+      <OpenFolderSubscription
+        folderId={trackedFolderId}
+        onChange={onOpenFolder}
+      />
+    </IdQueryErrorBoundary>
+  ) : null;
+
+  if (isLoading) {
+    return (
+      <LibrariesPane fallbackTitle="Scenes">
+        <div className="layer-ui__library-message">Loading scenes…</div>
+      </LibrariesPane>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <LibrariesPane fallbackTitle="Scenes">
+        <div className="library-menu-items__no-items">
+          <div className="library-menu-items__no-items__label">Sign in</div>
+          <div className="library-menu-items__no-items__hint">
+            Sign in to see your scenes.
+          </div>
+        </div>
+      </LibrariesPane>
+    );
+  }
+
   if (folders === undefined || scenes === undefined) {
     return (
       <LibrariesPane fallbackTitle="Scenes">
+        {folderSubscription}
         <div className="layer-ui__library-message">Loading scenes…</div>
       </LibrariesPane>
     );
@@ -893,6 +1000,7 @@ const JayrrSceneMenuConnected = () => {
           )
         }
       >
+        {folderSubscription}
         <div className="jayrr-library__body">
           {scenes.length === 0 ? (
             <div className="library-menu-items__no-items">
@@ -947,6 +1055,7 @@ const JayrrSceneMenuConnected = () => {
 
   return (
     <LibrariesPane fallbackTitle="Scenes" actions={headerActions}>
+      {folderSubscription}
       <div className="jayrr-library__body">
         {sceneStatus}
         {!hasContent ? (
