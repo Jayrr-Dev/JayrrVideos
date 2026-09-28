@@ -45,14 +45,15 @@ export type JayrrDisplayCrop = {
 export const JAYRR_CAMERA_LOOK_MIN = 0;
 export const JAYRR_CAMERA_LOOK_MAX = 200;
 export const JAYRR_CAMERA_LOOK_DEFAULT = 100;
-export const JAYRR_CAMERA_ZOOM_MIN = 100;
+export const JAYRR_CAMERA_ZOOM_MIN = 25;
+export const JAYRR_CAMERA_ZOOM_DEFAULT = 100;
 export const JAYRR_CAMERA_ZOOM_MAX = 400;
 
 export type JayrrCameraLook = {
   brightness: number;
   contrast: number;
   saturation: number;
-  /** Percent; 100 shows the whole picture, higher crops in on the center. */
+  /** Percent; 100 fits the box, higher crops in, lower shrinks the picture. */
   zoom: number;
 };
 
@@ -60,7 +61,7 @@ export const DEFAULT_CAMERA_LOOK: JayrrCameraLook = {
   brightness: JAYRR_CAMERA_LOOK_DEFAULT,
   contrast: JAYRR_CAMERA_LOOK_DEFAULT,
   saturation: JAYRR_CAMERA_LOOK_DEFAULT,
-  zoom: JAYRR_CAMERA_ZOOM_MIN,
+  zoom: JAYRR_CAMERA_ZOOM_DEFAULT,
 };
 
 export const FULL_DISPLAY_CROP: JayrrDisplayCrop = {
@@ -240,7 +241,7 @@ export const parseCameraLook = (
     brightness: brightness ?? JAYRR_CAMERA_LOOK_DEFAULT,
     contrast: contrast ?? JAYRR_CAMERA_LOOK_DEFAULT,
     saturation: saturation ?? JAYRR_CAMERA_LOOK_DEFAULT,
-    zoom: zoom ?? JAYRR_CAMERA_ZOOM_MIN,
+    zoom: zoom ?? JAYRR_CAMERA_ZOOM_DEFAULT,
   };
 };
 
@@ -294,7 +295,7 @@ export const isDefaultCameraLook = (look: JayrrCameraLook) =>
   look.brightness === JAYRR_CAMERA_LOOK_DEFAULT &&
   look.contrast === JAYRR_CAMERA_LOOK_DEFAULT &&
   look.saturation === JAYRR_CAMERA_LOOK_DEFAULT &&
-  look.zoom === JAYRR_CAMERA_ZOOM_MIN;
+  look.zoom === JAYRR_CAMERA_ZOOM_DEFAULT;
 
 export const cameraLookFields = (look: JayrrCameraLook) => {
   if (isDefaultCameraLook(look)) {

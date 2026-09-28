@@ -10,7 +10,7 @@ import { appJotaiStore } from "../app-jotai";
 import { readCaption } from "../domain/transcription";
 
 import {
-  JAYRR_CAMERA_ZOOM_MIN,
+  JAYRR_CAMERA_ZOOM_DEFAULT,
   cameraLookFilter,
   canLinkJayrrCamera,
   isFullDisplayCrop,
@@ -244,12 +244,17 @@ export const paintJayrrCameraLive = (
     let sy = useCrop ? crop.y * sourceH : 0;
     let sw = useCrop ? crop.width * sourceW : sourceW;
     let sh = useCrop ? crop.height * sourceH : sourceH;
-    if (look.zoom > JAYRR_CAMERA_ZOOM_MIN) {
-      const scale = JAYRR_CAMERA_ZOOM_MIN / look.zoom;
+    if (look.zoom > JAYRR_CAMERA_ZOOM_DEFAULT) {
+      const scale = JAYRR_CAMERA_ZOOM_DEFAULT / look.zoom;
       sx += (sw * (1 - scale)) / 2;
       sy += (sh * (1 - scale)) / 2;
       sw *= scale;
       sh *= scale;
+    } else if (look.zoom < JAYRR_CAMERA_ZOOM_DEFAULT) {
+      const scale = look.zoom / JAYRR_CAMERA_ZOOM_DEFAULT;
+      context.translate(width / 2, height / 2);
+      context.scale(scale, scale);
+      context.translate(-width / 2, -height / 2);
     }
     drawFitted(
       context,
