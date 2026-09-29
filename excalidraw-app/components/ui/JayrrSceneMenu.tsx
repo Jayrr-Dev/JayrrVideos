@@ -1644,7 +1644,7 @@ const FolderCard = ({
 const FolderCardShape = ({ fill }: { fill?: string }) => (
   <svg
     className="jayrr-folder-card__shape"
-    viewBox="0 0 200 156"
+    viewBox="12 0 174 156"
     aria-hidden="true"
     focusable="false"
   >

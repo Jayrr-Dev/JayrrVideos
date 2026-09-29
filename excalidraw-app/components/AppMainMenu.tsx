@@ -144,6 +144,7 @@ export const AppMainMenu: React.FC<{
     <>
       {isConvexLinked ? <JayrrProfileSync /> : null}
       <MainMenu>
+        {/* File */}
         <MainMenu.DefaultItems.LoadScene />
         <MainMenu.Item
           icon={SceneIcon}
@@ -186,14 +187,13 @@ export const AppMainMenu: React.FC<{
         <MainMenu.DefaultItems.SaveToActiveFile />
         <MainMenu.DefaultItems.Export />
         <MainMenu.DefaultItems.SaveAsImage />
+        <MainMenu.DefaultItems.ClearCanvas />
+        <MainMenu.Separator />
+        {/* Find / commands */}
         <MainMenu.DefaultItems.CommandPalette className="highlighted" />
         <MainMenu.DefaultItems.SearchMenu />
-        {props.isCollabEnabled ? (
-          <MainMenu.DefaultItems.LiveCollaborationTrigger
-            isCollaborating={props.isCollaborating}
-            onSelect={props.onCollabDialogOpen}
-          />
-        ) : null}
+        <MainMenu.Separator />
+        {/* Create / present */}
         <MainMenu.Item
           icon={presentationIcon}
           onSelect={() => {
@@ -217,9 +217,18 @@ export const AppMainMenu: React.FC<{
         >
           Sound Library
         </MainMenu.Item>
-        <MainMenu.DefaultItems.Help />
-        <MainMenu.DefaultItems.ClearCanvas />
+        {props.isCollabEnabled ? (
+          <>
+            <MainMenu.Separator />
+            {/* Collaborate */}
+            <MainMenu.DefaultItems.LiveCollaborationTrigger
+              isCollaborating={props.isCollaborating}
+              onSelect={props.onCollabDialogOpen}
+            />
+          </>
+        ) : null}
         <MainMenu.Separator />
+        {/* Integrations */}
         <MainMenu.Item
           icon={LinkIcon}
           onSelect={() => {
@@ -230,6 +239,36 @@ export const AppMainMenu: React.FC<{
           {driveLabel}
         </MainMenu.Item>
         <MainMenu.DefaultItems.Socials />
+        {isConvexLinked ? (
+          <>
+            <MainMenu.Separator />
+            {/* Account */}
+            <MainMenu.Item
+              icon={usersIcon}
+              onSelect={() => {
+                setProfileOpen(true);
+              }}
+            >
+              Profile
+            </MainMenu.Item>
+            <SignOutMenuItem />
+          </>
+        ) : null}
+        <MainMenu.Separator />
+        {/* Settings */}
+        {isConvexLinked ? <JayrrFeatureFlags /> : null}
+        <MainMenu.DefaultItems.Preferences />
+        <MainMenu.DefaultItems.ToggleTheme
+          allowSystemTheme
+          theme={props.theme}
+        />
+        <MainMenu.ItemCustom>
+          <LanguageList style={{ width: "100%" }} />
+        </MainMenu.ItemCustom>
+        <MainMenu.DefaultItems.ChangeCanvasBackground />
+        <MainMenu.Separator />
+        {/* Help */}
+        <MainMenu.DefaultItems.Help />
         {isDevEnv() && (
           <MainMenu.Item
             icon={eyeIcon}
@@ -247,28 +286,6 @@ export const AppMainMenu: React.FC<{
             Visual Debug
           </MainMenu.Item>
         )}
-        <MainMenu.Separator />
-        {isConvexLinked ? (
-          <MainMenu.Item
-            icon={usersIcon}
-            onSelect={() => {
-              setProfileOpen(true);
-            }}
-          >
-            Profile
-          </MainMenu.Item>
-        ) : null}
-        {isConvexLinked ? <SignOutMenuItem /> : null}
-        {isConvexLinked ? <JayrrFeatureFlags /> : null}
-        <MainMenu.DefaultItems.Preferences />
-        <MainMenu.DefaultItems.ToggleTheme
-          allowSystemTheme
-          theme={props.theme}
-        />
-        <MainMenu.ItemCustom>
-          <LanguageList style={{ width: "100%" }} />
-        </MainMenu.ItemCustom>
-        <MainMenu.DefaultItems.ChangeCanvasBackground />
       </MainMenu>
       {profileOpen ? (
         <JayrrProfileDialog

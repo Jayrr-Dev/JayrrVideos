@@ -45,23 +45,26 @@
     flex: 1;
     min-height: 0;
     overflow: auto;
-    padding: 0 0.75rem 1rem;
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
+    padding: 0 0.75rem 1rem;
+    max-width: 100%;
   }
 
   .jayrr-scene-status {
     padding: 0.5rem 0.65rem;
+
     border: 1px solid var(--default-border-color);
     border-radius: var(--border-radius-lg, 8px);
     background: var(--island-bg-color);
     display: flex;
+    width: 93%;
     flex-direction: column;
     gap: 0.2rem;
     min-width: 0;
     flex-shrink: 0;
-    width: 100%;
+    align-self: flex-start;
     font: inherit;
     text-align: left;
     color: inherit;
@@ -259,10 +262,12 @@
   }
 
   .jayrr-scene-card--folder .jayrr-scene-card__preview {
-    aspect-ratio: 5 / 4;
+    // Match FolderCardShape content width (path ~12–186 in viewBox)
+    aspect-ratio: 174 / 156;
     border: none;
     border-radius: 0;
     padding: 0;
+    padding-inline: 0;
     overflow: visible;
     background: none;
   }
