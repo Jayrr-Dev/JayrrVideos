@@ -59,6 +59,7 @@
     background: var(--island-bg-color);
     display: flex;
     width: 100%;
+    box-sizing: border-box;
     flex-direction: column;
     gap: 0.2rem;
     min-width: 0;
