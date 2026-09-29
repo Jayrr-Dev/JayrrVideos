@@ -188,6 +188,24 @@
     z-index: 10;
   }
 
+  // Fade behind the title so it stays readable over the preview image.
+  .jayrr-scene-card:not(.jayrr-scene-card--folder)::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2.4rem;
+    z-index: 1;
+    pointer-events: none;
+    border-radius: var(--border-radius-lg, 8px) var(--border-radius-lg, 8px) 0 0;
+    background: linear-gradient(
+      to bottom,
+      var(--island-bg-color) 25%,
+      transparent
+    );
+  }
+
   .jayrr-scene-card__name,
   .jayrr-scene-card__name-input {
     position: absolute;
