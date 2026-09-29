@@ -54,12 +54,11 @@
 
   .jayrr-scene-status {
     padding: 0.5rem 0.65rem;
-
     border: 1px solid var(--default-border-color);
     border-radius: var(--border-radius-lg, 8px);
     background: var(--island-bg-color);
     display: flex;
-    width: 93%;
+    width: 100%;
     flex-direction: column;
     gap: 0.2rem;
     min-width: 0;
@@ -180,6 +179,12 @@
     background: none;
     padding: 0;
     box-sizing: border-box;
+  }
+
+  // Lift a card above its neighbours while its menu is open so the popover
+  // isn't covered by the next card's title or badges.
+  .jayrr-scene-card:has(.dropdown-menu-container) {
+    z-index: 10;
   }
 
   .jayrr-scene-card__name,
