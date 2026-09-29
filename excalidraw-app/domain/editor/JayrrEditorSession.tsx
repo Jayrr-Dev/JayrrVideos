@@ -53,6 +53,7 @@ import {
 } from "./editorPreviewModel";
 import {
   attachRecordingMedia,
+  DEFAULT_EDITOR_PROJECT_NAME,
   normalizeEditorProjectName,
   parseStoredEditorClips,
   parseStoredEditorView,
@@ -184,6 +185,7 @@ type EditorSessionValue = {
   separateAudio: (clipIds: readonly string[]) => string[];
   returnAudio: (clipIds: readonly string[]) => string[];
   loadProject: (projectId: Id<"editorProjects">) => Promise<void>;
+  newProject: () => void;
   projectName: string;
   loadedProjectId: Id<"editorProjects"> | null;
   sessionReady: boolean;
@@ -880,6 +882,16 @@ const JayrrEditorSessionView = ({
     [apiExcal, applyRestored, linkPreview, persistProjectMeta, seek],
   );
 
+  const newProject = useCallback(() => {
+    // Detach first so the autosave never overwrites the previous project.
+    persistProjectMeta(DEFAULT_EDITOR_PROJECT_NAME, null);
+    applyRestored([], []);
+    setSelectedClipIdsState([]);
+    undoStackRef.current = [];
+    redoStackRef.current = [];
+    seek(0);
+  }, [applyRestored, persistProjectMeta, seek]);
+
   useEffect(() => {
     if (hydratedRef.current) {
       return;
@@ -946,6 +958,7 @@ const JayrrEditorSessionView = ({
       separateAudio,
       returnAudio,
       loadProject,
+      newProject,
       projectName,
       loadedProjectId,
       sessionReady,
@@ -977,6 +990,7 @@ const JayrrEditorSessionView = ({
       loadedProjectId,
       loadProject,
       markProjectSaved,
+      newProject,
       pause,
       persist,
       placePreview,

@@ -196,6 +196,24 @@ const SaveGlyph = (
   </svg>
 );
 
+const NewProjectGlyph = (
+  <svg
+    aria-hidden="true"
+    focusable="false"
+    viewBox="0 0 20 20"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.7"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="M11.6 3.4H5.2a1 1 0 0 0-1 1v11.2a1 1 0 0 0 1 1h9.6a1 1 0 0 0 1-1V7.2z" />
+    <path d="M11.6 3.4v3.8h4.2" />
+    <path d="M10 10v4.4" />
+    <path d="M7.8 12.2h4.4" />
+  </svg>
+);
+
 const LAYER_MOVE_ACTIONS: readonly {
   direction: EditorLayerDirection;
   label: string;
@@ -250,6 +268,7 @@ export const JayrrEditorPanel = () => {
     sessionReady,
     setProjectName,
     markProjectSaved,
+    newProject,
   } = useJayrrEditorSession();
   const excalidrawAPI = useExcalidrawAPI();
   const saveProject = useMutation(api.editorProjects.save);
@@ -926,6 +945,22 @@ export const JayrrEditorPanel = () => {
           </button>
         )}
         <div className="jayrr-library__header-actions">
+          <button
+            type="button"
+            className="jayrr-library__icon-button jayrr-editor-panel__new"
+            disabled={
+              saveBusy ||
+              exportBusy ||
+              (clips.length === 0 &&
+                !loadedProjectId &&
+                projectName === DEFAULT_EDITOR_PROJECT_NAME)
+            }
+            aria-label="New project"
+            title="New project (current one is auto-saved)"
+            onClick={newProject}
+          >
+            {NewProjectGlyph}
+          </button>
           <button
             type="button"
             className="jayrr-library__icon-button jayrr-editor-panel__export"

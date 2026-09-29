@@ -919,6 +919,10 @@ export const JayrrEditorTimeline = ({
   );
 
   const canAddStackLane = stackLaneIds.length < MAX_STACK_LANES;
+  // Stack lanes render newest-first on the left; the sequence lane is last.
+  const displayStackLanes = stackLaneIds
+    .map((laneId, index) => ({ laneId, index }))
+    .reverse();
   const laneCountStyle = {
     ["--jayrr-editor-lanes" as string]: String(1 + stackLaneIds.length),
   } as CSSProperties;
@@ -944,12 +948,7 @@ export const JayrrEditorTimeline = ({
         <div className="jayrr-editor-timeline__col-label jayrr-editor-timeline__col-label--ruler">
           Time
         </div>
-        <LaneHeader
-          label="1"
-          addDisabled={!canAddStackLane}
-          onAdd={onAddStackLane}
-        />
-        {stackLaneIds.map((laneId, index) => (
+        {displayStackLanes.map(({ laneId, index }) => (
           <LaneHeader
             key={laneId}
             label={`${index + 2}`}
@@ -958,6 +957,11 @@ export const JayrrEditorTimeline = ({
             onRemove={() => onRemoveStackLane(laneId)}
           />
         ))}
+        <LaneHeader
+          label="1"
+          addDisabled={!canAddStackLane}
+          onAdd={onAddStackLane}
+        />
       </div>
       <div
         ref={bodyRef}
@@ -994,46 +998,7 @@ export const JayrrEditorTimeline = ({
               pxPerMs={pxPerMs}
               tickMs={rulerTickMs}
             />
-            <TrackLane
-              laneId={SEQUENCE_LANE_ID}
-              dropSlot={
-                placement?.toLaneId === SEQUENCE_LANE_ID &&
-                dropSlotTop != null &&
-                dropSlotHeight != null ? (
-                  <DropSlot top={dropSlotTop} height={dropSlotHeight} />
-                ) : null
-              }
-            >
-              {timeline.sequence.map((clip) => (
-                <TimelineClip
-                  key={clip.id}
-                  clip={visibleClip(clip, trimDraft)}
-                  pxPerMs={pxPerMs}
-                  selected={selectedClipIds.has(clip.id)}
-                  playhead={playheadClipId === clip.id}
-                  currentTimeMs={currentTimeMs}
-                  hidden={activeClipId === clip.id}
-                  resizing={trimDraft?.clipId === clip.id}
-                  onResizePointerDown={(edge, event) =>
-                    onResizePointerDown(clip, edge, event)
-                  }
-                  renaming={renamingClipId === clip.id}
-                  onCommitRename={(label) => onRenameClip?.(clip.id, label)}
-                  onCancelRename={onCancelRenameClip}
-                  onSelect={(toggle) => {
-                    if (skipClickRef.current) {
-                      skipClickRef.current = false;
-                      return;
-                    }
-                    onSelectClip(clip, { toggle });
-                    if (!toggle) {
-                      onSeek(clip.startMs);
-                    }
-                  }}
-                />
-              ))}
-            </TrackLane>
-            {stackLaneIds.map((laneId) => (
+            {displayStackLanes.map(({ laneId }) => (
               <TrackLane
                 key={laneId}
                 laneId={laneId}
@@ -1076,11 +1041,51 @@ export const JayrrEditorTimeline = ({
                 ))}
               </TrackLane>
             ))}
+            <TrackLane
+              laneId={SEQUENCE_LANE_ID}
+              dropSlot={
+                placement?.toLaneId === SEQUENCE_LANE_ID &&
+                dropSlotTop != null &&
+                dropSlotHeight != null ? (
+                  <DropSlot top={dropSlotTop} height={dropSlotHeight} />
+                ) : null
+              }
+            >
+              {timeline.sequence.map((clip) => (
+                <TimelineClip
+                  key={clip.id}
+                  clip={visibleClip(clip, trimDraft)}
+                  pxPerMs={pxPerMs}
+                  selected={selectedClipIds.has(clip.id)}
+                  playhead={playheadClipId === clip.id}
+                  currentTimeMs={currentTimeMs}
+                  hidden={activeClipId === clip.id}
+                  resizing={trimDraft?.clipId === clip.id}
+                  onResizePointerDown={(edge, event) =>
+                    onResizePointerDown(clip, edge, event)
+                  }
+                  renaming={renamingClipId === clip.id}
+                  onCommitRename={(label) => onRenameClip?.(clip.id, label)}
+                  onCancelRename={onCancelRenameClip}
+                  onSelect={(toggle) => {
+                    if (skipClickRef.current) {
+                      skipClickRef.current = false;
+                      return;
+                    }
+                    onSelectClip(clip, { toggle });
+                    if (!toggle) {
+                      onSeek(clip.startMs);
+                    }
+                  }}
+                />
+              ))}
+            </TrackLane>
             {overlapBands.map((band) => (
               <OverlapHandle
                 key={band.id}
                 band={band}
                 laneIndexById={laneIndexById}
+                laneCount={1 + stackLaneIds.length}
                 pxPerMs={pxPerMs}
                 container={menuContainer}
                 onPick={(kind) => onSetTransition(band.clipIds, kind)}
@@ -1234,6 +1239,7 @@ const DropSlot = ({ top, height }: { top: number; height: number }) => (
 const OverlapHandle = ({
   band,
   laneIndexById,
+  laneCount,
   pxPerMs,
   container,
   onPick,
@@ -1243,6 +1249,7 @@ const OverlapHandle = ({
 }: {
   band: OverlapBand;
   laneIndexById: ReadonlyMap<string, number>;
+  laneCount: number;
   pxPerMs: number;
   container?: HTMLElement | null;
   onPick: (kind: EditorTransitionKind) => void;
@@ -1257,8 +1264,8 @@ const OverlapHandle = ({
   if (indexes.length === 0) {
     return null;
   }
-  const fromIndex = Math.min(...indexes);
-  const toIndex = Math.max(...indexes);
+  const fromIndex = laneCount - 1 - Math.max(...indexes);
+  const toIndex = laneCount - 1 - Math.min(...indexes);
   const top = TRACK_PAD_PX + msToPx(band.joinMs, pxPerMs);
   const gridColumn = `${fromIndex + 2} / ${toIndex + 3}`;
   const joinClock = formatEditorClock(band.joinMs);

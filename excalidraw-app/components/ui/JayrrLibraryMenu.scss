@@ -511,6 +511,7 @@
   .jayrr-library__icon-button,
   .jayrr-present__settings,
   .jayrr-present__back,
+  .jayrr-editor-panel__new,
   .jayrr-editor-panel__export,
   .jayrr-editor-panel__save,
   .jayrr-editor-panel__settings,
@@ -532,6 +533,7 @@
   .jayrr-library__icon-button:hover,
   .jayrr-present__settings:hover,
   .jayrr-present__back:hover,
+  .jayrr-editor-panel__new:hover:not(:disabled),
   .jayrr-editor-panel__export:hover:not(:disabled),
   .jayrr-editor-panel__save:hover:not(:disabled),
   .jayrr-editor-panel__settings:hover,
@@ -541,6 +543,7 @@
   }
 
   .jayrr-library__icon-button:disabled,
+  .jayrr-editor-panel__new:disabled,
   .jayrr-editor-panel__export:disabled,
   .jayrr-editor-panel__save:disabled,
   .jayrr-ai__icon-btn:disabled {
@@ -559,6 +562,7 @@
   .jayrr-library__icon-button svg,
   .jayrr-present__settings svg,
   .jayrr-present__back svg,
+  .jayrr-editor-panel__new svg,
   .jayrr-editor-panel__export svg,
   .jayrr-editor-panel__save svg,
   .jayrr-editor-panel__settings svg,
